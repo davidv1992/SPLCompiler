@@ -1,0 +1,11 @@
+Void main() {
+	return;
+}
+
+Int f() {
+	return 1;
+}
+
+Int g(Int a) {
+	return a+(a*a)-(a+a)*a+f();
+}

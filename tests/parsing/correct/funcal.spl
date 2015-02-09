@@ -1,0 +1,11 @@
+Int sqr(Int x) {
+	return x*x;
+}
+
+Int sqrprod(Int x, Int y) {
+	return sqr(x)*sqr(y);
+}
+
+Int main(Int a, Int b) {
+	return sqrprod(a,b);
+}
