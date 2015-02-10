@@ -1,0 +1,23 @@
+\section{Position management}
+
+In order to generate reasonable error messages, we need some sort of position logging. We implement that here.
+
+For now, there are only three interesting facts determining the location, filename, line number and offset in line:
+<<position type>>=
+struct source_position
+{
+	std::string filename;
+	int lineno;
+	int offset;
+};
+@
+
+\subsection{header and source}
+Making module source and header from the pieces
+
+<<position.h>>=
+#ifndef POSITION_H
+#define POSITION_H
+#include <string>
+<<position type>>
+#endif
