@@ -3,15 +3,16 @@ The compiler can generate a wide variety of errors, and handling them in a consi
 
 Formatting and writing is identical across all types of warning and errors, so lets also implement it in a central place:
 <<Write exception>>=
-void eh_writeformat(FILE *out, const char *errortype, source_position pos, char *message, va_list args)
+void eh_writeformat(FILE *out, const char *errortype, source_position pos, const char *message, va_list args)
 {
 	fprintf(out, "%s:", errortype);
 	fprintf(out, "%s line %d pos %d: ", pos.filename.c_str(), pos.lineno, pos.offset);
 	vfprintf(out, message, args);
+	fprintf(out, "\n");
 }
 @
 <<we header>>=
-void eh_writeformat(FILE *out, char *errortype, source_position pos, char *message, va_list args);
+void eh_writeformat(FILE *out, const char *errortype, source_position pos, const char *message, va_list args);
 @
 
 At various points in the compiler we dont want to proceed if the previous step had errors, because internal datastructures might not be completely valid anymore. The easiest way to handle this is to use a global state that indicates if there were any error. Furthermore some errors are serious enough that even the current step cannot proceed any further, and the immediate termination that then follows is also handled here.
@@ -24,29 +25,29 @@ bool eh_haveerror()
 	return have_error;
 }
 
-void eh_fatal(source_position pos, char *message, va_list args)
+void eh_fatal(source_position pos, const char *message, va_list args)
 {
 	eh_writeformat(errout, "ERROR", pos, message, args);
 	have_error = true;
 	exit(1);
 }
 
-void eh_error(source_position pos, char *message, va_list args)
+void eh_error(source_position pos, const char *message, va_list args)
 {
 	eh_writeformat(errout, "ERROR", pos, message, args);
 	have_error = true;
 }
 
-void eh_warning(source_position pos, char *message, va_list args)
+void eh_warning(source_position pos, const char *message, va_list args)
 {
 	eh_writeformat(errout, "WARNING", pos, message, args);
 }
 @
 <<he headers>>=
 bool eh_haveerror();
-void eh_fatal(source_position pos, char *message, va_list args);
-void eh_error(source_position pos, char *message, va_list args);
-void eh_warning(source_position pos, char *message, va_list args);
+void eh_fatal(source_position pos, const char *message, va_list args);
+void eh_error(source_position pos, const char *message, va_list args);
+void eh_warning(source_position pos, const char *message, va_list args);
 @
 
 Especially in testing, but also in other situations, it can be very usefull to redirect error output to a source other than stderr. For this we have the following:
