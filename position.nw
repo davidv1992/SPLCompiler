@@ -21,3 +21,4 @@ Making module source and header from the pieces
 #include <string>
 <<position type>>
 #endif
+@
