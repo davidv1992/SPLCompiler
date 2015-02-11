@@ -1,0 +1,512 @@
+\section{Tokenizer}
+
+\subsection{Tokens}
+Datastructure for tokens is simple, just type with associated data:
+<<token struct>>=
+struct token
+{
+	token_type type;
+	unsigned int intval;
+	char charval;
+	std::string id;
+};
+@
+
+Various token types:
+<<token types>>=
+enum token_type
+{
+	TOKEN_SQUAREBRACKET_LEFT,	// [
+	TOKEN_SQUAREBRACKET_RIGHT,	// ]
+	TOKEN_CURLYBRACKET_LEFT,	// {
+	TOKEN_CURLYBRACKET_RIGHT,	// }
+	TOKEN_ROUNDBRACKET_LEFT,	// (
+	TOKEN_ROUNDBRACKET_RIGHT,	// )
+	
+	TOKEN_ASSIGN,				// =
+	
+	TOKEN_PLUS,					// +
+	TOKEN_MINUS,				// -
+	TOKEN_TIMES,				// *
+	TOKEN_DIV,					// /
+	TOKEN_MOD,					// %
+	
+	TOKEN_EQ,					// ==
+	TOKEN_LT,					// <
+	TOKEN_GT,					// >
+	TOKEN_LE,					// <=
+	TOKEN_GE,					// >=
+	
+	TOKEN_AND,					// &&
+	TOKEN_OR,					// ||
+	
+	TOKEN_COLON,				// :
+	
+	TOKEN_DOT,					// .
+	
+	TOKEN_COMMA,				// ,
+	
+	TOKEN_NOT,					// !
+	
+	TOKEN_SEMICOLON,			// ;
+	
+	TOKEN_IF,					// if
+	TOKEN_ELSE,					// else
+	TOKEN_WHILE,				// while
+	TOKEN_RETURN,				// return
+	
+	TOKEN_NUMERIC,				// Int value
+	TOKEN_CHARACTER,			// Char value
+	TOKEN_ID,					// Identifier
+	
+	TOKEN_EOF,					// End of file token
+};
+@
+
+\subsection{Tokenizing}
+
+Going from plain text to a token stream is a two step process. First we generate tokens, with everything that is id-like becomes an id token. In this step the first character is almost always enough to determine the type of the entire token.
+<<generate basic token>>=
+char next_char;
+char value;
+switch(cur_char)
+{
+// brackets
+case '[':
+	cur_token.type = TOKEN_SQUAREBRACKET_LEFT;
+	break;
+case ']':
+	cur_token.type = TOKEN_SQUAREBRACKET_RIGHT;
+	break;
+case '{':
+	cur_token.type = TOKEN_CURLYBRACKET_LEFT;
+	break;
+case '}':
+	cur_token.type = TOKEN_CURLYBRACKET_RIGHT;
+	break;
+case '(':
+	cur_token.type = TOKEN_ROUNDBRACKET_LEFT;
+	break;
+case ')':
+	cur_token.type = TOKEN_ROUNDBRACKET_RIGHT;
+	break;
+
+// Math operators
+case '+':
+	cur_token.type = TOKEN_PLUS;
+	break;
+case '-':
+	cur_token.type = TOKEN_MINUS;
+	break;
+case '*':
+	cur_token.type = TOKEN_TIMES;
+	break;
+case '/':
+	cur_token.type = TOKEN_DIV;
+	break;
+case '%':
+	cur_token.type = TOKEN_MOD;
+	break;
+
+// Comparison operators and assign
+case '=':
+	next_char = tok_getchar();
+	if (next_char == '=')
+	{
+		cur_token.type = TOKEN_EQ;
+	}
+	else
+	{
+		cur_token.type = TOKEN_ASSIGN;
+		tok_ungetchar(next_char);
+	}
+	break;
+case '<':
+	next_char = tok_getchar();
+	if (next_char == '=')
+	{
+		cur_token.type = TOKEN_LE;
+	}
+	else
+	{
+		cur_token.type = TOKEN_LT;
+		tok_ungetchar(next_char);
+	}
+	break;
+case '>':
+	next_char = tok_getchar();
+	if (next_char == '=')
+	{
+		cur_token.type = TOKEN_GE;
+	}
+	else
+	{
+		cur_token.type = TOKEN_GT;
+		tok_ungetchar(next_char);
+	}
+	break;
+
+// Logic operators
+case '&':
+	next_char = tok_getchar();
+	if (next_char != '&')
+	{
+		// Easy error to fix
+		tok_error("Incomplete operator &, did you mean &&?");
+	}
+	cur_token.type = TOKEN_AND;
+	break;
+case '|':
+	next_char = tok_getchar();
+	if (next_char != '|')
+	{
+		// Easy error to fix
+		tok_error("Incomplete operator &, did you mean &&?");
+	}
+	cur_token.type = TOKEN_OR;
+	break;
+
+// remaining simple tokens (! : . ;)
+case ':':
+	cur_token.type = TOKEN_COLON;
+	break;
+case ';':
+	cur_token.type = TOKEN_SEMICOLON;
+	break;
+case '.':
+	cur_token.type = TOKEN_DOT;
+	break;
+case ',':
+	cur_token.type = TOKEN_COMMA;
+	break;
+case '!':
+	cur_token.type = TOKEN_NOT;
+	break;
+
+// Character constant
+case '\'':
+	value = tok_getchar();
+	next_char = tok_getchar();
+	if (next_char != '\'' && value == '\'')
+	{
+		// Likely empty char constant given, interpret it as such
+		tok_error("Empty character constant.");
+		tok_ungetchar(next_char);
+	}
+	else if (next_char != '\'')
+	{
+		// Likely forgot closing quote, interpret it as such
+		tok_error("Character constant not closed.");
+		tok_ungetchar(next_char);
+	}
+	cur_token.type = TOKEN_CHARACTER;
+	cur_token.charval = value;
+	break;
+
+// The other tokens are easier handled with default, too many options for first character
+default:
+	// Identifier:
+	if (isalpha(cur_char))
+	{
+		cur_token.type = TOKEN_ID;
+		cur_token.id = "";
+		while (isalnum(cur_char) || cur_char == '_')
+		{
+			cur_token.id += cur_char;
+			cur_char = tok_getchar();
+		}
+		tok_ungetchar(cur_char);	// if it is not part of the id, next character might be part of the next token.
+	}
+	else if (isdigit(cur_char))
+	{
+		cur_token.type = TOKEN_NUMERIC;
+		cur_token.intval = 0;
+		while(isdigit(cur_char))
+		{
+			if (cur_token.intval * 10 + (cur_char-'0') < cur_token.intval)
+				tok_error("Integer constant out of bounds.");
+			cur_token.intval *= 10;
+			cur_token.intval += (cur_char - '0');
+			cur_char = tok_getchar();
+		}
+		tok_ungetchar(cur_char);	// not part of number, hence might be part of next token.
+	}
+	else
+	{
+		// Totaly unrecognized character, hence error
+		tok_error("Unrecognized character %c in input.", cur_char);
+		
+		// Try again to find token
+		return tok_getfromstream();
+	}
+}
+@
+
+Then we filter out the keyword tokens from the id tokens:
+<<filter keywords>>=
+if (cur_token.type == TOKEN_ID)
+{
+	if (cur_token.id == "if")
+		cur_token.type = TOKEN_IF;
+	if (cur_token.id == "else")
+		cur_token.type = TOKEN_ELSE;
+	if (cur_token.id == "while")
+		cur_token.type = TOKEN_WHILE;
+	if (cur_token.id == "return")
+		cur_token.type = TOKEN_RETURN;
+}
+@
+
+Of course, this is not the whole story, we also need to handle whitespace and comments and end of file:
+<<filter whitespace and comments>>=
+char cur_char = tok_getchar();
+token cur_token;
+while (isspace(cur_char))
+	cur_char = tok_getchar();
+
+if (cur_char == '/')
+{
+	char next_char = tok_getchar();
+	if (next_char == '/')
+	{
+		// Line comment
+		while (next_char != '\n' && next_char != 0)
+			next_char = tok_getchar();
+		
+		if (next_char == 0)
+		{
+			cur_token.type = TOKEN_EOF;
+			return cur_token;
+		}
+		
+		return tok_getfromstream();
+	}
+	else if (next_char == '*')
+	{
+		source_position comment_startpos = tok_curpos();
+		// Inline/multiline comment
+		next_char = tok_getchar();
+		while (1)
+		{
+			while(next_char != '*')
+				next_char = tok_getchar();
+				
+			next_char = tok_getchar();
+			if (next_char == '/')
+				break;
+			if (next_char == 0)
+			{
+				tok_warning_pos(comment_startpos, "Unclosed multiline comment");
+				cur_token.type = TOKEN_EOF;
+				return cur_token;
+			}
+		}
+		return tok_getfromstream();
+	}
+	tok_ungetchar(next_char);
+}
+@
+
+Finaly, we put it all together:
+<<token from stream>>=
+token tok_getfromstream()
+{
+	<<filter whitespace and comments>>
+	if (cur_char == 0)
+	{
+		// eof
+		cur_token.type = TOKEN_EOF;
+		return cur_token;
+	}
+	source_position cur_pos = tok_curpos();
+	<<generate basic token>>
+	<<filter keywords>>
+	
+	return cur_token;
+}
+@
+
+\subsection{Tokenizer input interface}
+
+The tokenizer proper uses a few function calls to manage it's input stream, and the current location associated with it, we need to implement those.
+
+First the data about the current position:
+<<tokenizer file data>>=
+FILE *input_file;
+string input_filename;
+int lineno;
+int offset;
+stack<char> unget_characters;
+@
+
+The tokenizer needs a nice way to get and unget characters from the main file stream
+<<tokenizer read functions>>=
+char tok_getchar()
+{
+	if (!unget_characters.empty())
+	{
+		char result = unget_characters.top();
+		unget_characters.pop();
+		offset++;
+		return result;
+	}
+	int input_char = fgetc(input_file);
+	
+	if (input_char == EOF)
+		return 0;
+		
+	if (input_char == '\n')
+	{
+		lineno++;
+		offset=0;
+	}
+	else
+	{
+		offset++;
+	}
+	return (char) input_char;
+}
+
+void tok_ungetchar(char c)
+{
+	unget_characters.push(c);
+	offset--;
+}
+@
+
+We need to be able to extract the position data in a reasonable way.
+<<generate position data>>=
+source_position tok_curpos()
+{
+	source_position result;
+	result.filename = input_filename;
+	result.lineno = lineno;
+	result.offset = offset;
+	return result;
+}
+@
+
+\subsection{Tokenizer application interface}
+
+We also need some interface to the rest of the compiler, this implements that.
+
+First of all, we need to be able to point the tokenizer to an input file:
+<<open input file>>=
+void tok_setinput(string filename)
+{
+	input_filename = filename;
+	input_file = fopen(filename.c_str(), "r");
+	if (input_file == NULL)
+		tok_fatal("Could not open input file %s", filename.c_str());
+	
+	// reset location data
+	lineno = 1;
+	offset = 0;
+}
+@
+
+<<tokenizer input header>>=
+void tok_setinput(std::string filename);
+@
+
+Second, the parser will need to have some interface for getting its tokens.
+<<tokenizer unget data>>=
+stack<token> unget_tokens;
+@
+
+<<parser tokenizer interface>>=
+token tok_get()
+{
+	if (!unget_tokens.empty())
+	{
+		token res = unget_tokens.top();
+		unget_tokens.pop();
+		return res;
+	}
+	
+	return tok_getfromstream();
+}
+
+void tok_unget(token t)
+{
+	unget_tokens.push(t);
+}
+@
+
+<<tokenizer interface header>>=
+token tok_get();
+void tok_unget(token t);
+@
+
+\subsection{Tokenizer error interface}
+In the tokenizer, almost all errors are generated at the point they really are, hence positions are added to errors/warnings in the actual error functions themselves.
+<<tokenizer errors>>=
+void tok_error(const char *message, ...)
+{
+	va_list args;
+	va_start(args, message);
+	
+	eh_error(tok_curpos(), message, args);
+	
+	va_end(args);
+}
+
+void tok_warning_pos(source_position pos, const char *message, ...)
+{
+	va_list args;
+	va_start(args, message);
+	
+	eh_warning(pos, message, args);
+	
+	va_end(args);
+}
+
+void tok_fatal(const char *message, ...)
+{
+	va_list args;
+	va_start(args, message);
+	
+	eh_error(tok_curpos(), message, args);
+	
+	va_end(args);
+}
+@
+
+\subsection(header and source)
+Combining the pieces:
+
+<<token.h>>=
+#ifndef TOKEN_H
+#define TOKEN_H
+#include "position.h"
+
+<<token types>>
+<<token struct>>
+
+<<tokenizer input header>>
+<<tokenizer interface header>>
+#endif
+@
+
+<<token.cpp>>=
+#include "token.h"
+#include "error.h"
+#include <cstdarg>
+#include <cstdio>
+#include <string>
+#include <stack>
+
+using namespace std;
+
+<<tokenizer file data>>
+<<tokenizer read functions>>
+<<generate position data>>
+
+<<tokenizer errors>>
+
+<<token from stream>>
+
+<<tokenizer unget data>>
+<<parser tokenizer interface>>
+<<open input file>>
+@
