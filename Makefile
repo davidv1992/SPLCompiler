@@ -1,6 +1,11 @@
-.PHONY: clean
+.PHONY: clean test test/tokentest
 
 CXXFLAGS = -I. -g
+
+test: test/tokentest
+
+test/tokentest: testprogs/tokentest
+	ls tests/parsing/correct/*.spl | xargs -n 1 valgrind --quiet ./testprogs/tokentest >/dev/null
 
 error.o: error.cpp error.h position.h
 error.h: error.nw
@@ -20,10 +25,11 @@ token.cpp: token.nw
 code.tex: token.nw position.nw error.nw
 	noweave -t4 token.nw position.nw error.nw > code.tex
 code.pdf: code.tex
-	pdflatex code.tex
+	latexmk -pdf code.tex
+	latexmk -c
 
 testprogs/tokentest: testprogs/tokentest.o token.o error.o
-	g++ -o testprogs/tokentest testprogs/tokentest.o token.o error.o -g
+	g++ $(CXXFLAGS) -o testprogs/tokentest testprogs/tokentest.o token.o error.o
 testprogs/tokentest.o: testprogs/tokentest.cpp token.h position.h
 testprogs/tokentest.cpp: testprogs/tokentest.nw
 	notangle -L -Rtokentest.cpp testprogs/tokentest.nw > testprogs/tokentest.cpp
@@ -34,3 +40,4 @@ clean:
 	rm -f testprogs/tokentest.cpp testprogs/tokentest
 	rm -f position.h
 	rm -f code.tex code.pdf
+	
