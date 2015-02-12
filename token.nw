@@ -12,52 +12,18 @@ struct token
 };
 @
 
+Token type is identified with a giant enum. The enum here just declares the enum itself, various TOKEN\_ definitions are at their generation sites in the tokenizer. The only token type define here is TOKEN\_EOF, because there is no place that is more natural.
 Various token types:
 <<token types>>=
 enum token_type
 {
-	TOKEN_SQUAREBRACKET_LEFT,	// [
-	TOKEN_SQUAREBRACKET_RIGHT,	// ]
-	TOKEN_CURLYBRACKET_LEFT,	// {
-	TOKEN_CURLYBRACKET_RIGHT,	// }
-	TOKEN_ROUNDBRACKET_LEFT,	// (
-	TOKEN_ROUNDBRACKET_RIGHT,	// )
-	
-	TOKEN_ASSIGN,				// =
-	
-	TOKEN_PLUS,					// +
-	TOKEN_MINUS,				// -
-	TOKEN_TIMES,				// *
-	TOKEN_DIV,					// /
-	TOKEN_MOD,					// %
-	
-	TOKEN_EQ,					// ==
-	TOKEN_LT,					// <
-	TOKEN_GT,					// >
-	TOKEN_LE,					// <=
-	TOKEN_GE,					// >=
-	
-	TOKEN_AND,					// &&
-	TOKEN_OR,					// ||
-	
-	TOKEN_COLON,				// :
-	
-	TOKEN_DOT,					// .
-	
-	TOKEN_COMMA,				// ,
-	
-	TOKEN_NOT,					// !
-	
-	TOKEN_SEMICOLON,			// ;
-	
-	TOKEN_IF,					// if
-	TOKEN_ELSE,					// else
-	TOKEN_WHILE,				// while
-	TOKEN_RETURN,				// return
-	
-	TOKEN_NUMERIC,				// Int value
-	TOKEN_CHARACTER,			// Char value
-	TOKEN_ID,					// Identifier
+	<<token type bracket>>
+	<<token type math operators>>
+	<<token type comparison and assign>>
+	<<token type logic operators>>
+	<<token type other simple tokens>>
+	<<token type keywords>>
+	<<token types with associated values>>
 	
 	TOKEN_EOF,					// End of file token
 };
@@ -65,13 +31,31 @@ enum token_type
 
 \subsection{Tokenizing}
 
-Going from plain text to a token stream is a two step process. First we generate tokens, with everything that is id-like becomes an id token. In this step the first character is almost always enough to determine the type of the entire token.
+Going from plain text to a token stream is a two step process. First we generate tokens, with everything that is id-like becomes an id token. In this step the first character is almost always enough to determine the type of the entire token, so we just do a huge switch on it.
 <<generate basic token>>=
 char next_char;
 char value;
 switch(cur_char)
 {
-// brackets
+<<tokenize brackets>>
+<<tokenize math operators>>
+<<tokenize comparison and assign>>
+<<tokenize logic operators>>
+<<tokenize other 1 character symbols>>
+<<tokenizing types with associated values>>
+}
+@
+
+Bracket tokens are simple, one character with no surprises:
+<<token type bracket>>=
+TOKEN_SQUAREBRACKET_LEFT,	// [
+TOKEN_SQUAREBRACKET_RIGHT,	// ]
+TOKEN_CURLYBRACKET_LEFT,	// {
+TOKEN_CURLYBRACKET_RIGHT,	// }
+TOKEN_ROUNDBRACKET_LEFT,	// (
+TOKEN_ROUNDBRACKET_RIGHT,	// )
+@
+<<tokenize brackets>>=
 case '[':
 	cur_token.type = TOKEN_SQUAREBRACKET_LEFT;
 	break;
@@ -90,8 +74,17 @@ case '(':
 case ')':
 	cur_token.type = TOKEN_ROUNDBRACKET_RIGHT;
 	break;
+@
 
-// Math operators
+The same holds for the math operators:
+<<token type math operators>>=
+TOKEN_PLUS,					// +
+TOKEN_MINUS,				// -
+TOKEN_TIMES,				// *
+TOKEN_DIV,					// /
+TOKEN_MOD,					// %
+@
+<<tokenize math operators>>=
 case '+':
 	cur_token.type = TOKEN_PLUS;
 	break;
@@ -107,8 +100,19 @@ case '/':
 case '%':
 	cur_token.type = TOKEN_MOD;
 	break;
+@
 
-// Comparison operators and assign
+The comparison operators are a little trickier. Both assignment and equality start with an equals sign, and both smaller than and greater than have also or equal variants. However maximal matching works for spl:
+<<token type comparison and assign>>=
+TOKEN_ASSIGN,				// =
+
+TOKEN_EQ,					// ==
+TOKEN_LT,					// <
+TOKEN_GT,					// >
+TOKEN_LE,					// <=
+TOKEN_GE,					// >=
+@
+<<tokenize comparison and assign>>=
 case '=':
 	next_char = tok_getchar();
 	if (next_char == '=')
@@ -145,8 +149,15 @@ case '>':
 		tok_ungetchar(next_char);
 	}
 	break;
+@
 
-// Logic operators
+The logical operators are a bit weird. Most of them are double character tokens, but we know what the second character needs to be entirely from the first. Hence we just verify that they are there (or report error):
+<<token type logic operators>>=
+TOKEN_AND,					// &&
+TOKEN_OR,					// ||
+TOKEN_NOT,					// !
+@
+<<tokenize logic operators>>=
 case '&':
 	next_char = tok_getchar();
 	if (next_char != '&')
@@ -165,8 +176,19 @@ case '|':
 	}
 	cur_token.type = TOKEN_OR;
 	break;
+case '!':
+	cur_token.type = TOKEN_NOT;
+	break;
+@
 
-// remaining simple tokens (! : . ;)
+This leaves only a few other simple (1 character) tokens.
+<<token type other simple tokens>>=
+TOKEN_COLON,				// :
+TOKEN_DOT,					// .
+TOKEN_COMMA,				// ,
+TOKEN_SEMICOLON,			// ;
+@
+<<tokenize other 1 character symbols>>=
 case ':':
 	cur_token.type = TOKEN_COLON;
 	break;
@@ -179,11 +201,36 @@ case '.':
 case ',':
 	cur_token.type = TOKEN_COMMA;
 	break;
-case '!':
-	cur_token.type = TOKEN_NOT;
-	break;
+@
 
-// Character constant
+This leaves us with the more complicated tokens, those that actually have values attached to them. Of these, character constants are the easiest, as they will always start with a quote. Numeric and identifier tokens start with such large classes of characters that using the switch for them (though faster) is not the best way. For these we just fall back to the builtin character classification functions.
+<<token types with associated values>>=
+TOKEN_NUMERIC,				// Int value
+TOKEN_CHARACTER,			// Char value
+TOKEN_ID,					// Identifier
+@
+<<tokenizing types with associated values>>=
+<<tokenize character constant>>
+default:
+	// Identifier:
+	if (isalpha(cur_char))
+	{
+		<<tokenize identifier>>
+	}
+	else if (isdigit(cur_char))
+	{
+		<<tokenize numeric>>
+	}
+	else
+	{
+		// Totaly unrecognized character, hence error
+		tok_error("Unrecognized character %c in input.", cur_char);
+		
+		// Try again to find token
+		return tok_getfromstream();
+	}
+@
+<<tokenize character constant>>=
 case '\'':
 	value = tok_getchar();
 	next_char = tok_getchar();
@@ -202,47 +249,41 @@ case '\'':
 	cur_token.type = TOKEN_CHARACTER;
 	cur_token.charval = value;
 	break;
-
-// The other tokens are easier handled with default, too many options for first character
-default:
-	// Identifier:
-	if (isalpha(cur_char))
-	{
-		cur_token.type = TOKEN_ID;
-		cur_token.id = "";
-		while (isalnum(cur_char) || cur_char == '_')
-		{
-			cur_token.id += cur_char;
-			cur_char = tok_getchar();
-		}
-		tok_ungetchar(cur_char);	// if it is not part of the id, next character might be part of the next token.
-	}
-	else if (isdigit(cur_char))
-	{
-		cur_token.type = TOKEN_NUMERIC;
-		cur_token.intval = 0;
-		while(isdigit(cur_char))
-		{
-			if (cur_token.intval * 10 + (cur_char-'0') < cur_token.intval)
-				tok_error("Integer constant out of bounds.");
-			cur_token.intval *= 10;
-			cur_token.intval += (cur_char - '0');
-			cur_char = tok_getchar();
-		}
-		tok_ungetchar(cur_char);	// not part of number, hence might be part of next token.
-	}
-	else
-	{
-		// Totaly unrecognized character, hence error
-		tok_error("Unrecognized character %c in input.", cur_char);
-		
-		// Try again to find token
-		return tok_getfromstream();
-	}
-}
 @
 
-Then we filter out the keyword tokens from the id tokens:
+Identifiers have to start with a letter, but may contain numbers after that first letter. Since the check that we start with a letter is already done, we just need isalnum here.
+<<tokenize identifier>>=
+cur_token.type = TOKEN_ID;
+cur_token.id = "";
+while (isalnum(cur_char) || cur_char == '_')
+{
+	cur_token.id += cur_char;
+	cur_char = tok_getchar();
+}
+tok_ungetchar(cur_char);	// if it is not part of the id, next character might be part of the next token.
+@
+
+Numeric tokens are stored in an integer, which means we have limited range. Hence we do an initial range check here.
+<<tokenize numeric>>=
+cur_token.type = TOKEN_NUMERIC;
+cur_token.intval = 0;
+while(isdigit(cur_char))
+{
+	if (cur_token.intval * 10 + (cur_char-'0') < cur_token.intval)
+		tok_error("Integer constant out of bounds.");
+	cur_token.intval *= 10;
+	cur_token.intval += (cur_char - '0');
+	cur_char = tok_getchar();
+}
+tok_ungetchar(cur_char);	// not part of number, hence might be part of next token.
+@
+As a second stage, keywords are filtered out from the id tokens:
+<<token type keywords>>=
+TOKEN_IF,					// if
+TOKEN_ELSE,					// else
+TOKEN_WHILE,				// while
+TOKEN_RETURN,				// return
+@
 <<filter keywords>>=
 if (cur_token.type == TOKEN_ID)
 {
@@ -258,52 +299,75 @@ if (cur_token.type == TOKEN_ID)
 @
 
 Of course, this is not the whole story, we also need to handle whitespace and comments and end of file:
-<<filter whitespace and comments>>=
+<<filter whitespace>>=
 char cur_char = tok_getchar();
 token cur_token;
 while (isspace(cur_char))
 	cur_char = tok_getchar();
+@
 
+<<filter comments>>=
 if (cur_char == '/')
 {
 	char next_char = tok_getchar();
 	if (next_char == '/')
 	{
-		// Line comment
-		while (next_char != '\n' && next_char != 0)
-			next_char = tok_getchar();
-		
-		if (next_char == 0)
-		{
-			cur_token.type = TOKEN_EOF;
-			return cur_token;
-		}
+		<<skip line comment>>
 		
 		return tok_getfromstream();
 	}
 	else if (next_char == '*')
 	{
-		source_position comment_startpos = tok_curpos();
-		// Inline/multiline comment
-		next_char = tok_getchar();
-		while (1)
-		{
-			while(next_char != '*')
-				next_char = tok_getchar();
-				
-			next_char = tok_getchar();
-			if (next_char == '/')
-				break;
-			if (next_char == 0)
-			{
-				tok_warning_pos(comment_startpos, "Unclosed multiline comment");
-				cur_token.type = TOKEN_EOF;
-				return cur_token;
-			}
-		}
+		<<skip multiline comment>>
 		return tok_getfromstream();
 	}
 	tok_ungetchar(next_char);
+}
+@
+
+The tricky bit about a multiline comment is that we might run out of file before it is closed. This specs isn't clear on whether that should be considered an error, hence we just warn.
+
+<<skip multiline comment>>=
+source_position comment_startpos = tok_curpos();
+next_char = tok_getchar();
+while (1)
+{
+	while(next_char != '*' && next_char != 0)
+		next_char = tok_getchar();
+	<<check end of file in multiline>>
+	next_char = tok_getchar();
+	if (next_char == '/')
+		break;
+}
+@
+<<check end of file in multiline>>=
+if (next_char == 0)
+{
+	tok_warning_pos(comment_startpos, "Unclosed multiline comment");
+	cur_token.type = TOKEN_EOF;
+	return cur_token;
+}
+@
+
+Line comments can end on a line. Normal behaviour for a line comment is to read the ending newline and discard it. However, when there is no such newline, but an eof terminating the comment, we know the complete token. We could handle this case by just pushing back the read character and calling getfromstream again, but we might as well generate the eof token immediately.
+
+<<skip line comment>>=
+while (next_char != '\n' && next_char != 0)
+	next_char = tok_getchar();
+
+if (next_char == 0)
+{
+	cur_token.type = TOKEN_EOF;
+	return cur_token;
+}
+@
+
+<<filter end of file>>=
+if (cur_char == 0)
+{
+	// eof
+	cur_token.type = TOKEN_EOF;
+	return cur_token;
 }
 @
 
@@ -311,13 +375,9 @@ Finaly, we put it all together:
 <<token from stream>>=
 token tok_getfromstream()
 {
-	<<filter whitespace and comments>>
-	if (cur_char == 0)
-	{
-		// eof
-		cur_token.type = TOKEN_EOF;
-		return cur_token;
-	}
+	<<filter whitespace>>
+	<<filter comments>>
+	<<filter end of file>>
 	source_position cur_pos = tok_curpos();
 	<<generate basic token>>
 	<<filter keywords>>
@@ -472,7 +532,7 @@ void tok_fatal(const char *message, ...)
 }
 @
 
-\subsection(header and source)
+\subsection{header and source}
 Combining the pieces:
 
 <<token.h>>=
