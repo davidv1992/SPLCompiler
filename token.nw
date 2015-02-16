@@ -46,6 +46,7 @@ switch(cur_char)
 }
 @
 
+\subsubsection{Brackets}
 Bracket tokens are simple, one character with no surprises:
 <<token type bracket>>=
 TOKEN_SQUAREBRACKET_LEFT,	// [
@@ -76,6 +77,7 @@ case ')':
 	break;
 @
 
+\subsubsection{Math operators}
 The same holds for the math operators:
 <<token type math operators>>=
 TOKEN_PLUS,					// +
@@ -102,7 +104,9 @@ case '%':
 	break;
 @
 
+\subsubsection{Comparison operators}
 The comparison operators are a little trickier. Both assignment and equality start with an equals sign, and both smaller than and greater than have also or equal variants. However maximal matching works for spl:
+
 <<token type comparison and assign>>=
 TOKEN_ASSIGN,				// =
 
@@ -112,6 +116,7 @@ TOKEN_GT,					// >
 TOKEN_LE,					// <=
 TOKEN_GE,					// >=
 @
+
 <<tokenize comparison and assign>>=
 case '=':
 	next_char = tok_getchar();
@@ -151,7 +156,9 @@ case '>':
 	break;
 @
 
-The logical operators are a bit weird. Most of them are double character tokens, but we know what the second character needs to be entirely from the first. Hence we just verify that they are there (or report error):
+\subsubsection{Logic operators}
+The logic operators are a bit weird. Most of them are double character tokens, but we know what the second character needs to be entirely from the first. Hence we just verify that they are there (or report error):
+
 <<token type logic operators>>=
 TOKEN_AND,					// &&
 TOKEN_OR,					// ||
@@ -181,7 +188,9 @@ case '!':
 	break;
 @
 
+\subsubsection{Other simple tokens}
 This leaves only a few other simple (1 character) tokens.
+
 <<token type other simple tokens>>=
 TOKEN_COLON,				// :
 TOKEN_DOT,					// .
@@ -203,6 +212,7 @@ case ',':
 	break;
 @
 
+\subsubsection{Compound tokens}
 This leaves us with the more complicated tokens, those that actually have values attached to them. Of these, character constants are the easiest, as they will always start with a quote. Numeric and identifier tokens start with such large classes of characters that using the switch for them (though faster) is not the best way. For these we just fall back to the builtin character classification functions.
 <<token types with associated values>>=
 TOKEN_NUMERIC,				// Int value
@@ -260,7 +270,8 @@ while (isalnum(cur_char) || cur_char == '_')
 	cur_token.id += cur_char;
 	cur_char = tok_getchar();
 }
-tok_ungetchar(cur_char);	// if it is not part of the id, next character might be part of the next token.
+tok_ungetchar(cur_char);	// if it is not part of the id, 
+                        	// next character might be part of the next token.
 @
 
 Numeric tokens are stored in an integer, which means we have limited range. Hence we do an initial range check here.
@@ -275,7 +286,8 @@ while(isdigit(cur_char))
 	cur_token.intval += (cur_char - '0');
 	cur_char = tok_getchar();
 }
-tok_ungetchar(cur_char);	// not part of number, hence might be part of next token.
+tok_ungetchar(cur_char);	// not part of number, 
+                        	//hence might be part of next token.
 @
 As a second stage, keywords are filtered out from the id tokens:
 <<token type keywords>>=
