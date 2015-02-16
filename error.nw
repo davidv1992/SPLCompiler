@@ -3,16 +3,19 @@ The compiler can generate a wide variety of errors, and handling them in a consi
 
 Formatting and writing is identical across all types of warning and errors, so lets also implement it in a central place:
 <<Write exception>>=
-void eh_writeformat(FILE *out, const char *errortype, source_position pos, const char *message, va_list args)
+void eh_writeformat(FILE *out, const char *errortype, source_position pos,
+                    const char *message, va_list args)
 {
 	fprintf(out, "%s:", errortype);
-	fprintf(out, "%s line %d pos %d: ", pos.filename.c_str(), pos.lineno, pos.offset);
+	fprintf(out, "%s line %d pos %d: ", pos.filename.c_str(), 
+	        pos.lineno, pos.offset);
 	vfprintf(out, message, args);
 	fprintf(out, "\n");
 }
 @
 <<we header>>=
-void eh_writeformat(FILE *out, const char *errortype, source_position pos, const char *message, va_list args);
+void eh_writeformat(FILE *out, const char *errortype, source_position pos,
+                    const char *message, va_list args);
 @
 
 At various points in the compiler we dont want to proceed if the previous step had errors, because internal datastructures might not be completely valid anymore. The easiest way to handle this is to use a global state that indicates if there were any error. Furthermore some errors are serious enough that even the current step cannot proceed any further, and the immediate termination that then follows is also handled here.
