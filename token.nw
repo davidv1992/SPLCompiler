@@ -562,10 +562,18 @@ void tok_setinput(string filename)
 	lineno = 1;
 	offset = 0;
 }
+void tok_setinput_fd(string filename, FILE *desc)
+{
+	input_filename = filename;
+	lineno = 1;
+	offset = 0;
+	input_file = desc;
+}
 @
 
 <<tokenizer input header>>=
 void tok_setinput(std::string filename);
+void tok_setinput_fd(std::string filename,FILE *desc);
 @
 
 Second, the parser will need to have some interface for getting its tokens.
