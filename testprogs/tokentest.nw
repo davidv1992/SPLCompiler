@@ -2,135 +2,11 @@
 
 The program presented in this section is intended to test the tokenizer on its own. It simply prints every token as it comes out the tokenizer. IO is simple, using just standard input and output, and no configuration arguments for the whole.
 
-<<print token>>=
-void print_token(token t)
-{
-	switch(t.type)
-	{
-	//brackets
-	case TOKEN_SQUAREBRACKET_LEFT:
-		printf("[");
-		break;
-	case TOKEN_SQUAREBRACKET_RIGHT:
-		printf("]");
-		break;
-	case TOKEN_CURLYBRACKET_LEFT:
-		printf("{");
-		break;
-	case TOKEN_CURLYBRACKET_RIGHT:
-		printf("}");
-		break;
-	case TOKEN_ROUNDBRACKET_LEFT:
-		printf("(");
-		break;
-	case TOKEN_ROUNDBRACKET_RIGHT:
-		printf(")");
-		break;
-	
-	//operators
-	case TOKEN_ASSIGN:
-		printf("=");
-		break;
-	case TOKEN_PLUS:
-		printf("+");
-		break;
-	case TOKEN_MINUS:
-		printf("-");
-		break;
-	case TOKEN_TIMES:
-		printf("*");
-		break;
-	case TOKEN_DIV:
-		printf("/");
-		break;
-	case TOKEN_MOD:
-		printf("%%");
-		break;
-	
-	//Compares
-	case TOKEN_EQ:
-		printf("==");
-		break;
-	case TOKEN_LT:
-		printf("<");
-		break;
-	case TOKEN_LE:
-		printf("<=");
-		break;
-	case TOKEN_GT:
-		printf(">");
-		break;
-	case TOKEN_GE:
-		printf(">=");
-		break;
-	
-	//logic
-	case TOKEN_AND:
-		printf("&&");
-		break;
-	case TOKEN_OR:
-		printf("||");
-		break;
-	
-	//other operators
-	case TOKEN_COLON:
-		printf(":");
-		break;
-	case TOKEN_DOT:
-		printf(".");
-		break;
-	case TOKEN_COMMA:
-		printf(",");
-		break;
-	case TOKEN_NOT:
-		printf("!");
-		break;
-		
-	// semicolon
-	case TOKEN_SEMICOLON:
-		printf(";");
-		break;
-	
-	// keywords
-	case TOKEN_IF:
-		printf("if");
-		break;
-	case TOKEN_ELSE:
-		printf("else");
-		break;
-	case TOKEN_WHILE:
-		printf("while");
-		break;
-	case TOKEN_RETURN:
-		printf("return");
-		break;
-	
-	// tokens with associated data
-	case TOKEN_ID:
-		printf("%s", t.id.c_str());
-		break;
-	case TOKEN_CHARACTER:
-		printf("'%c'", t.charval);
-		break;
-	case TOKEN_NUMERIC:
-		printf("%d", t.intval);
-		break;
-	
-	case TOKEN_EOF:
-		break;
-	}
-	
-	printf("\n");
-}
-@
-
 <<tokentest.cpp>>=
 #include "token.h"
 #include <cstdio>
 
 using namespace std;
-
-<<print token>>
 
 int main(int argc, char **argv)
 {
@@ -144,7 +20,7 @@ int main(int argc, char **argv)
 		token t = tok_get();
 		if (t.type == TOKEN_EOF)
 			break;
-		print_token(t);
+		printf("%s\n", token_name(t).c_str());
 	}
 	return 0;
 }

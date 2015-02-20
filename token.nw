@@ -6,6 +6,7 @@ Datastructure for tokens is simple, just type with associated data:
 struct token
 {
 	token_type type;
+	source_position position;
 	unsigned int intval;
 	char charval;
 	std::string id;
@@ -76,6 +77,20 @@ case ')':
 	cur_token.type = TOKEN_ROUNDBRACKET_RIGHT;
 	break;
 @
+<<print brackets>>=
+case TOKEN_SQUAREBRACKET_LEFT:
+	return "[";
+case TOKEN_SQUAREBRACKET_RIGHT:
+	return "]";
+case TOKEN_CURLYBRACKET_LEFT:
+	return "{";
+case TOKEN_CURLYBRACKET_RIGHT:
+	return "}";
+case TOKEN_ROUNDBRACKET_LEFT:
+	return "(";
+case TOKEN_ROUNDBRACKET_RIGHT:
+	return ")";
+@
 
 \subsubsection{Math operators}
 The same holds for the math operators:
@@ -102,6 +117,18 @@ case '/':
 case '%':
 	cur_token.type = TOKEN_MOD;
 	break;
+@
+<<print math operators>>=
+case TOKEN_PLUS:
+	return "+";
+case TOKEN_MINUS:
+	return "-";
+case TOKEN_TIMES:
+	return "*";
+case TOKEN_DIV:
+	return "/";
+case TOKEN_MOD:
+	return "%";
 @
 
 \subsubsection{Comparison operators}
@@ -155,6 +182,20 @@ case '>':
 	}
 	break;
 @
+<<print comparison and assign>>=
+case TOKEN_ASSIGN:
+	return "=";
+case TOKEN_EQ:
+	return "==";
+case TOKEN_LT:
+	return "<";
+case TOKEN_LE:
+	return "<=";
+case TOKEN_GT:
+	return ">";
+case TOKEN_GE:
+	return ">=";
+@
 
 \subsubsection{Logic operators}
 The logic operators are a bit weird. Most of them are double character tokens, but we know what the second character needs to be entirely from the first. Hence we just verify that they are there (or report error):
@@ -187,6 +228,14 @@ case '!':
 	cur_token.type = TOKEN_NOT;
 	break;
 @
+<<print logic operators>>=
+case TOKEN_AND:
+	return "&&";
+case TOKEN_OR:
+	return "||";
+case TOKEN_NOT:
+	return "!";
+@
 
 \subsubsection{Other simple tokens}
 This leaves only a few other simple (1 character) tokens.
@@ -210,6 +259,16 @@ case '.':
 case ',':
 	cur_token.type = TOKEN_COMMA;
 	break;
+@
+<<print other simple tokens>>=
+case TOKEN_COLON:
+	return ":";
+case TOKEN_DOT:
+	return ".";
+case TOKEN_COMMA:
+	return ",";
+case TOKEN_SEMICOLON:
+	return ";";
 @
 
 \subsubsection{Compound tokens}
@@ -289,6 +348,21 @@ while(isdigit(cur_char))
 tok_ungetchar(cur_char);	// not part of number, 
                         	//hence might be part of next token.
 @
+Printing is relatively easy:
+<<print compound tokens>>=
+case TOKEN_ID:
+	return t.id;
+case TOKEN_CHARACTER:
+	return string(1, t.charval);
+case TOKEN_NUMERIC:
+	{
+		ostringstream res;
+		res << t.intval;
+		return res.str();
+	}
+@
+
+\subsubsection{Keywords}
 As a second stage, keywords are filtered out from the id tokens:
 <<token type keywords>>=
 TOKEN_IF,					// if
@@ -309,7 +383,18 @@ if (cur_token.type == TOKEN_ID)
 		cur_token.type = TOKEN_RETURN;
 }
 @
+<<print keywords>>=
+case TOKEN_IF:
+	return "if";
+case TOKEN_ELSE:
+	return "else";
+case TOKEN_WHILE:
+	return "while";
+case TOKEN_RETURN:
+	return "return";
+@
 
+\subsubsection{Whitespace, comments and end of file}
 Of course, this is not the whole story, we also need to handle whitespace and comments and end of file:
 <<filter whitespace>>=
 char cur_char = tok_getchar();
@@ -361,7 +446,7 @@ if (next_char == 0)
 }
 @
 
-Line comments can end on a line. Normal behaviour for a line comment is to read the ending newline and discard it. However, when there is no such newline, but an eof terminating the comment, we know the complete token. We could handle this case by just pushing back the read character and calling getfromstream again, but we might as well generate the eof token immediately.
+Line comments can end on a line. Normal behaviour for a line comment is to read the ending newline and discard it. However, when there is no such newline, but an eof terminating the comment, we know the complete token. We could handle this case by just pushing back the read eof and calling getfromstream again, but we might as well generate the eof token immediately.
 
 <<skip line comment>>=
 while (next_char != '\n' && next_char != 0)
@@ -383,6 +468,7 @@ if (cur_char == 0)
 }
 @
 
+\subsubsection{Final tokenizing function}
 Finaly, we put it all together:
 <<token from stream>>=
 token tok_getfromstream()
@@ -393,6 +479,7 @@ token tok_getfromstream()
 	source_position cur_pos = tok_curpos();
 	<<generate basic token>>
 	<<filter keywords>>
+	cur_token.position = cur_pos;
 	
 	return cur_token;
 }
@@ -544,6 +631,30 @@ void tok_fatal(const char *message, ...)
 }
 @
 
+\subsection{token printing}
+When generating error messages it is very usefull to have a string represtation of token to indicate to the user what went wrong.
+<<token name header>>=
+std::string token_name(token t);
+@
+<<token name>>=
+string token_name(token t)
+{
+	switch(t.type)
+	{
+	<<print brackets>>
+	<<print math operators>>
+	<<print comparison and assign>>
+	<<print logic operators>>
+	<<print other simple tokens>>
+	<<print keywords>>
+	<<print compound tokens>>
+	case TOKEN_EOF:
+		return "";
+	}
+	return "Unknown token";
+}
+@
+
 \subsection{header and source}
 Combining the pieces:
 
@@ -557,12 +668,14 @@ Combining the pieces:
 
 <<tokenizer input header>>
 <<tokenizer interface header>>
+<<token name header>>
 #endif
 @
 
 <<token.cpp>>=
 #include "token.h"
 #include "error.h"
+#include <sstream>
 #include <cstdarg>
 #include <cstdio>
 #include <string>
@@ -581,4 +694,5 @@ using namespace std;
 <<tokenizer unget data>>
 <<parser tokenizer interface>>
 <<open input file>>
+<<token name>>
 @
