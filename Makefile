@@ -1,6 +1,6 @@
 .PHONY: clean test test/tokentest
 
-CXXFLAGS = -I. -g
+CXXFLAGS = -I. -g -Wall -Wextra -Werror
 
 test: test/tokentest
 
@@ -12,7 +12,7 @@ error.h: error.nw
 	notangle -L -Rerror.h error.nw > error.h
 error.cpp: error.nw
 	notangle -L -Rerror.cpp error.nw > error.cpp
-	
+
 position.h: position.nw
 	notangle -L -Rposition.h position.nw > position.h
 
@@ -40,4 +40,3 @@ clean:
 	rm -f testprogs/tokentest.cpp testprogs/tokentest
 	rm -f position.h
 	rm -f code.tex code.pdf
-	
