@@ -198,12 +198,13 @@ case TOKEN_GE:
 @
 
 \subsubsection{Logic operators}
-The logic operators are a bit weird. Most of them are double character tokens, but we know what the second character needs to be entirely from the first. Hence we just verify that they are there (or report error):
+The logic operators are a bit weird. Most of them are double character tokens, but we know what the second character needs to be entirely from the first. Hence we just verify that they are there (or report error). The exclamation mark can be two things, depending on the next character.
 
 <<token type logic operators>>=
 TOKEN_AND,					// &&
 TOKEN_OR,					// ||
 TOKEN_NOT,					// !
+TOKEN_NE,					// !=
 @
 <<tokenize logic operators>>=
 case '&':
@@ -225,7 +226,16 @@ case '|':
 	cur_token.type = TOKEN_OR;
 	break;
 case '!':
-	cur_token.type = TOKEN_NOT;
+	next_char = tok_getchar();
+	if (next_char == '=')
+	{
+		cur_token.type = TOKEN_NE;
+	}
+	else
+	{
+		tok_ungetchar(next_char);
+		cur_token.type = TOKEN_NOT;
+	}
 	break;
 @
 <<print logic operators>>=
@@ -235,6 +245,8 @@ case TOKEN_OR:
 	return "||";
 case TOKEN_NOT:
 	return "!";
+case TOKEN_NE:
+	return "!=";
 @
 
 \subsubsection{Other simple tokens}
