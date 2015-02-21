@@ -1,0 +1,19 @@
+\section{Test type parsing}
+
+The following is a simple program to test type parsing
+
+<<typeparsetest.cpp>>=
+#include "token.h"
+#include "parser.h"
+#include <cstdio>
+
+int main()
+{
+	tok_setinput_fd("stdin", stdin);
+	
+	parse_type()->print();
+	
+	printf("\n");
+	return 0;
+}
+@

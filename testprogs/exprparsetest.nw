@@ -1,0 +1,19 @@
+\section{Test expression parsing}
+
+The following is a simple program to test expression parsing
+
+<<exprparsetest.cpp>>=
+#include "token.h"
+#include "parser.h"
+#include <cstdio>
+
+int main()
+{
+	tok_setinput_fd("stdin", stdin);
+	
+	parse_expr()->print();
+	
+	printf("\n");
+	return 0;
+}
+@

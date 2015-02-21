@@ -1,0 +1,591 @@
+\section{Parsing}
+
+\subsection{Grammar}
+The grammar as given in the SPL specification has a number of ambiguities, which need to be resolved before we can get to work on the parser proper
+
+\subsection{Abstract Syntax trees}
+Abstract syntax trees are implemented using classes for each of the nodes. Each node is responsible for managing the memory used by itself and its subtrees. Upon passing pointers of an ast to a constructor for a node, that node acquires ownership of the memory associated with the ast, and should free it when it gets deleted. Also, each node should be able to print a readable representation of itsef.
+
+<<ast base>>=
+class ast_base
+{
+public:
+	virtual ~ast_base(){};
+	virtual void print()=0;
+};
+@
+
+\subsection{Parsing types}
+Type expressions are simple, there are no issues with precedence and ambiguities that require extra rules to resolve, so we can just implement the given rules.
+
+<<type parsing header>>=
+ast_type *parse_type();
+@
+<<type expression ast>>=
+class ast_type : public ast_base
+{
+};
+class ast_simple_type : public ast_type
+{
+public:
+	std::string type_id;
+
+	ast_simple_type(std::string _id) { type_id=_id; }
+	virtual ~ast_simple_type() {}
+	virtual void print() {printf("%s", type_id.c_str());}
+};
+class ast_tuple_type : public ast_type
+{
+public:
+	ast_type *type_first, *type_second;
+
+	ast_tuple_type(ast_type *first, ast_type *second) { type_first = first; type_second = second; }
+	virtual ~ast_tuple_type() { delete type_first; delete type_second; }
+	virtual void print() {
+		printf("(");
+		type_first->print();
+		printf(",");
+		type_second->print();
+		printf(")");
+	}
+};
+class ast_list_type : public ast_type
+{
+public:
+	ast_type *type_element;
+
+	ast_list_type(ast_type *el) { type_element = el; }
+	virtual ~ast_list_type() { delete type_element; }
+	virtual void print() {
+		printf("[");
+		type_element->print();
+		printf("]");
+	}
+};
+@
+<<parse simple type>>=
+case TOKEN_ID:
+	return new ast_simple_type(cur_token.id);
+@
+<<parse tuple type>>=
+case TOKEN_ROUNDBRACKET_LEFT:
+	{
+		ast_type *first = parse_type();
+		match_token(TOKEN_COMMA);
+		ast_type *right = parse_type();
+		match_token(TOKEN_ROUNDBRACKET_RIGHT);
+		return new ast_tuple_type(first, right);
+	}
+@
+<<parse list type>>=
+case TOKEN_SQUAREBRACKET_LEFT:
+	{
+		ast_type *el = parse_type();
+		match_token(TOKEN_SQUAREBRACKET_RIGHT);
+		return new ast_list_type(el);
+	}
+@
+<<parse type expression>>=
+ast_type *parse_type()
+{
+	token cur_token = tok_get();
+	switch(cur_token.type)
+	{
+	<<parse simple type>>
+	<<parse tuple type>>
+	<<parse list type>>
+	default:
+		parse_error(cur_token.position, "Expected type, got %s", token_name(cur_token).c_str());
+		return new ast_simple_type("Int");
+	}
+}
+@
+
+\subsection{Parsing expressions}
+Expressions are the most complicated part of the grammar, because of the extra non-terminals introduced to insure good handling of operator precedence. As stated before, the extra tokens are named after the precedence level they represent.
+
+The ast representing all this however is straightforward, one node type for binary operators and one for unary:
+<<expression ast>>=
+enum ast_binary_operator {
+	OP_ADD,
+	OP_SUB,
+	OP_MUL,
+	OP_DIV,
+	OP_MOD,
+	
+	OP_AND,
+	OP_OR,
+	
+	OP_EQ,
+	OP_NE,
+	OP_LT,
+	OP_GT,
+	OP_LE,
+	OP_GE,
+	
+	OP_COLON,
+};
+enum ast_unary_operator{
+	OP_NEG,
+	OP_NOT,
+};
+std::string ast_operator_string(ast_binary_operator op);
+std::string ast_operator_string(ast_unary_operator op);
+class ast_expression : public ast_base
+{
+};
+class ast_expression_binary : public ast_expression
+{
+public:
+	ast_expression *left, *right;
+	ast_binary_operator op;
+	
+	ast_expression_binary(ast_binary_operator _op, ast_expression *l, ast_expression *r) { op =_op; left = l; right = r; }
+	virtual ~ast_expression_binary() { delete left; delete right; }
+	virtual void print() {
+		printf("(");
+		left->print();
+		printf("%s", ast_operator_string(op).c_str());
+		right->print();
+		printf(")");
+	}
+};
+class ast_expression_unary : public ast_expression
+{
+public:
+	ast_expression *inner;
+	ast_unary_operator op;
+	
+	ast_expression_unary(ast_unary_operator _op, ast_expression *i) {op = _op; inner = i;}
+	virtual ~ast_expression_unary() {delete inner;}
+	virtual void print() {
+		printf("(%s", ast_operator_string(op).c_str());
+		inner->print();
+		printf(")");
+	}
+};
+class ast_expression_variable : public ast_expression
+{
+public:
+	std::string id;
+	
+	ast_expression_variable(std::string _id) {id = _id;}
+	virtual ~ast_expression_variable(){}
+	virtual void print() { printf("%s", id.c_str()); }
+};
+class ast_expression_intconst : public ast_expression
+{
+public:
+	unsigned int value;
+	
+	ast_expression_intconst(unsigned int v) {value = v;}
+	virtual ~ast_expression_intconst() {}
+	virtual void print() { printf("%d", value); }
+};
+class ast_expression_charconst : public ast_expression
+{
+public:
+	char value;
+	
+	ast_expression_charconst(char v) { value = v; }
+	virtual ~ast_expression_charconst() {}
+	virtual void print() { printf("%c", value); }
+};
+class ast_expression_emptylist : public ast_expression
+{
+public:
+	ast_expression_emptylist(){}
+	virtual ~ast_expression_emptylist(){}
+	virtual void print() { printf("[]");}
+};
+@
+<<expression ast implementation>>=
+string ast_operator_string(ast_binary_operator op)
+{
+	switch(op)
+	{
+	case OP_ADD:
+		return "+";
+	case OP_SUB:
+		return "-";
+	case OP_MUL:
+		return "*";
+	case OP_DIV:
+		return "/";
+	case OP_MOD:
+		return "%";
+	
+	case OP_AND:
+		return "&&";
+	case OP_OR:
+		return "||";
+	
+	case OP_EQ:
+		return "==";
+	case OP_NE:
+		return "!=";
+	case OP_LT:
+		return "<";
+	case OP_GT:
+		return ">";
+	case OP_LE:
+		return "<=";
+	case OP_GE:
+		return ">=";
+	
+	case OP_COLON:
+		return ":";
+	}
+	
+	return "";
+}
+
+string ast_operator_string(ast_unary_operator op)
+{
+	switch(op)
+	{
+	case OP_NEG:
+		return "-";
+	case OP_NOT:
+		return "!";
+	}
+	
+	return "";
+}
+@
+
+Since expressions can contain brackets, we need recursion across multiple functions, hence we pre-declare the expr parser:
+<<parse expression header>>=
+ast_expression *parse_expr();
+@
+
+Highest precedence, brackets, constants, variables and unary operators
+<<parse opl0>>=
+ast_expression *parse_opl0()
+{
+	token cur_token = tok_get();
+	
+	switch(cur_token.type)
+	{
+	case TOKEN_ROUNDBRACKET_LEFT: {
+			ast_expression *result = parse_expr();
+			match_token(TOKEN_ROUNDBRACKET_RIGHT);
+			return result;
+		}
+	case TOKEN_MINUS:
+		return new ast_expression_unary(OP_NEG, parse_opl0());
+	case TOKEN_NOT:
+		return new ast_expression_unary(OP_NOT, parse_opl0());
+	case TOKEN_ID:
+		return new ast_expression_variable(cur_token.id);
+	case TOKEN_NUMERIC:
+		return new ast_expression_intconst(cur_token.intval);
+	case TOKEN_CHARACTER:
+		return new ast_expression_charconst(cur_token.charval);
+	case TOKEN_SQUAREBRACKET_LEFT:
+		match_token(TOKEN_SQUAREBRACKET_RIGHT);
+		return new ast_expression_emptylist();
+	default:
+		parse_error(cur_token.position, "Unexpected token %s", token_name(cur_token).c_str());
+		return new ast_expression_intconst(0);
+	}
+}
+@
+
+Second highest precedence, division, multiplication and modulo
+<<parse opl1>>=
+ast_expression *parse_opl1()
+{
+	ast_expression *opl0 = parse_opl0();
+	
+	bool cont = true;
+	
+	while (cont)
+	{
+		token cur_token = tok_get();
+	
+		switch(cur_token.type)
+		{
+		case TOKEN_TIMES:
+			opl0 = new ast_expression_binary(OP_MUL, opl0, parse_opl0());
+			break;
+		case TOKEN_DIV:
+			opl0 = new ast_expression_binary(OP_DIV, opl0, parse_opl0());
+			break;
+		case TOKEN_MOD:
+			opl0 = new ast_expression_binary(OP_MOD, opl0, parse_opl0());
+			break;
+		default:
+			// no further stuff at this level
+			tok_unget(cur_token);
+			cont = false;
+			break;
+		}
+	}
+	
+	return opl0;
+}
+@
+
+Third highest precedence, plus and minus
+<<parse opl2>>=
+ast_expression *parse_opl2()
+{
+	ast_expression *opl1 = parse_opl1();
+	
+	bool cont = true;
+	
+	while (cont)
+	{
+		token cur_token = tok_get();
+		
+		switch(cur_token.type)
+		{
+		case TOKEN_PLUS:
+			opl1 = new ast_expression_binary(OP_ADD, opl1, parse_opl1());
+			break;
+		case TOKEN_MINUS:
+			opl1 = new ast_expression_binary(OP_SUB, opl1, parse_opl1());
+			break;
+		default:
+			// no furhter stuff at this level
+			tok_unget(cur_token);
+			cont = false;
+			break;
+		}
+	}
+	
+	return opl1;
+}
+@
+
+Next up are ordering operators
+<<parse opl3>>=
+ast_expression *parse_opl3()
+{
+	ast_expression *opl2 = parse_opl2();
+	
+	bool cont = true;
+	
+	while (cont)
+	{
+		token cur_token = tok_get();
+		
+		switch(cur_token.type)
+		{
+		case TOKEN_LT:
+			opl2 = new ast_expression_binary(OP_LT, opl2, parse_opl2());
+			break;
+		case TOKEN_LE:
+			opl2 = new ast_expression_binary(OP_LE, opl2, parse_opl2());
+			break;
+		case TOKEN_GT:
+			opl2 = new ast_expression_binary(OP_GT, opl2, parse_opl2());
+			break;
+		case TOKEN_GE:
+			opl2 = new ast_expression_binary(OP_GE, opl2, parse_opl2());
+			break;
+		default:
+			// no further stuff at this level
+			tok_unget(cur_token);
+			cont = false;
+			break;
+		}
+	}
+	
+	return opl2;
+}	
+@
+
+Next up equality and its inverse
+<<parse opl4>>=
+ast_expression *parse_opl4()
+{
+	ast_expression *opl3 = parse_opl3();
+	
+	bool cont = true;
+	
+	while (cont)
+	{
+		token cur_token = tok_get();
+		
+		switch(cur_token.type)
+		{
+		case TOKEN_EQ:
+			opl3 = new ast_expression_binary(OP_EQ, opl3, parse_opl3());
+			break;
+		case TOKEN_NE:
+			opl3 = new ast_expression_binary(OP_NE, opl3, parse_opl3());
+			break;
+		default:
+			// not further stuff at this level
+			tok_unget(cur_token);
+			cont = false;
+			break;
+		}
+	}
+	
+	return opl3;
+}
+@
+
+Logical and
+<<parse opl5>>=
+ast_expression *parse_opl5()
+{
+	ast_expression *opl4 = parse_opl4();
+	
+	bool cont = true;
+	
+	while (cont)
+	{
+		token cur_token = tok_get();
+		
+		switch(cur_token.type)
+		{
+		case TOKEN_AND:
+			opl4 = new ast_expression_binary(OP_AND, opl4, parse_opl4());
+			break;
+		default:
+			// no further stuff at this level
+			tok_unget(cur_token);
+			cont = false;
+			break;
+		}
+	}
+	
+	return opl4;
+}
+@
+
+Logical or
+<<parse opl6>>=
+ast_expression *parse_opl6()
+{
+	ast_expression *opl5 = parse_opl5();
+	
+	bool cont = true;
+	
+	while (cont)
+	{
+		token cur_token = tok_get();
+		
+		switch(cur_token.type)
+		{
+		case TOKEN_OR:
+			opl5 = new ast_expression_binary(OP_OR, opl5, parse_opl5());
+			break;
+		default:
+			// no further stuff at this level
+			tok_unget(cur_token);
+			cont = false;
+			break;
+		}
+	}
+	
+	return opl5;
+}
+@
+
+And were at the highest precedence level (hence using parse_expr), the colon operator:
+<<parse expression>>=
+ast_expression *parse_expr()
+{
+	ast_expression *opl6 = parse_opl6();
+	
+	token cur_token = tok_get();
+	
+	if (cur_token.type == TOKEN_COLON)
+	{
+		return new ast_expression_binary(OP_COLON, opl6, parse_expr());
+	}
+	else
+	{
+		tok_unget(cur_token);
+		return opl6;
+	}
+}
+@
+
+\subsection{Auxilary functions}
+Matching a token we know should be there, and that does not contain additional info, is a fairly common task. Generating error messages for them is also not difficult, hence it is usefull to make a single function handling this.
+<<match token>>=
+void match_token(token_type t)
+{
+	token cur_token = tok_get();
+	
+	if (cur_token.type != t)
+	{
+		// most likely the needed token is missing, so correct on that assumption
+		tok_unget(cur_token);
+		
+		// to generate the error message we need a full token, not just a type, so build one
+		token expected_token;
+		expected_token.type = t;
+		expected_token.id = "";
+		expected_token.charval = ' ';
+		expected_token.intval = 0;
+		
+		// Error
+		parse_error(cur_token.position, "Missing %s", token_name(expected_token).c_str());
+	}
+}
+@
+
+\subsection{Error handling}
+<<parser error handling>>=
+void parse_error(source_position pos, const char *message, ...)
+{
+	va_list args;
+	va_start(args, message);
+	
+	eh_error(pos, message, args);
+	
+	va_end(args);
+}
+
+@
+
+\subsection{Source and headers}
+<<ast.h>>=
+#include <cstdio>
+#include <string>
+
+<<ast base>>
+<<type expression ast>>
+<<expression ast>>
+@
+<<ast.cpp>>=
+#include "ast.h"
+using namespace std;
+
+<<expression ast implementation>>
+@
+
+<<parser.h>>=
+#include "ast.h"
+
+<<type parsing header>>
+<<parse expression header>>
+@
+<<parser.cpp>>=
+#include "parser.h"
+#include "token.h"
+#include "error.h"
+#include <cstdarg>
+
+using namespace std;
+
+<<parser error handling>>
+<<match token>>
+<<parse type expression>>
+
+<<parse opl0>>
+<<parse opl1>>
+<<parse opl2>>
+<<parse opl3>>
+<<parse opl4>>
+<<parse opl5>>
+<<parse opl6>>
+<<parse expression>>
+@
