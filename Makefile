@@ -9,18 +9,18 @@ test/tokentest: testprogs/tokentest
 
 error.o: error.cpp error.h position.h
 error.h: error.nw
-	notangle -L -Rerror.h error.nw > error.h
+	notangle -L -Rerror.h error.nw | cpif error.h
 error.cpp: error.nw
-	notangle -L -Rerror.cpp error.nw > error.cpp
+	notangle -L -Rerror.cpp error.nw | cpif error.cpp
 
 position.h: position.nw
-	notangle -L -Rposition.h position.nw > position.h
+	notangle -L -Rposition.h position.nw | cpif position.h
 
 token.o: token.cpp token.h error.h position.h
 token.h: token.nw
-	notangle -L -Rtoken.h token.nw > token.h
+	notangle -L -Rtoken.h token.nw | cpif token.h
 token.cpp: token.nw
-	notangle -L -Rtoken.cpp token.nw > token.cpp
+	notangle -L -Rtoken.cpp token.nw | cpif token.cpp
 
 code.tex: token.nw position.nw error.nw
 	noweave -t4 token.nw position.nw error.nw > code.tex
