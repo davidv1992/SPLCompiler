@@ -1,4 +1,4 @@
-.PHONY: clean test test/tokentest version.h
+.PHONY: clean test version.h
 #force version.h on every build
 
 CXXFLAGS = -I. -g -Wall -Wextra -Werror
