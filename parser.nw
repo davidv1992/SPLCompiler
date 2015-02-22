@@ -487,7 +487,7 @@ ast_expression *parse_opl6()
 }
 @
 
-And were at the highest precedence level (hence using parse_expr), the colon operator:
+And were at the highest precedence level (hence using parse\_expr), the colon operator:
 <<parse expression>>=
 ast_expression *parse_expr()
 {
