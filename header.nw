@@ -1,0 +1,6 @@
+%header for tex generation using noweb. This allows me to put in extra packages
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{noweb}
+\pagestyle{noweb}\noweboptions{}
+\begin{document}
