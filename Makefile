@@ -38,7 +38,7 @@ parser.cpp: parser.nw
 version.h:
 	echo \#define VERSION \"`git describe --abbrev=4 --dirty --always --tags`\" | cpif version.h
 
-code.tex: token.nw position.nw error.nw parser.nw
+code.tex: header.nw trailer.nw token.nw position.nw error.nw parser.nw
 	noweave -t4 -delay header.nw token.nw parser.nw position.nw error.nw trailer.nw | cpif code.tex
 code.pdf: code.tex
 	latexmk -pdf code.tex
