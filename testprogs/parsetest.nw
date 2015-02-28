@@ -1,0 +1,22 @@
+\section{Parsing test program}
+
+The program here tests the tokenizer and parser
+
+<<parsetest.cpp>>=
+#include "token.h"
+#include "parser.h"
+#include <cstdio>
+
+using namespace std;
+
+int main(int argc, char **argv)
+{
+	if (argc < 2)
+		return 1;
+	
+	tok_setinput(string(argv[1]));
+	
+	parse_program()->print();
+	return 0;
+}
+@

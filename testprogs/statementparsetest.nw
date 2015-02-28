@@ -1,0 +1,19 @@
+\section{Test statement parsing}
+
+The following is a simple program to test statement parsing
+
+<<statementparsetest.cpp>>=
+#include "token.h"
+#include "parser.h"
+#include <cstdio>
+
+int main()
+{
+	tok_setinput_fd("stdin", stdin);
+	
+	parse_statement(false, false)->print();
+	
+	printf("\n");
+	return 0;
+}
+@

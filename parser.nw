@@ -1,7 +1,7 @@
 \section{Parsing}
 
 \subsection{Grammar}
-The grammar as given in the SPL specification has a number of ambiguities, which need to be resolved before we can get to work on the parser proper
+The grammar as given in the SPL specification has a number of ambiguities, which need to be resolved before we can get to work on the parser proper. The most important of these is the fact that expression parsing is defined using operator precedence. However, for the purpose of parsing it is more usefull to write it in the grammar itself. For this purpose we introduce several new non-terminals opl0 through opl6, which contain the precedence levels
 
 \subsection{Abstract Syntax trees}
 Abstract syntax trees are implemented using classes for each of the nodes. Each node is responsible for managing the memory used by itself and its subtrees. Upon passing pointers of an ast to a constructor for a node, that node acquires ownership of the memory associated with the ast, and should free it when it gets deleted. Also, each node should be able to print a readable representation of itsef.
@@ -166,12 +166,47 @@ public:
 };
 class ast_expression_variable : public ast_expression
 {
+};
+class ast_expression_variable_base : public ast_expression_variable
+{
 public:
 	std::string id;
 	
-	ast_expression_variable(std::string _id) {id = _id;}
-	virtual ~ast_expression_variable(){}
+	ast_expression_variable_base(std::string _id) {id = _id;}
+	virtual ~ast_expression_variable_base(){}
 	virtual void print() { printf("%s", id.c_str()); }
+};
+class ast_expression_variable_field : public ast_expression_variable
+{
+public:
+	ast_expression_variable *base;
+	std::string field;
+	
+	ast_expression_variable_field(ast_expression_variable *b, std::string f) { base = b; field = f; }
+	virtual ~ast_expression_variable_field() { delete base; }
+	virtual void print() { base->print(); printf(".%s", field.c_str()); }
+};
+class ast_expression_funcall : public ast_expression
+{
+public:
+	std::string id;
+	std::vector<ast_expression*> arguments;
+	
+	ast_expression_funcall(std::string fn, std::vector<ast_expression*> args) { id=fn; arguments = args; }
+	virtual ~ast_expression_funcall() { for (auto ptr : arguments) delete ptr; }
+	virtual void print() {
+		bool firstArg = true;
+		printf("%s(", id.c_str());
+		for (auto ptr : arguments)
+		{
+			if (firstArg)
+				firstArg = false;
+			else
+				printf(", ");
+			ptr->print();
+		}
+		printf(")");
+	}
 };
 class ast_expression_intconst : public ast_expression
 {
@@ -197,6 +232,15 @@ public:
 	ast_expression_emptylist(){}
 	virtual ~ast_expression_emptylist(){}
 	virtual void print() { printf("[]");}
+};
+class ast_expression_pair : public ast_expression
+{
+public:
+	ast_expression *first, *second;
+	
+	ast_expression_pair(ast_expression *f, ast_expression *s) {first = f; second = s;}
+	virtual ~ast_expression_pair() {delete first; delete second;}
+	virtual void print() { printf("("); first->print(); printf(","); second->print(); printf(")");}
 };
 @
 <<expression ast implementation>>=
@@ -256,28 +300,88 @@ string ast_operator_string(ast_unary_operator op)
 
 Since expressions can contain brackets, we need recursion across multiple functions, hence we pre-declare the expr parser:
 <<parse expression header>>=
-ast_expression *parse_expr();
+ast_expression *parse_expression();
 @
 
-Highest precedence, brackets, constants, variables and unary operators
+Highest precedence, brackets, constants, variables, function calls and unary operators
 <<parse opl0>>=
 ast_expression *parse_opl0()
 {
 	token cur_token = tok_get();
 	
+	token next_token;
 	switch(cur_token.type)
 	{
 	case TOKEN_ROUNDBRACKET_LEFT: {
-			ast_expression *result = parse_expr();
-			match_token(TOKEN_ROUNDBRACKET_RIGHT);
-			return result;
+			ast_expression *result = parse_expression();
+			next_token = tok_get();
+			if (next_token.type == TOKEN_ROUNDBRACKET_RIGHT)
+			{
+				return result;
+			}
+			else if (next_token.type == TOKEN_COMMA)
+			{
+				ast_expression *sec = parse_expression();
+				match_token(TOKEN_ROUNDBRACKET_RIGHT);
+				return new ast_expression_pair(result, sec);
+			}
+			else
+			{
+				parse_error(next_token.position, "Unexpected %s, expected , or )", token_name(next_token).c_str());
+				return result;
+			}
 		}
 	case TOKEN_MINUS:
 		return new ast_expression_unary(OP_NEG, parse_opl0());
 	case TOKEN_NOT:
 		return new ast_expression_unary(OP_NOT, parse_opl0());
 	case TOKEN_ID:
-		return new ast_expression_variable(cur_token.id);
+		next_token = tok_get();
+		if (next_token.type == TOKEN_ROUNDBRACKET_LEFT)
+		{
+			vector<ast_expression*> args;
+			next_token = tok_get();
+			if (next_token.type != TOKEN_ROUNDBRACKET_RIGHT)
+			{
+				tok_unget(next_token);
+				do
+				{
+					args.push_back(parse_expression());
+					next_token = tok_get();
+				}
+				while (next_token.type == TOKEN_COMMA);
+			}
+			
+			if (next_token.type != TOKEN_ROUNDBRACKET_RIGHT)
+			{
+				parse_error(next_token.position, "Missing )");
+				tok_unget(next_token);
+			}
+			
+			return new ast_expression_funcall(cur_token.id, args);
+		}
+		else
+		{
+			ast_expression_variable *val = new ast_expression_variable_base(cur_token.id);
+			while (next_token.type == TOKEN_DOT)
+			{
+				next_token = tok_get();
+				string field = "";
+				if (next_token.type == TOKEN_ID)
+				{
+					field = next_token.id;
+				}
+				else
+				{
+					parse_error(next_token.position, "Missing field name, got %s", token_name(next_token).c_str());
+					tok_unget(next_token);
+				}
+				val = new ast_expression_variable_field(val, field);
+				next_token = tok_get();
+			}
+			tok_unget(next_token);
+			return val;
+		}
 	case TOKEN_NUMERIC:
 		return new ast_expression_intconst(cur_token.intval);
 	case TOKEN_CHARACTER:
@@ -489,7 +593,7 @@ ast_expression *parse_opl6()
 
 And were at the highest precedence level (hence using parse\_expr), the colon operator:
 <<parse expression>>=
-ast_expression *parse_expr()
+ast_expression *parse_expression()
 {
 	ast_expression *opl6 = parse_opl6();
 	
@@ -497,13 +601,614 @@ ast_expression *parse_expr()
 	
 	if (cur_token.type == TOKEN_COLON)
 	{
-		return new ast_expression_binary(OP_COLON, opl6, parse_expr());
+		return new ast_expression_binary(OP_COLON, opl6, parse_expression());
 	}
 	else
 	{
 		tok_unget(cur_token);
 		return opl6;
 	}
+}
+@
+
+\subsection{Parsing statements}
+Statements are relatively simple. There are only two notable things. In order to avoid having two representations of function calls, a function call statement is represented as an expression statement where the expression is a function call. Furthermore, because it is very easy to implement, variable declarations are seen as statements inside functions, using a flag and boolean argument to the parsing routines to enforce the strict rules.
+
+For assignment statements we need a concept of lvalue.
+<<lvalue ast>>=
+class ast_lvalue : public ast_base
+{
+};
+class ast_lvalue_variable : public ast_lvalue
+{
+public:
+	std::string variable;
+	
+	ast_lvalue_variable(std::string var) { variable = var; }
+	virtual ~ast_lvalue_variable() {}
+	virtual void print()
+	{
+		printf("%s", variable.c_str());
+	}
+};
+class ast_lvalue_field : public ast_lvalue
+{
+public:
+	ast_lvalue *base;
+	std::string field;
+	
+	ast_lvalue_field(ast_lvalue *b, std::string f) { base = b; field  = f;}
+	virtual ~ast_lvalue_field() { delete base; }
+	virtual void print()
+	{
+		base->print();
+		printf(".%s", field.c_str());
+	}
+};
+@
+
+And of course we need to be able to store statements
+<<statement ast>>=
+class ast_statement : public ast_base
+{
+};
+class ast_statement_block : public ast_statement
+{
+public:
+	std::vector<ast_statement*> body;
+	
+	ast_statement_block(std::vector<ast_statement*> b) {body = b;}
+	virtual ~ast_statement_block() {for (auto ptr :body) delete ptr;}
+	virtual void print()
+	{
+		printf("{\n");
+		for (auto ptr:body) ptr->print();
+		printf("}\n");
+	}
+};
+class ast_statement_vardecl : public ast_statement
+{
+public:
+	ast_type *type;
+	std::string id;
+	ast_expression *value;
+	
+	ast_statement_vardecl(ast_type *t, std::string i, ast_expression *val) { type = t; id = i; value = val; }
+	virtual ~ast_statement_vardecl() { delete type; delete value; }
+	virtual void print()
+	{
+		type->print();
+		printf(" %s = ", id.c_str());
+		value->print();
+		printf(";\n");
+	}
+};
+class ast_statement_assign : public ast_statement
+{
+public:
+	ast_lvalue *location;
+	ast_expression *value;
+	
+	ast_statement_assign(ast_lvalue * loc, ast_expression *val) { location = loc; value = val; }
+	virtual ~ast_statement_assign() { delete location; delete value;}
+	virtual void print()
+	{
+		location->print();
+		printf(" = ");
+		value->print();
+		printf(";\n");
+	}
+};
+class ast_statement_expression : public ast_statement
+{
+public:
+	ast_expression *inner;
+	
+	ast_statement_expression(ast_expression *i) { inner = i; }
+	virtual ~ast_statement_expression() { delete inner; }
+	virtual void print()
+	{
+		inner->print();
+		printf(";\n");
+	}
+};
+class ast_statement_if : public ast_statement
+{
+public:
+	ast_expression *condition;
+	ast_statement *true_statement;
+	ast_statement *false_statement;
+	
+	ast_statement_if(ast_expression *cond, ast_statement *t, ast_statement *f=NULL) { condition = cond; true_statement = t; false_statement = f; }
+	virtual ~ast_statement_if () {
+		delete true_statement; 
+		if (false_statement != NULL) delete false_statement;
+	}
+	virtual void print()
+	{
+		printf("if (");
+		condition->print();
+		printf(") ");
+		true_statement->print();
+		if (false_statement != NULL)
+		{
+			printf("else ");
+			false_statement->print();
+		}
+	}
+};
+class ast_statement_while : public ast_statement
+{
+public:
+	ast_expression *condition;
+	ast_statement *body;
+	
+	ast_statement_while (ast_expression *c, ast_statement *b) { condition = c; body = b;}
+	virtual ~ast_statement_while() { delete condition; delete body; }
+	virtual void print()
+	{
+		printf("while (");
+		condition->print();
+		printf(") ");
+		body->print();
+	}
+};
+class ast_statement_return : public ast_statement
+{
+public:
+	ast_expression *value;
+	
+	ast_statement_return(ast_expression *val = NULL) { value = val; }
+	virtual ~ast_statement_return() { if (value != NULL) delete value; }
+	virtual void print()
+	{
+		if (value == NULL)
+			printf("return;");
+		else
+		{
+			printf("return ");
+			value->print();
+			printf(";\n");
+		}
+	}
+};
+@
+
+Parsing lvalues is straightforward, because there really is only one thing going on. The only problem is that there is left recursion, but we solve that in the same way as for expressions.
+<<parse lvalue>>=
+ast_lvalue *parse_lvalue()
+{
+	ast_lvalue *res;
+	
+	token cur_token = tok_get();
+	if (cur_token.type != TOKEN_ID)
+	{
+		// Technically an error, but the rest of the parser shouldn't call us if the next token
+		//  is not an ID, hence we can afford to fatal here and not handle this in a better way
+		parse_fatal(cur_token.position, "Expected lvalue, got %s", token_name(cur_token).c_str());
+	}
+	
+	res = new ast_lvalue_variable(cur_token.id);
+	
+	token next_token = tok_get();
+	while (next_token.type == TOKEN_DOT)
+	{
+		next_token = tok_get();
+		string field;
+		if (cur_token.type != TOKEN_ID)
+		{
+			field = "";
+			parse_error(next_token.position, "Missing field name, got %s", token_name(next_token).c_str());
+		}
+		else
+		{
+			field = next_token.id;
+			next_token = tok_get();
+		}
+		
+		res = new ast_lvalue_field(res, field);	
+	}
+	tok_unget(next_token);
+	
+	return res;
+}
+@
+
+Parsing statements has two modes, depending on whether vardecls are allowed in strict mode. Furthermore, we keep track if the current statement is part of "if <stmt>", to give warnings for the dangling else problem.
+If we cannot generate a statement starting with the current input, we declare an error and consume it. This is likely to give us a reasonable state, unless it is an eof token, which is handled seperately in a few cases.
+<<parse statement header>>=
+ast_statement *parse_statement(bool vardecl_allowed, bool direct_in_if);
+@
+<<parse statement>>=
+ast_statement *parse_statement(bool vardecl_allowed, bool direct_in_if)
+{
+	token cur_token = tok_get();
+	
+	token next_token;
+	switch(cur_token.type)
+	{
+	<<parse block>>
+	<<parse statements starting with id>>
+	<<parse rest of vardecls>>
+	<<parse if>>
+	<<parse while>>
+	<<parse return>>
+	default:
+		parse_error(cur_token.position, "Unexpected symbol %s, expected a statement.", token_name(cur_token).c_str());
+		return new ast_statement_block(vector<ast_statement*>(0));
+	}
+	
+	return new ast_statement_block(vector<ast_statement*>(0));
+}
+@
+
+Id first has a few options, either it is a vardecl with simple type, a function call, or an assign, so we need extra lookahead
+<<parse statements starting with id>>=
+case TOKEN_ID:
+	next_token = tok_get();
+	if (next_token.type == TOKEN_ASSIGN || next_token.type == TOKEN_DOT)
+	{
+		tok_unget(next_token);
+		tok_unget(cur_token);
+		<<parse assign>>
+	}
+	else if (next_token.type == TOKEN_ROUNDBRACKET_LEFT)
+	{
+		<<parse funcall>>
+	}
+	else
+	{
+		tok_unget(next_token);
+		tok_unget(cur_token);
+		<<parse vardecl>>
+	}
+	break;
+@
+
+function call statements are actually more like expressions, so the rest of the compiler looks at function call statements as expressions that are a statement on their own.
+<<parse funcall>>=
+vector<ast_expression*> args;
+next_token = tok_get();
+if (next_token.type != TOKEN_ROUNDBRACKET_RIGHT)
+{
+	tok_unget(next_token);
+	do
+	{
+		args.push_back(parse_expression());
+		next_token = tok_get();
+	}
+	while (next_token.type == TOKEN_COMMA);
+}
+
+if (next_token.type != TOKEN_ROUNDBRACKET_RIGHT)
+{
+	parse_error(next_token.position, "Missing )");
+	tok_unget(next_token);
+}
+
+match_token(TOKEN_SEMICOLON);
+
+return new ast_statement_expression(new ast_expression_funcall(cur_token.id, args));
+@
+
+Variable declarations have two source:
+<<parse rest of vardecls>>=
+case TOKEN_ROUNDBRACKET_LEFT:
+case TOKEN_SQUAREBRACKET_LEFT:
+	tok_unget(cur_token);
+	<<parse vardecl>>
+	break;
+@
+<<parse vardecl>>=
+{
+	// cur_token still contains info on first token of statement, lets use that here
+	if (!vardecl_allowed && strict_vardecl)
+		parse_error(cur_token.position, "Illegal variable declaration. Variable declarations are only allowed at start of functions.");
+		
+	ast_type *type = parse_type();
+	cur_token = tok_get();
+	string name;
+	if (cur_token.type != TOKEN_ID)
+	{
+		parse_error(cur_token.position, "Missing variable name.");
+		tok_unget(cur_token);
+		name = "";
+	}
+	else
+	{
+		name = cur_token.id;
+	}
+	match_token(TOKEN_ASSIGN);
+	ast_expression *value = parse_expression();
+	match_token(TOKEN_SEMICOLON);
+	return new ast_statement_vardecl(type, name, value);
+}
+@
+
+Assignments come only from ids, hence we dont need seperate case statement:
+<<parse assign>>=
+{
+	ast_lvalue *lhs = parse_lvalue();
+	match_token(TOKEN_ASSIGN);
+	ast_expression *value = parse_expression();
+	match_token(TOKEN_SEMICOLON);
+	return new ast_statement_assign(lhs, value);
+}
+@
+
+For an else the corresponding if might be ambigue. We always bind to the last started if that we can still bind it to (eg if if stmt; else stmt; is parsed as if {if stmt; else stmt;}).
+<<parse if>>=
+case TOKEN_IF:
+{
+	match_token(TOKEN_ROUNDBRACKET_LEFT);
+	ast_expression *cond = parse_expression();
+	match_token(TOKEN_ROUNDBRACKET_RIGHT);
+	ast_statement *truestat = parse_statement(false, true);
+	next_token = tok_get();
+	if (next_token.type == TOKEN_ELSE)
+	{
+		if (direct_in_if)
+			parse_warning(next_token.position, "Ambiguos else, can correspond to more than one if.");
+		return new ast_statement_if(cond, truestat, parse_statement(false, true));
+	}
+	else
+	{
+		tok_unget(next_token);
+		return new ast_statement_if(cond, truestat);
+	}
+}
+break;
+@
+
+There are two types of returns, those that return values, and those that do not. We recognize those that do not by the semicolon directly following the return.
+<<parse return>>=
+case TOKEN_RETURN:
+{
+	next_token = tok_get();
+	if (next_token.type != TOKEN_SEMICOLON)
+	{
+		tok_unget(next_token);
+		ast_expression *value = parse_expression();
+		match_token(TOKEN_SEMICOLON);
+		return new ast_statement_return(value);
+	}
+	else
+	{
+		return new ast_statement_return();
+	}
+}
+break;
+@
+
+If we find an eof while checking whether we are at the end, something is wrong and we should wrap up.
+<<parse block>>=
+case TOKEN_CURLYBRACKET_LEFT:
+{
+	next_token = tok_get();
+	vector<ast_statement*> stats;
+	while (next_token.type != TOKEN_CURLYBRACKET_RIGHT)
+	{
+		if (next_token.type == TOKEN_CURLYBRACKET_LEFT)
+		{
+			// nested block cant have vardecl
+			vardecl_allowed = false;
+		}
+		tok_unget(next_token);
+		if (next_token.type == TOKEN_EOF)
+		{
+			parse_error(next_token.position, "Missing } at end of file.");
+			break;
+		}
+		ast_statement *stat = parse_statement(vardecl_allowed, false);
+		
+		// after first non-vardecl vardecls no longer allowed
+		if (typeid(stat) != typeid(ast_statement_vardecl))
+			vardecl_allowed = false;
+			
+		stats.push_back(stat);
+		next_token = tok_get();
+	}
+	return new ast_statement_block(stats);
+}
+break;
+@
+
+A while is the simple one:
+<<parse while>>=
+case TOKEN_WHILE:
+{
+	match_token(TOKEN_ROUNDBRACKET_LEFT);
+	ast_expression *cond = parse_expression();
+	match_token(TOKEN_ROUNDBRACKET_RIGHT);
+	return new ast_statement_while(cond, parse_statement(false, false));
+}
+break;
+@
+
+\subsection{Parsing programs}
+Representing the whole program is a single top-level object, containing two lists, variable definitions and function definitions. Variable declarations can be handled as statements, so do that (saves code later on). Functions need something new.
+<<program ast>>=
+class ast_funarg : public ast_base
+{
+public:
+	ast_type *type;
+	std::string name;
+	
+	ast_funarg(ast_type *t, std::string n) { type = t; name = n; }
+	virtual ~ast_funarg() { delete type; }
+	virtual void print()
+	{
+		type->print();
+		printf(" %s", name.c_str());
+	}
+};
+class ast_fundecl
+{
+public:
+	ast_type *type;
+	std::string name;
+	std::vector<ast_funarg*> args;
+	ast_statement *body;
+	
+	ast_fundecl(ast_type *t, std::string n, std::vector<ast_funarg*> a, ast_statement* b) { type = t; name = n; args = a; body = b; }
+	virtual ~ast_fundecl()
+	{
+		delete type;
+		delete body;
+		for (auto ptr : args) delete ptr;
+	}
+	virtual void print()
+	{
+		type->print();
+		printf(" %s(", name.c_str());
+		bool is_firstarg = true;
+		for (auto ptr : args)
+		{
+			if (is_firstarg)
+				is_firstarg = false;
+			else
+				printf(",");
+			ptr->print();
+		}
+		printf(") ");
+		body->print();
+	}
+};
+class ast_program
+{
+public:
+	std::vector<ast_statement_vardecl*> globalvars;
+	std::vector<ast_fundecl*> functions;
+	
+	ast_program(std::vector<ast_statement_vardecl*>vars, std::vector<ast_fundecl*> funs) { globalvars = vars; functions = funs; }
+	virtual ~ast_program()
+	{
+		for (auto ptr : globalvars) delete ptr;
+		for (auto ptr : functions) delete ptr;
+	}
+	virtual void print()
+	{
+		for (auto ptr : globalvars)
+		{
+			ptr->print();
+		}
+		for (auto ptr : functions)
+		{
+			ptr->print();
+		}
+	}
+};
+@
+
+Whole program parsing is the only thing left to do. It is relatively simple compared to statement parsing, as there are only two things that we see. However, both start with a type followed by an identifier, so we cannot simply check the first symbol to see what it is. However, because parsing of the "type identifier" segment does not depend on whether we have a function declaration or a variable declaration, we can simply defer the decision till after parsing those.
+<<parse program header>>=
+ast_program *parse_program();
+@
+<<parse program>>=
+ast_program *parse_program()
+{
+	// accumulator for results
+	vector<ast_statement_vardecl*> globalvariables;
+	vector<ast_fundecl*> functions;	
+	
+	// check for eof
+	token cur_token = tok_get();
+	while (cur_token.type != TOKEN_EOF)
+	{
+		tok_unget(cur_token);
+		
+		ast_type *type = parse_type();
+		
+		cur_token = tok_get();
+		string name;
+		if (cur_token.type == TOKEN_ID)
+		{
+			name = cur_token.id;
+		}
+		else
+		{
+			parse_error(cur_token.position, "Unexpected %s, expected identifier.", token_name(cur_token).c_str());
+			tok_unget(cur_token);
+			name = "";
+		}
+		
+		cur_token = tok_get();
+		switch(cur_token.type)
+		{
+		<<parse function>>
+		<<parse global vardecl>>
+		default:
+			parse_error(cur_token.position, "Unexpected %s, expected a function or variable definition", token_name(cur_token).c_str());
+			break;
+		}
+		
+		cur_token = tok_get();
+	}
+	
+	return new ast_program(globalvariables, functions);
+}
+@
+
+Vardecls are straightforward at the global level, since there is nothing that looks similar, but is parsed different.
+<<parse global vardecl>>=
+case TOKEN_ASSIGN:
+{
+	ast_expression *value = parse_expression();
+	match_token(TOKEN_SEMICOLON);
+	globalvariables.push_back(new ast_statement_vardecl(type, name, value));
+}
+break;
+@
+
+Functions need a block statement as their body according to the doc, so verify that. Furthermore, vardecls are allowed in the start of that 
+<<parse function>>=
+case TOKEN_ROUNDBRACKET_LEFT:
+{
+	vector<ast_funarg*> arguments;
+	cur_token = tok_get();
+	bool is_first_arg = true;
+	while (cur_token.type != TOKEN_ROUNDBRACKET_RIGHT)
+	{
+		if (is_first_arg)
+		{
+			is_first_arg = false;
+			tok_unget(cur_token);
+		}
+		else
+		{
+			if (cur_token.type != TOKEN_COMMA)
+			{
+				parse_error(cur_token.position, "Missing ,");
+				tok_unget(cur_token);
+			}
+		}
+		arguments.push_back(parse_funarg());
+		cur_token = tok_get();
+	}
+	
+	cur_token = tok_get();
+	if (cur_token.type != TOKEN_CURLYBRACKET_LEFT)
+		parse_error(cur_token.position, "Missing {, functions can only have blocks as body.");
+	tok_unget(cur_token);
+	
+	functions.push_back(new ast_fundecl(type, name, arguments, parse_statement(true, false)));
+}
+break;
+@
+
+Parsing function arguments is simple:
+<<parse funarg>>=
+ast_funarg *parse_funarg()
+{
+	ast_type * type = parse_type();
+	token cur_token = tok_get();
+	if (cur_token.type != TOKEN_ID)
+	{
+		parse_error(cur_token.position, "Unexpected %s, expected argument name", token_name(cur_token).c_str());
+		tok_unget(cur_token);
+		return new ast_funarg(type, "");
+	}
+	return new ast_funarg(type, cur_token.id);
 }
 @
 
@@ -534,6 +1239,15 @@ void match_token(token_type t)
 
 \subsection{Error handling}
 <<parser error handling>>=
+void parse_warning(source_position pos, const char *message, ...)
+{
+	va_list args;
+	va_start(args, message);
+	
+	eh_warning(pos, message, args);
+	
+	va_end(args);
+}
 void parse_error(source_position pos, const char *message, ...)
 {
 	va_list args;
@@ -543,17 +1257,34 @@ void parse_error(source_position pos, const char *message, ...)
 	
 	va_end(args);
 }
-
+void parse_fatal(source_position pos, const char *message, ...)
+{
+	va_list args;
+	va_start(args, message);
+	
+	eh_error(pos, message, args);
+	
+	va_end(args);
+	
+	exit(1);
+}
 @
 
 \subsection{Source and headers}
 <<ast.h>>=
+#ifndef AST_H
+#define AST_H
 #include <cstdio>
 #include <string>
+#include <vector>
 
 <<ast base>>
 <<type expression ast>>
 <<expression ast>>
+<<lvalue ast>>
+<<statement ast>>
+<<program ast>>
+#endif
 @
 <<ast.cpp>>=
 #include "ast.h"
@@ -563,16 +1294,23 @@ using namespace std;
 @
 
 <<parser.h>>=
+#ifndef PARSER_H
+#define PARSER_H
 #include "ast.h"
 
 <<type parsing header>>
 <<parse expression header>>
+<<parse statement header>>
+<<parse program header>>
+#endif
 @
 <<parser.cpp>>=
 #include "parser.h"
 #include "token.h"
 #include "error.h"
+#include "settings.h"
 #include <cstdarg>
+#include <typeinfo>
 
 using namespace std;
 
@@ -588,4 +1326,11 @@ using namespace std;
 <<parse opl5>>
 <<parse opl6>>
 <<parse expression>>
+
+<<parse lvalue>>
+
+<<parse statement>>
+
+<<parse funarg>>
+<<parse program>>
 @

@@ -1,0 +1,20 @@
+\section{Settings}
+
+I'm planning to have some of the compiler behaviour, such as language extensions and warning behaviour, configurable with runtime flags. For now though, static boolean values in the header should do.
+
+\subsection{Strict variable declarations}
+
+The language spec allows variable declarations only at the start of a function. Arbitrary positioning of these is easy enough to do, and this flag disables that extension.
+<<config variable declarations>>=
+static bool strict_vardecl = false;
+@
+
+\subsection{Header file}
+
+Generating the actual code:
+<<settings.h>>=
+#ifndef SETTINGS_H
+#define SETTINGS_H
+<<config variable declarations>>
+#endif
+@
