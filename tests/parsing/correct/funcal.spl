@@ -3,7 +3,13 @@ Int sqr(Int x) {
 }
 
 Int sqrprod(Int x, Int y) {
+	sqrprod(x,y);
 	return sqr(x)*sqr(y);
+}
+
+Void emptycall() {
+	emptycall();
+	return emptycall();
 }
 
 Int main(Int a, Int b) {

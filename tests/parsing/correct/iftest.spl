@@ -1,6 +1,6 @@
 Int main(Int a) {
-	Int b;
-	Int c;
+	Int b = 0;
+	Int c = 1;
 	
 	if (a < 0) {
 		b = a+5;
