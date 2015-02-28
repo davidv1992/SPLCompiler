@@ -454,6 +454,7 @@ if (next_char == 0)
 {
 	tok_warning_pos(comment_startpos, "Unclosed multiline comment");
 	cur_token.type = TOKEN_EOF;
+	cur_token.position = tok_curpos();
 	return cur_token;
 }
 @
@@ -467,6 +468,7 @@ while (next_char != '\n' && next_char != 0)
 if (next_char == 0)
 {
 	cur_token.type = TOKEN_EOF;
+	cur_token.position = tok_curpos();
 	return cur_token;
 }
 @
@@ -476,6 +478,7 @@ if (cur_char == 0)
 {
 	// eof
 	cur_token.type = TOKEN_EOF;
+	cur_token.position = tok_curpos();
 	return cur_token;
 }
 @
@@ -648,6 +651,8 @@ void tok_fatal(const char *message, ...)
 	eh_error(tok_curpos(), message, args);
 	
 	va_end(args);
+	
+	exit(1);
 }
 @
 
