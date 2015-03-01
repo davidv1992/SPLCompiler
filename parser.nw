@@ -849,13 +849,40 @@ public:
 		printf("if (");
 		condition->print(tabdepth);
 		printf(") ");
-		true_statement->print(tabdepth);
+		if (typeid(*true_statement) != typeid(ast_statement_block))
+		{
+			printf("{\n");
+			for (int i=0; i<tabdepth+1; i++)
+				printf("\t");
+			true_statement->print(tabdepth+1);
+			for (int i=0; i<tabdepth; i++)
+				printf("\t");
+			printf("}\n");
+		}
+		else
+		{
+			true_statement->print(tabdepth);
+		}
 		if (false_statement != NULL)
 		{
 			for (int i=0; i<tabdepth; i++)
 				printf("\t");
 			printf("else ");
-			false_statement->print(tabdepth);
+			
+			if (typeid(*false_statement) != typeid(ast_statement_block))
+			{
+				printf("{\n");
+				for (int i=0; i<tabdepth+1; i++)
+					printf("\t");
+				false_statement->print(tabdepth+1);
+				for (int i=0; i<tabdepth; i++)
+					printf("\t");
+				printf("}\n");
+			}
+			else
+			{
+				false_statement->print(tabdepth);
+			}
 		}
 	}
 };
@@ -873,7 +900,20 @@ public:
 		printf("while (");
 		condition->print(tabdepth);
 		printf(") ");
-		body->print(tabdepth);
+		if (typeid(*body) != typeid(ast_statement_block))
+		{
+			printf("{\n");
+			for (int i=0; i<tabdepth+1; i++)
+				printf("\t");
+			body->print(tabdepth+1);
+			for (int i=0; i<tabdepth; i++)
+				printf("\t");
+			printf("}\n");
+		}
+		else
+		{
+			body->print(tabdepth);
+		}
 	}
 };
 class ast_statement_return : public ast_statement
@@ -1451,6 +1491,7 @@ void parse_fatal(source_position pos, const char *message, ...)
 #include <cstdio>
 #include <string>
 #include <vector>
+#include <typeinfo>
 
 <<ast base>>
 <<type expression ast>>
