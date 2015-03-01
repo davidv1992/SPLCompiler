@@ -10,6 +10,8 @@ Abstract syntax trees are implemented using classes for each of the nodes. Each 
 class ast_base
 {
 public:
+	source_position position;
+
 	virtual ~ast_base(){};
 	virtual void print()=0;
 };
@@ -30,7 +32,8 @@ class ast_simple_type : public ast_type
 public:
 	std::string type_id;
 
-	ast_simple_type(std::string _id) { type_id=_id; }
+	ast_simple_type(source_position pos, std::string _id) 
+		{ position = pos; type_id=_id; }
 	virtual ~ast_simple_type() {}
 	virtual void print() {printf("%s", type_id.c_str());}
 };
@@ -39,8 +42,9 @@ class ast_tuple_type : public ast_type
 public:
 	ast_type *type_first, *type_second;
 
-	ast_tuple_type(ast_type *first, ast_type *second)
+	ast_tuple_type(source_position pos, ast_type *first, ast_type *second)
 	{
+		position = pos;
 		type_first = first; 
 		type_second = second;
 	}
@@ -63,7 +67,8 @@ class ast_list_type : public ast_type
 public:
 	ast_type *type_element;
 
-	ast_list_type(ast_type *el) { type_element = el; }
+	ast_list_type(source_position pos, ast_type *el) 
+		{ position = pos; type_element = el; }
 	virtual ~ast_list_type() { delete type_element; }
 	virtual void print()
 	{
@@ -75,7 +80,7 @@ public:
 @
 <<parse simple type>>=
 case TOKEN_ID:
-	return new ast_simple_type(cur_token.id);
+	return new ast_simple_type(cur_token.position, cur_token.id);
 @
 <<parse tuple type>>=
 case TOKEN_ROUNDBRACKET_LEFT:
@@ -84,7 +89,7 @@ case TOKEN_ROUNDBRACKET_LEFT:
 		match_token(TOKEN_COMMA);
 		ast_type *right = parse_type();
 		match_token(TOKEN_ROUNDBRACKET_RIGHT);
-		return new ast_tuple_type(first, right);
+		return new ast_tuple_type(cur_token.position, first, right);
 	}
 @
 <<parse list type>>=
@@ -92,7 +97,7 @@ case TOKEN_SQUAREBRACKET_LEFT:
 	{
 		ast_type *el = parse_type();
 		match_token(TOKEN_SQUAREBRACKET_RIGHT);
-		return new ast_list_type(el);
+		return new ast_list_type(cur_token.position, el);
 	}
 @
 <<parse type expression>>=
@@ -107,7 +112,7 @@ ast_type *parse_type()
 	default:
 		parse_error(cur_token.position, 
 			"Expected type, got %s", token_name(cur_token).c_str());
-		return new ast_simple_type("Int");
+		return new ast_simple_type(cur_token.position, "Int");
 	}
 }
 @
@@ -152,8 +157,9 @@ public:
 	ast_expression *left, *right;
 	ast_binary_operator op;
 	
-	ast_expression_binary(ast_binary_operator _op, 
-		ast_expression *l, ast_expression *r) { op =_op; left = l; right = r; }
+	ast_expression_binary(source_position pos, ast_binary_operator _op, 
+		ast_expression *l, ast_expression *r) 
+		{ position = pos, op =_op; left = l; right = r; }
 	virtual ~ast_expression_binary() { delete left; delete right; }
 	virtual void print() {
 		printf("(");
@@ -169,8 +175,9 @@ public:
 	ast_expression *inner;
 	ast_unary_operator op;
 	
-	ast_expression_unary(ast_unary_operator _op, ast_expression *i) 
-		{op = _op; inner = i;}
+	ast_expression_unary(source_position pos, ast_unary_operator _op, 
+		ast_expression *i) 
+		{ position = pos; op = _op; inner = i;}
 	virtual ~ast_expression_unary() {delete inner;}
 	virtual void print() {
 		printf("(%s", ast_operator_string(op).c_str());
@@ -186,7 +193,8 @@ class ast_expression_variable_base : public ast_expression_variable
 public:
 	std::string id;
 	
-	ast_expression_variable_base(std::string _id) {id = _id;}
+	ast_expression_variable_base(source_position pos, std::string _id) 
+		{ position = pos; id = _id;}
 	virtual ~ast_expression_variable_base(){}
 	virtual void print() { printf("%s", id.c_str()); }
 };
@@ -197,7 +205,7 @@ public:
 	std::string field;
 	
 	ast_expression_variable_field(ast_expression_variable *b, std::string f) 
-		{ base = b; field = f; }
+		{ position = b->position; base = b; field = f; }
 	virtual ~ast_expression_variable_field() { delete base; }
 	virtual void print() { base->print(); printf(".%s", field.c_str()); }
 };
@@ -207,8 +215,9 @@ public:
 	std::string id;
 	std::vector<ast_expression*> arguments;
 	
-	ast_expression_funcall(std::string fn, std::vector<ast_expression*> args) 
-		{ id=fn; arguments = args; }
+	ast_expression_funcall(source_position pos, 
+		std::string fn, std::vector<ast_expression*> args) 
+		{ position = pos; id=fn; arguments = args; }
 	virtual ~ast_expression_funcall() { for (auto ptr : arguments) delete ptr; }
 	virtual void print() {
 		bool firstArg = true;
@@ -229,7 +238,8 @@ class ast_expression_intconst : public ast_expression
 public:
 	unsigned int value;
 	
-	ast_expression_intconst(unsigned int v) {value = v;}
+	ast_expression_intconst(source_position pos, unsigned int v) 
+		{position = pos, value = v;}
 	virtual ~ast_expression_intconst() {}
 	virtual void print() { printf("%d", value); }
 };
@@ -238,14 +248,16 @@ class ast_expression_charconst : public ast_expression
 public:
 	char value;
 	
-	ast_expression_charconst(char v) { value = v; }
+	ast_expression_charconst(source_position pos, char v) 
+		{ position = pos; value = v; }
 	virtual ~ast_expression_charconst() {}
 	virtual void print() { printf("%c", value); }
 };
 class ast_expression_emptylist : public ast_expression
 {
 public:
-	ast_expression_emptylist(){}
+	ast_expression_emptylist(source_position pos)
+		{position = pos;}
 	virtual ~ast_expression_emptylist(){}
 	virtual void print() { printf("[]");}
 };
@@ -254,8 +266,9 @@ class ast_expression_pair : public ast_expression
 public:
 	ast_expression *first, *second;
 	
-	ast_expression_pair(ast_expression *f, ast_expression *s) 
-		{first = f; second = s;}
+	ast_expression_pair(source_position pos, ast_expression *f, 
+		ast_expression *s) 
+		{position = pos; first = f; second = s;}
 	virtual ~ast_expression_pair() {delete first; delete second;}
 	virtual void print()
 	{
@@ -345,7 +358,7 @@ ast_expression *parse_opl0()
 	default:
 		parse_error(cur_token.position, 
 			"Unexpected token %s", token_name(cur_token).c_str());
-		return new ast_expression_intconst(0);
+		return new ast_expression_intconst(cur_token.position, 0);
 	}
 }
 @
@@ -363,7 +376,7 @@ case TOKEN_ROUNDBRACKET_LEFT: {
 	{
 		ast_expression *sec = parse_expression();
 		match_token(TOKEN_ROUNDBRACKET_RIGHT);
-		return new ast_expression_pair(result, sec);
+		return new ast_expression_pair(cur_token.position, result, sec);
 	}
 	else
 	{
@@ -409,12 +422,13 @@ if (next_token.type != TOKEN_ROUNDBRACKET_RIGHT)
 	tok_unget(next_token);
 }
 
-return new ast_expression_funcall(cur_token.id, args);
+return new ast_expression_funcall(cur_token.position, cur_token.id, args);
 @
 
 Variable references are a bit more difficult, because field access has a right-recursive structure. This is fixed by ussing an accumulator and a loop, and parsing it in a more bottom-up style (the same way as other operators with this behaviour are parsed).
 <<parse variable>>=
-ast_expression_variable *val = new ast_expression_variable_base(cur_token.id);
+ast_expression_variable *val = new ast_expression_variable_base
+	(cur_token.position, cur_token.id);
 while (next_token.type == TOKEN_DOT)
 {
 	next_token = tok_get();
@@ -439,20 +453,20 @@ return val;
 The unary operators are really straightforward:
 <<parse unary operators>>=
 case TOKEN_MINUS:
-	return new ast_expression_unary(OP_NEG, parse_opl0());
+	return new ast_expression_unary(cur_token.position, OP_NEG, parse_opl0());
 case TOKEN_NOT:
-	return new ast_expression_unary(OP_NOT, parse_opl0());
+	return new ast_expression_unary(cur_token.position, OP_NOT, parse_opl0());
 @
 
 And constants are straightforward as well
 <<parse constants>>=
 case TOKEN_NUMERIC:
-	return new ast_expression_intconst(cur_token.intval);
+	return new ast_expression_intconst(cur_token.position, cur_token.intval);
 case TOKEN_CHARACTER:
-	return new ast_expression_charconst(cur_token.charval);
+	return new ast_expression_charconst(cur_token.position, cur_token.charval);
 case TOKEN_SQUAREBRACKET_LEFT:
 	match_token(TOKEN_SQUAREBRACKET_RIGHT);
-	return new ast_expression_emptylist();
+	return new ast_expression_emptylist(cur_token.position);
 
 @
 
@@ -472,13 +486,16 @@ ast_expression *parse_opl1()
 		switch(cur_token.type)
 		{
 		case TOKEN_TIMES:
-			opl0 = new ast_expression_binary(OP_MUL, opl0, parse_opl0());
+			opl0 = new ast_expression_binary(cur_token.position, OP_MUL, 
+				opl0, parse_opl0());
 			break;
 		case TOKEN_DIV:
-			opl0 = new ast_expression_binary(OP_DIV, opl0, parse_opl0());
+			opl0 = new ast_expression_binary(cur_token.position, OP_DIV,
+				opl0, parse_opl0());
 			break;
 		case TOKEN_MOD:
-			opl0 = new ast_expression_binary(OP_MOD, opl0, parse_opl0());
+			opl0 = new ast_expression_binary(cur_token.position, OP_MOD,
+				opl0, parse_opl0());
 			break;
 		default:
 			// no further stuff at this level
@@ -508,10 +525,12 @@ ast_expression *parse_opl2()
 		switch(cur_token.type)
 		{
 		case TOKEN_PLUS:
-			opl1 = new ast_expression_binary(OP_ADD, opl1, parse_opl1());
+			opl1 = new ast_expression_binary(cur_token.position, OP_ADD,
+				opl1, parse_opl1());
 			break;
 		case TOKEN_MINUS:
-			opl1 = new ast_expression_binary(OP_SUB, opl1, parse_opl1());
+			opl1 = new ast_expression_binary(cur_token.position, OP_SUB,
+				opl1, parse_opl1());
 			break;
 		default:
 			// no furhter stuff at this level
@@ -541,16 +560,20 @@ ast_expression *parse_opl3()
 		switch(cur_token.type)
 		{
 		case TOKEN_LT:
-			opl2 = new ast_expression_binary(OP_LT, opl2, parse_opl2());
+			opl2 = new ast_expression_binary(cur_token.position, OP_LT, 
+				opl2, parse_opl2());
 			break;
 		case TOKEN_LE:
-			opl2 = new ast_expression_binary(OP_LE, opl2, parse_opl2());
+			opl2 = new ast_expression_binary(cur_token.position, OP_LE,
+				opl2, parse_opl2());
 			break;
 		case TOKEN_GT:
-			opl2 = new ast_expression_binary(OP_GT, opl2, parse_opl2());
+			opl2 = new ast_expression_binary(cur_token.position, OP_GT,
+				opl2, parse_opl2());
 			break;
 		case TOKEN_GE:
-			opl2 = new ast_expression_binary(OP_GE, opl2, parse_opl2());
+			opl2 = new ast_expression_binary(cur_token.position, OP_GE,
+				opl2, parse_opl2());
 			break;
 		default:
 			// no further stuff at this level
@@ -580,10 +603,12 @@ ast_expression *parse_opl4()
 		switch(cur_token.type)
 		{
 		case TOKEN_EQ:
-			opl3 = new ast_expression_binary(OP_EQ, opl3, parse_opl3());
+			opl3 = new ast_expression_binary(cur_token.position, OP_EQ,
+				opl3, parse_opl3());
 			break;
 		case TOKEN_NE:
-			opl3 = new ast_expression_binary(OP_NE, opl3, parse_opl3());
+			opl3 = new ast_expression_binary(cur_token.position, OP_NE,
+				opl3, parse_opl3());
 			break;
 		default:
 			// not further stuff at this level
@@ -613,7 +638,8 @@ ast_expression *parse_opl5()
 		switch(cur_token.type)
 		{
 		case TOKEN_AND:
-			opl4 = new ast_expression_binary(OP_AND, opl4, parse_opl4());
+			opl4 = new ast_expression_binary(cur_token.position, OP_AND,
+				opl4, parse_opl4());
 			break;
 		default:
 			// no further stuff at this level
@@ -643,7 +669,8 @@ ast_expression *parse_opl6()
 		switch(cur_token.type)
 		{
 		case TOKEN_OR:
-			opl5 = new ast_expression_binary(OP_OR, opl5, parse_opl5());
+			opl5 = new ast_expression_binary(cur_token.position, OP_OR,
+				opl5, parse_opl5());
 			break;
 		default:
 			// no further stuff at this level
@@ -668,7 +695,8 @@ ast_expression *parse_expression()
 	
 	if (cur_token.type == TOKEN_COLON)
 	{
-		return new ast_expression_binary(OP_COLON, opl6, parse_expression());
+		return new ast_expression_binary(cur_token.position, OP_COLON, 
+			opl6, parse_expression());
 	}
 	else
 	{
@@ -692,7 +720,8 @@ class ast_lvalue_variable : public ast_lvalue
 public:
 	std::string variable;
 	
-	ast_lvalue_variable(std::string var) { variable = var; }
+	ast_lvalue_variable(source_position pos, std::string var) 
+		{ position = pos, variable = var; }
 	virtual ~ast_lvalue_variable() {}
 	virtual void print()
 	{
@@ -705,7 +734,8 @@ public:
 	ast_lvalue *base;
 	std::string field;
 	
-	ast_lvalue_field(ast_lvalue *b, std::string f) { base = b; field  = f;}
+	ast_lvalue_field(ast_lvalue *b, std::string f) 
+		{ position = b->position; base = b; field  = f;}
 	virtual ~ast_lvalue_field() { delete base; }
 	virtual void print()
 	{
@@ -725,7 +755,8 @@ class ast_statement_block : public ast_statement
 public:
 	std::vector<ast_statement*> body;
 	
-	ast_statement_block(std::vector<ast_statement*> b) {body = b;}
+	ast_statement_block(source_position pos, std::vector<ast_statement*> b)
+		{ position = pos; body = b; }
 	virtual ~ast_statement_block() {for (auto ptr :body) delete ptr;}
 	virtual void print()
 	{
@@ -742,7 +773,7 @@ public:
 	ast_expression *value;
 	
 	ast_statement_vardecl(ast_type *t, std::string i, ast_expression *val)
-		{ type = t; id = i; value = val; }
+		{ position = t->position; type = t; id = i; value = val; }
 	virtual ~ast_statement_vardecl() { delete type; delete value; }
 	virtual void print()
 	{
@@ -759,7 +790,7 @@ public:
 	ast_expression *value;
 	
 	ast_statement_assign(ast_lvalue * loc, ast_expression *val)
-		{ location = loc; value = val; }
+		{ position = loc->position; location = loc; value = val; }
 	virtual ~ast_statement_assign() { delete location; delete value;}
 	virtual void print()
 	{
@@ -774,7 +805,8 @@ class ast_statement_expression : public ast_statement
 public:
 	ast_expression *inner;
 	
-	ast_statement_expression(ast_expression *i) { inner = i; }
+	ast_statement_expression(ast_expression *i) 
+		{ position = i->position; inner = i; }
 	virtual ~ast_statement_expression() { delete inner; }
 	virtual void print()
 	{
@@ -789,8 +821,14 @@ public:
 	ast_statement *true_statement;
 	ast_statement *false_statement;
 	
-	ast_statement_if(ast_expression *cond, ast_statement *t, ast_statement *f=NULL) 
-		{ condition = cond; true_statement = t; false_statement = f; }
+	ast_statement_if(source_position pos, ast_expression *cond,
+		ast_statement *t, ast_statement *f=NULL) 
+	{
+		position = pos;
+		condition = cond;
+		true_statement = t;
+		false_statement = f;
+	}
 	virtual ~ast_statement_if () {
 		delete true_statement; 
 		if (false_statement != NULL) delete false_statement;
@@ -814,8 +852,8 @@ public:
 	ast_expression *condition;
 	ast_statement *body;
 	
-	ast_statement_while (ast_expression *c, ast_statement *b)
-		{ condition = c; body = b;}
+	ast_statement_while (source_position pos, ast_expression *c, ast_statement *b)
+		{ position = pos; condition = c; body = b;}
 	virtual ~ast_statement_while() { delete condition; delete body; }
 	virtual void print()
 	{
@@ -830,7 +868,8 @@ class ast_statement_return : public ast_statement
 public:
 	ast_expression *value;
 	
-	ast_statement_return(ast_expression *val = NULL) { value = val; }
+	ast_statement_return(source_position pos, ast_expression *val = NULL)
+		{ position = pos; value = val; }
 	virtual ~ast_statement_return() { if (value != NULL) delete value; }
 	virtual void print()
 	{
@@ -864,7 +903,7 @@ ast_lvalue *parse_lvalue()
 			token_name(cur_token).c_str());
 	}
 	
-	res = new ast_lvalue_variable(cur_token.id);
+	res = new ast_lvalue_variable(cur_token.position, cur_token.id);
 	
 	token next_token = tok_get();
 	while (next_token.type == TOKEN_DOT)
@@ -915,10 +954,12 @@ ast_statement *parse_statement(bool vardecl_allowed, bool direct_in_if)
 		parse_error(cur_token.position, 
 			"Unexpected symbol %s, expected a statement.", 
 			token_name(cur_token).c_str());
-		return new ast_statement_block(vector<ast_statement*>(0));
+		return new ast_statement_block(cur_token.position, 
+			vector<ast_statement*>(0));
 	}
 	
-	return new ast_statement_block(vector<ast_statement*>(0));
+	return new ast_statement_block(cur_token.position, 
+		vector<ast_statement*>(0));
 }
 @
 
@@ -969,7 +1010,8 @@ if (next_token.type != TOKEN_ROUNDBRACKET_RIGHT)
 
 match_token(TOKEN_SEMICOLON);
 
-return new ast_statement_expression(new ast_expression_funcall(cur_token.id, args));
+return new ast_statement_expression(new ast_expression_funcall(cur_token.position, 
+	cur_token.id, args));
 @
 
 Variable declarations have two source:
@@ -1033,12 +1075,13 @@ case TOKEN_IF:
 		if (direct_in_if)
 			parse_warning(next_token.position, 
 				"Ambiguos else, can correspond to more than one if.");
-		return new ast_statement_if(cond, truestat, parse_statement(false, true));
+		return new ast_statement_if(cur_token.position, cond, truestat, 
+			parse_statement(false, true));
 	}
 	else
 	{
 		tok_unget(next_token);
-		return new ast_statement_if(cond, truestat);
+		return new ast_statement_if(cur_token.position, cond, truestat);
 	}
 }
 break;
@@ -1055,11 +1098,11 @@ case TOKEN_RETURN:
 		tok_unget(next_token);
 		ast_expression *value = parse_expression();
 		match_token(TOKEN_SEMICOLON);
-		return new ast_statement_return(value);
+		return new ast_statement_return(cur_token.position, value);
 	}
 	else
 	{
-		return new ast_statement_return();
+		return new ast_statement_return(cur_token.position);
 	}
 }
 break;
@@ -1094,7 +1137,7 @@ case TOKEN_CURLYBRACKET_LEFT:
 		stats.push_back(stat);
 		next_token = tok_get();
 	}
-	return new ast_statement_block(stats);
+	return new ast_statement_block(cur_token.position, stats);
 }
 break;
 @
@@ -1107,7 +1150,8 @@ case TOKEN_WHILE:
 	match_token(TOKEN_ROUNDBRACKET_LEFT);
 	ast_expression *cond = parse_expression();
 	match_token(TOKEN_ROUNDBRACKET_RIGHT);
-	return new ast_statement_while(cond, parse_statement(false, false));
+	return new ast_statement_while(cur_token.position, cond,
+		parse_statement(false, false));
 }
 break;
 @
@@ -1121,7 +1165,8 @@ public:
 	ast_type *type;
 	std::string name;
 	
-	ast_funarg(ast_type *t, std::string n) { type = t; name = n; }
+	ast_funarg(ast_type *t, std::string n)
+		{ position = t->position; type = t; name = n; }
 	virtual ~ast_funarg() { delete type; }
 	virtual void print()
 	{
@@ -1129,7 +1174,7 @@ public:
 		printf(" %s", name.c_str());
 	}
 };
-class ast_fundecl
+class ast_fundecl : public ast_base
 {
 public:
 	ast_type *type;
@@ -1139,7 +1184,7 @@ public:
 	
 	ast_fundecl(ast_type *t, std::string n, std::vector<ast_funarg*> a, 
 	                                                   ast_statement* b) 
-		{ type = t; name = n; args = a; body = b; }
+		{ position = t->position; type = t; name = n; args = a; body = b; }
 	virtual ~ast_fundecl()
 	{
 		delete type;
@@ -1163,7 +1208,7 @@ public:
 		body->print();
 	}
 };
-class ast_program
+class ast_program : public ast_base
 {
 public:
 	std::vector<ast_statement_vardecl*> globalvars;
@@ -1375,6 +1420,7 @@ void parse_fatal(source_position pos, const char *message, ...)
 <<ast.h>>=
 #ifndef AST_H
 #define AST_H
+#include "position.h"
 #include <cstdio>
 #include <string>
 #include <vector>
