@@ -44,8 +44,8 @@ version.h:
 settings.h:
 	notangle -L -Rsettings.h settings.nw | cpif settings.h
 
-code.tex: header.nw trailer.nw token.nw position.nw error.nw parser.nw
-	noweave -t4 -delay header.nw token.nw parser.nw position.nw error.nw trailer.nw | cpif code.tex
+code.tex: header.nw trailer.nw token.nw position.nw error.nw parser.nw settings.nw
+	noweave -t4 -delay header.nw token.nw parser.nw settings.nw position.nw error.nw trailer.nw | cpif code.tex
 code.pdf: code.tex
 	latexmk -pdf code.tex
 	latexmk -c

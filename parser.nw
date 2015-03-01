@@ -115,6 +115,7 @@ ast_type *parse_type()
 \subsection{Parsing expressions}
 Expressions are the most complicated part of the grammar, because of the extra non-terminals introduced to insure good handling of operator precedence. As stated before, the extra tokens are named after the precedence level they represent.
 
+\subsubsection{Expression ast}
 The ast representing all this however is straightforward, one node type for binary operators and one for unary:
 <<expression ast>>=
 enum ast_binary_operator {
@@ -321,11 +322,13 @@ string ast_operator_string(ast_unary_operator op)
 }
 @
 
+\subsubsection{Parsing expression header}
 Since expressions can contain brackets, we need recursion across multiple functions, hence we pre-declare the expr parser:
 <<parse expression header>>=
 ast_expression *parse_expression();
 @
 
+\subsubsection{opl0}
 Highest precedence, brackets, constants, variables, function calls and unary operators. Because there is actually quite a lot happening here, split it up in more than one piece.
 <<parse opl0>>=
 ast_expression *parse_opl0()
@@ -450,8 +453,10 @@ case TOKEN_CHARACTER:
 case TOKEN_SQUAREBRACKET_LEFT:
 	match_token(TOKEN_SQUAREBRACKET_RIGHT);
 	return new ast_expression_emptylist();
+
 @
 
+\subsubsection{opl1}
 Second highest precedence, division, multiplication and modulo
 <<parse opl1>>=
 ast_expression *parse_opl1()
@@ -487,6 +492,7 @@ ast_expression *parse_opl1()
 }
 @
 
+\subsubsection{opl2}
 Third highest precedence, plus and minus
 <<parse opl2>>=
 ast_expression *parse_opl2()
@@ -519,6 +525,7 @@ ast_expression *parse_opl2()
 }
 @
 
+\subsubsection{opl3}
 Next up are ordering operators
 <<parse opl3>>=
 ast_expression *parse_opl3()
@@ -557,6 +564,7 @@ ast_expression *parse_opl3()
 }	
 @
 
+\subsubsection{opl4}
 Next up equality and its inverse
 <<parse opl4>>=
 ast_expression *parse_opl4()
@@ -589,6 +597,7 @@ ast_expression *parse_opl4()
 }
 @
 
+\subsubsection{opl5}
 Logical and
 <<parse opl5>>=
 ast_expression *parse_opl5()
@@ -618,6 +627,7 @@ ast_expression *parse_opl5()
 }
 @
 
+\subsubsection{opl6}
 Logical or
 <<parse opl6>>=
 ast_expression *parse_opl6()
@@ -647,6 +657,7 @@ ast_expression *parse_opl6()
 }
 @
 
+\subsubsection{Toplevel expression parsing}
 And were at the highest precedence level (hence using parse\_expr), the colon operator:
 <<parse expression>>=
 ast_expression *parse_expression()
@@ -670,6 +681,7 @@ ast_expression *parse_expression()
 \subsection{Parsing statements}
 Statements are relatively simple. There are only two notable things. In order to avoid having two representations of function calls, a function call statement is represented as an expression statement where the expression is a function call. Furthermore, because it is very easy to implement, variable declarations are seen as statements inside functions, using a flag and boolean argument to the parsing routines to enforce the strict rules.
 
+\subsubsection{Statement ast}
 For assignment statements we need a concept of lvalue.
 <<lvalue ast>>=
 class ast_lvalue : public ast_base
@@ -834,6 +846,7 @@ public:
 };
 @
 
+\subsubsection{Parsing lvalues}
 Parsing lvalues is straightforward, because there really is only one thing going on. The only problem is that there is left recursion, but we solve that in the same way as for expressions.
 <<parse lvalue>>=
 ast_lvalue *parse_lvalue()
@@ -878,6 +891,7 @@ ast_lvalue *parse_lvalue()
 }
 @
 
+\subsubsection{Parsing statements}
 Parsing statements has two modes, depending on whether vardecls are allowed in strict mode. Furthermore, we keep track if the current statement is part of "if <stmt>", to give warnings for the dangling else problem.
 If we cannot generate a statement starting with the current input, we declare an error and consume it. This is likely to give us a reasonable state, unless it is an eof token, which is handled seperately in a few cases.
 <<parse statement header>>=
@@ -908,6 +922,7 @@ ast_statement *parse_statement(bool vardecl_allowed, bool direct_in_if)
 }
 @
 
+\subsubsection{Assignments, function calls and variable declarations}
 Id first has a few options, either it is a vardecl with simple type, a function call, or an assign, so we need extra lookahead
 <<parse statements starting with id>>=
 case TOKEN_ID:
@@ -1003,6 +1018,7 @@ Assignments come only from ids, hence we dont need seperate case statement:
 }
 @
 
+\subsubsection{if statements}
 For an else the corresponding if might be ambigue. We always bind to the last started if that we can still bind it to (eg if if stmt; else stmt; is parsed as if {if stmt; else stmt;}).
 <<parse if>>=
 case TOKEN_IF:
@@ -1028,6 +1044,7 @@ case TOKEN_IF:
 break;
 @
 
+\subsubsection{return statements}
 There are two types of returns, those that return values, and those that do not. We recognize those that do not by the semicolon directly following the return.
 <<parse return>>=
 case TOKEN_RETURN:
@@ -1048,6 +1065,7 @@ case TOKEN_RETURN:
 break;
 @
 
+\subsubsection{Statement blocks}
 If we find an eof while checking whether we are at the end, something is wrong and we should wrap up.
 <<parse block>>=
 case TOKEN_CURLYBRACKET_LEFT:
@@ -1081,6 +1099,7 @@ case TOKEN_CURLYBRACKET_LEFT:
 break;
 @
 
+\subsubsection{while statements}
 A while is the simple one:
 <<parse while>>=
 case TOKEN_WHILE:
