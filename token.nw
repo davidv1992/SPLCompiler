@@ -1,5 +1,11 @@
 \section{Tokenizer}
 
+In order to make the eventual parsing process a lot easier, the compiler first splits up the input into tokens. Because this is a handwritten tokenizer, the choice has been made to do this in two steps, one running directly after the other per token. The first generates the tokens all non-keyword tokens, and tokenizes keywords as identifiers. The second stage then filters out those identifiers that are actually keywords, and changes the produced token to reflect that.
+
+This approach makes identifier tokenizing a lot easier, since at first there is no need to consider the possibility that an identifier is a keyword. This has the nice sideeffect that, as far as the first stage is concerned, the type of the token can be deduced with only one or two characters lookahead. This avoids the need of implementing a full on state machine.
+
+The second stage is simple since the entire text string of the identifier is then available, and a string comparison will suffice.
+
 \subsection{Tokens}
 Datastructure for tokens is simple, just type with associated data:
 <<token struct>>=
