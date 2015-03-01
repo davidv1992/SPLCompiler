@@ -86,7 +86,7 @@ clean:
 	rm -f ast.h ast.cpp ast.o
 	rm -f parser.h parser.cpp parser.o
 	rm -f testprogs/tokentest.cpp testprogs/tokentest.o testprogs/tokentest
-	rm -f testprogs/parsetest.cpp testprogs/parestest.o testprogs/parsetest
+	rm -f testprogs/parsetest.cpp testprogs/parsetest.o testprogs/parsetest
 	rm -f testprogs/typeparsetest.cpp testprogs/typeparsetest.o testprogs/typeparsetest
 	rm -f testprogs/exprparsetest.cpp testprogs/exprparsetest.o testprogs/exprparsetest
 	rm -f testprogs/statementparsetest.cpp testprogs/statementparsetest.o testprogs/statementparsetest
