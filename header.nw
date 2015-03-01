@@ -2,5 +2,6 @@
 \documentclass{article}
 \usepackage{amsmath}
 \usepackage{noweb}
+\usepackage[margin=1.5in]{geometry}
 \pagestyle{noweb}\noweboptions{}
 \begin{document}

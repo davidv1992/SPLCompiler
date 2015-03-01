@@ -39,9 +39,18 @@ class ast_tuple_type : public ast_type
 public:
 	ast_type *type_first, *type_second;
 
-	ast_tuple_type(ast_type *first, ast_type *second) { type_first = first; type_second = second; }
-	virtual ~ast_tuple_type() { delete type_first; delete type_second; }
-	virtual void print() {
+	ast_tuple_type(ast_type *first, ast_type *second)
+	{
+		type_first = first; 
+		type_second = second;
+	}
+	virtual ~ast_tuple_type() 
+	{
+		delete type_first; 
+		delete type_second;
+	}
+	virtual void print()
+	{
 		printf("(");
 		type_first->print();
 		printf(",");
@@ -56,7 +65,8 @@ public:
 
 	ast_list_type(ast_type *el) { type_element = el; }
 	virtual ~ast_list_type() { delete type_element; }
-	virtual void print() {
+	virtual void print()
+	{
 		printf("[");
 		type_element->print();
 		printf("]");
@@ -95,7 +105,8 @@ ast_type *parse_type()
 	<<parse tuple type>>
 	<<parse list type>>
 	default:
-		parse_error(cur_token.position, "Expected type, got %s", token_name(cur_token).c_str());
+		parse_error(cur_token.position, 
+			"Expected type, got %s", token_name(cur_token).c_str());
 		return new ast_simple_type("Int");
 	}
 }
@@ -140,7 +151,8 @@ public:
 	ast_expression *left, *right;
 	ast_binary_operator op;
 	
-	ast_expression_binary(ast_binary_operator _op, ast_expression *l, ast_expression *r) { op =_op; left = l; right = r; }
+	ast_expression_binary(ast_binary_operator _op, 
+		ast_expression *l, ast_expression *r) { op =_op; left = l; right = r; }
 	virtual ~ast_expression_binary() { delete left; delete right; }
 	virtual void print() {
 		printf("(");
@@ -156,7 +168,8 @@ public:
 	ast_expression *inner;
 	ast_unary_operator op;
 	
-	ast_expression_unary(ast_unary_operator _op, ast_expression *i) {op = _op; inner = i;}
+	ast_expression_unary(ast_unary_operator _op, ast_expression *i) 
+		{op = _op; inner = i;}
 	virtual ~ast_expression_unary() {delete inner;}
 	virtual void print() {
 		printf("(%s", ast_operator_string(op).c_str());
@@ -182,7 +195,8 @@ public:
 	ast_expression_variable *base;
 	std::string field;
 	
-	ast_expression_variable_field(ast_expression_variable *b, std::string f) { base = b; field = f; }
+	ast_expression_variable_field(ast_expression_variable *b, std::string f) 
+		{ base = b; field = f; }
 	virtual ~ast_expression_variable_field() { delete base; }
 	virtual void print() { base->print(); printf(".%s", field.c_str()); }
 };
@@ -192,7 +206,8 @@ public:
 	std::string id;
 	std::vector<ast_expression*> arguments;
 	
-	ast_expression_funcall(std::string fn, std::vector<ast_expression*> args) { id=fn; arguments = args; }
+	ast_expression_funcall(std::string fn, std::vector<ast_expression*> args) 
+		{ id=fn; arguments = args; }
 	virtual ~ast_expression_funcall() { for (auto ptr : arguments) delete ptr; }
 	virtual void print() {
 		bool firstArg = true;
@@ -238,9 +253,17 @@ class ast_expression_pair : public ast_expression
 public:
 	ast_expression *first, *second;
 	
-	ast_expression_pair(ast_expression *f, ast_expression *s) {first = f; second = s;}
+	ast_expression_pair(ast_expression *f, ast_expression *s) 
+		{first = f; second = s;}
 	virtual ~ast_expression_pair() {delete first; delete second;}
-	virtual void print() { printf("("); first->print(); printf(","); second->print(); printf(")");}
+	virtual void print()
+	{
+		printf("("); 
+		first->print(); 
+		printf(","); 
+		second->print(); 
+		printf(")");
+	}
 };
 @
 <<expression ast implementation>>=
@@ -303,7 +326,7 @@ Since expressions can contain brackets, we need recursion across multiple functi
 ast_expression *parse_expression();
 @
 
-Highest precedence, brackets, constants, variables, function calls and unary operators
+Highest precedence, brackets, constants, variables, function calls and unary operators. Because there is actually quite a lot happening here, split it up in more than one piece.
 <<parse opl0>>=
 ast_expression *parse_opl0()
 {
@@ -312,88 +335,121 @@ ast_expression *parse_opl0()
 	token next_token;
 	switch(cur_token.type)
 	{
-	case TOKEN_ROUNDBRACKET_LEFT: {
-			ast_expression *result = parse_expression();
-			next_token = tok_get();
-			if (next_token.type == TOKEN_ROUNDBRACKET_RIGHT)
-			{
-				return result;
-			}
-			else if (next_token.type == TOKEN_COMMA)
-			{
-				ast_expression *sec = parse_expression();
-				match_token(TOKEN_ROUNDBRACKET_RIGHT);
-				return new ast_expression_pair(result, sec);
-			}
-			else
-			{
-				parse_error(next_token.position, "Unexpected %s, expected , or )", token_name(next_token).c_str());
-				return result;
-			}
-		}
-	case TOKEN_MINUS:
-		return new ast_expression_unary(OP_NEG, parse_opl0());
-	case TOKEN_NOT:
-		return new ast_expression_unary(OP_NOT, parse_opl0());
-	case TOKEN_ID:
-		next_token = tok_get();
-		if (next_token.type == TOKEN_ROUNDBRACKET_LEFT)
-		{
-			vector<ast_expression*> args;
-			next_token = tok_get();
-			if (next_token.type != TOKEN_ROUNDBRACKET_RIGHT)
-			{
-				tok_unget(next_token);
-				do
-				{
-					args.push_back(parse_expression());
-					next_token = tok_get();
-				}
-				while (next_token.type == TOKEN_COMMA);
-			}
-			
-			if (next_token.type != TOKEN_ROUNDBRACKET_RIGHT)
-			{
-				parse_error(next_token.position, "Missing )");
-				tok_unget(next_token);
-			}
-			
-			return new ast_expression_funcall(cur_token.id, args);
-		}
-		else
-		{
-			ast_expression_variable *val = new ast_expression_variable_base(cur_token.id);
-			while (next_token.type == TOKEN_DOT)
-			{
-				next_token = tok_get();
-				string field = "";
-				if (next_token.type == TOKEN_ID)
-				{
-					field = next_token.id;
-				}
-				else
-				{
-					parse_error(next_token.position, "Missing field name, got %s", token_name(next_token).c_str());
-					tok_unget(next_token);
-				}
-				val = new ast_expression_variable_field(val, field);
-				next_token = tok_get();
-			}
-			tok_unget(next_token);
-			return val;
-		}
-	case TOKEN_NUMERIC:
-		return new ast_expression_intconst(cur_token.intval);
-	case TOKEN_CHARACTER:
-		return new ast_expression_charconst(cur_token.charval);
-	case TOKEN_SQUAREBRACKET_LEFT:
-		match_token(TOKEN_SQUAREBRACKET_RIGHT);
-		return new ast_expression_emptylist();
+	<<parse bracketed expressions>>
+	<<parse unary operators>>
+	<<parse identifier expressions>>
+	<<parse constants>>
 	default:
-		parse_error(cur_token.position, "Unexpected token %s", token_name(cur_token).c_str());
+		parse_error(cur_token.position, 
+			"Unexpected token %s", token_name(cur_token).c_str());
 		return new ast_expression_intconst(0);
 	}
 }
+@
+
+There are two things a pair of brackets "()" can mean. Either it groups stuff up to change order of evaluation, or it makes a pair. To recognize the pair case, just check for a comma after the first expression in the brackets.
+<<parse bracketed expressions>>=
+case TOKEN_ROUNDBRACKET_LEFT: {
+	ast_expression *result = parse_expression();
+	next_token = tok_get();
+	if (next_token.type == TOKEN_ROUNDBRACKET_RIGHT)
+	{
+		return result;
+	}
+	else if (next_token.type == TOKEN_COMMA)
+	{
+		ast_expression *sec = parse_expression();
+		match_token(TOKEN_ROUNDBRACKET_RIGHT);
+		return new ast_expression_pair(result, sec);
+	}
+	else
+	{
+		parse_error(next_token.position, 
+			"Unexpected %s, expected , or )", token_name(next_token).c_str());
+		return result;
+	}
+}
+@
+
+An identifier can signal two things. It either means we have a function call (when it is followed by a "(")), or it can be a variable access.
+<<parse identifier expressions>>=
+case TOKEN_ID:
+	next_token = tok_get();
+	if (next_token.type == TOKEN_ROUNDBRACKET_LEFT)
+	{
+		<<parse function call expression>>
+	}
+	else
+	{
+		<<parse variable>>
+	}
+@
+
+A function call is relatively straightforward. We check whether we have had all arguments by checking whether the last one was followed by a comma. This does mean we make function calls with no argument a special case, hence the extra if.
+<<parse function call expression>>=
+vector<ast_expression*> args;
+next_token = tok_get();
+if (next_token.type != TOKEN_ROUNDBRACKET_RIGHT)
+{
+	tok_unget(next_token);
+	do
+	{
+		args.push_back(parse_expression());
+		next_token = tok_get();
+	}
+	while (next_token.type == TOKEN_COMMA);
+}
+
+if (next_token.type != TOKEN_ROUNDBRACKET_RIGHT)
+{
+	parse_error(next_token.position, "Missing )");
+	tok_unget(next_token);
+}
+
+return new ast_expression_funcall(cur_token.id, args);
+@
+
+Variable references are a bit more difficult, because field access has a right-recursive structure. This is fixed by ussing an accumulator and a loop, and parsing it in a more bottom-up style (the same way as other operators with this behaviour are parsed).
+<<parse variable>>=
+ast_expression_variable *val = new ast_expression_variable_base(cur_token.id);
+while (next_token.type == TOKEN_DOT)
+{
+	next_token = tok_get();
+	string field = "";
+	if (next_token.type == TOKEN_ID)
+	{
+		field = next_token.id;
+	}
+	else
+	{
+		parse_error(next_token.position, 
+			"Missing field name, got %s", token_name(next_token).c_str());
+		tok_unget(next_token);
+	}
+	val = new ast_expression_variable_field(val, field);
+	next_token = tok_get();
+}
+tok_unget(next_token);
+return val;
+@
+
+The unary operators are really straightforward:
+<<parse unary operators>>=
+case TOKEN_MINUS:
+	return new ast_expression_unary(OP_NEG, parse_opl0());
+case TOKEN_NOT:
+	return new ast_expression_unary(OP_NOT, parse_opl0());
+@
+
+And constants are straightforward as well
+<<parse constants>>=
+case TOKEN_NUMERIC:
+	return new ast_expression_intconst(cur_token.intval);
+case TOKEN_CHARACTER:
+	return new ast_expression_charconst(cur_token.charval);
+case TOKEN_SQUAREBRACKET_LEFT:
+	match_token(TOKEN_SQUAREBRACKET_RIGHT);
+	return new ast_expression_emptylist();
 @
 
 Second highest precedence, division, multiplication and modulo
@@ -673,7 +729,8 @@ public:
 	std::string id;
 	ast_expression *value;
 	
-	ast_statement_vardecl(ast_type *t, std::string i, ast_expression *val) { type = t; id = i; value = val; }
+	ast_statement_vardecl(ast_type *t, std::string i, ast_expression *val)
+		{ type = t; id = i; value = val; }
 	virtual ~ast_statement_vardecl() { delete type; delete value; }
 	virtual void print()
 	{
@@ -689,7 +746,8 @@ public:
 	ast_lvalue *location;
 	ast_expression *value;
 	
-	ast_statement_assign(ast_lvalue * loc, ast_expression *val) { location = loc; value = val; }
+	ast_statement_assign(ast_lvalue * loc, ast_expression *val)
+		{ location = loc; value = val; }
 	virtual ~ast_statement_assign() { delete location; delete value;}
 	virtual void print()
 	{
@@ -719,7 +777,8 @@ public:
 	ast_statement *true_statement;
 	ast_statement *false_statement;
 	
-	ast_statement_if(ast_expression *cond, ast_statement *t, ast_statement *f=NULL) { condition = cond; true_statement = t; false_statement = f; }
+	ast_statement_if(ast_expression *cond, ast_statement *t, ast_statement *f=NULL) 
+		{ condition = cond; true_statement = t; false_statement = f; }
 	virtual ~ast_statement_if () {
 		delete true_statement; 
 		if (false_statement != NULL) delete false_statement;
@@ -743,7 +802,8 @@ public:
 	ast_expression *condition;
 	ast_statement *body;
 	
-	ast_statement_while (ast_expression *c, ast_statement *b) { condition = c; body = b;}
+	ast_statement_while (ast_expression *c, ast_statement *b)
+		{ condition = c; body = b;}
 	virtual ~ast_statement_while() { delete condition; delete body; }
 	virtual void print()
 	{
@@ -783,9 +843,12 @@ ast_lvalue *parse_lvalue()
 	token cur_token = tok_get();
 	if (cur_token.type != TOKEN_ID)
 	{
-		// Technically an error, but the rest of the parser shouldn't call us if the next token
-		//  is not an ID, hence we can afford to fatal here and not handle this in a better way
-		parse_fatal(cur_token.position, "Expected lvalue, got %s", token_name(cur_token).c_str());
+		// Technically an error, but the rest of the parser shouldn't call us if
+		//  the next token is not an ID, hence we can afford to fatal here and 
+		//  not handle this in a better way
+		parse_fatal(cur_token.position, 
+			"Expected lvalue, got %s (could be internal compiler error)", 
+			token_name(cur_token).c_str());
 	}
 	
 	res = new ast_lvalue_variable(cur_token.id);
@@ -798,7 +861,8 @@ ast_lvalue *parse_lvalue()
 		if (cur_token.type != TOKEN_ID)
 		{
 			field = "";
-			parse_error(next_token.position, "Missing field name, got %s", token_name(next_token).c_str());
+			parse_error(next_token.position, 
+				"Missing field name, got %s", token_name(next_token).c_str());
 		}
 		else
 		{
@@ -834,7 +898,9 @@ ast_statement *parse_statement(bool vardecl_allowed, bool direct_in_if)
 	<<parse while>>
 	<<parse return>>
 	default:
-		parse_error(cur_token.position, "Unexpected symbol %s, expected a statement.", token_name(cur_token).c_str());
+		parse_error(cur_token.position, 
+			"Unexpected symbol %s, expected a statement.", 
+			token_name(cur_token).c_str());
 		return new ast_statement_block(vector<ast_statement*>(0));
 	}
 	
@@ -903,7 +969,8 @@ case TOKEN_SQUAREBRACKET_LEFT:
 {
 	// cur_token still contains info on first token of statement, lets use that here
 	if (!vardecl_allowed && strict_vardecl)
-		parse_error(cur_token.position, "Illegal variable declaration. Variable declarations are only allowed at start of functions.");
+		parse_error(cur_token.position, "Illegal variable declaration. "
+			"Variable declarations are only allowed at start of functions.");
 		
 	ast_type *type = parse_type();
 	cur_token = tok_get();
@@ -948,7 +1015,8 @@ case TOKEN_IF:
 	if (next_token.type == TOKEN_ELSE)
 	{
 		if (direct_in_if)
-			parse_warning(next_token.position, "Ambiguos else, can correspond to more than one if.");
+			parse_warning(next_token.position, 
+				"Ambiguos else, can correspond to more than one if.");
 		return new ast_statement_if(cond, truestat, parse_statement(false, true));
 	}
 	else
@@ -1050,7 +1118,9 @@ public:
 	std::vector<ast_funarg*> args;
 	ast_statement *body;
 	
-	ast_fundecl(ast_type *t, std::string n, std::vector<ast_funarg*> a, ast_statement* b) { type = t; name = n; args = a; body = b; }
+	ast_fundecl(ast_type *t, std::string n, std::vector<ast_funarg*> a, 
+	                                                   ast_statement* b) 
+		{ type = t; name = n; args = a; body = b; }
 	virtual ~ast_fundecl()
 	{
 		delete type;
@@ -1080,7 +1150,9 @@ public:
 	std::vector<ast_statement_vardecl*> globalvars;
 	std::vector<ast_fundecl*> functions;
 	
-	ast_program(std::vector<ast_statement_vardecl*>vars, std::vector<ast_fundecl*> funs) { globalvars = vars; functions = funs; }
+	ast_program(std::vector<ast_statement_vardecl*>vars, 
+	                      std::vector<ast_fundecl*> funs) 
+		{ globalvars = vars; functions = funs; }
 	virtual ~ast_program()
 	{
 		for (auto ptr : globalvars) delete ptr;
@@ -1127,7 +1199,9 @@ ast_program *parse_program()
 		}
 		else
 		{
-			parse_error(cur_token.position, "Unexpected %s, expected identifier.", token_name(cur_token).c_str());
+			parse_error(cur_token.position, 
+				"Unexpected %s, expected identifier.", 
+				token_name(cur_token).c_str());
 			tok_unget(cur_token);
 			name = "";
 		}
@@ -1138,7 +1212,9 @@ ast_program *parse_program()
 		<<parse function>>
 		<<parse global vardecl>>
 		default:
-			parse_error(cur_token.position, "Unexpected %s, expected a function or variable definition", token_name(cur_token).c_str());
+			parse_error(cur_token.position, 
+				"Unexpected %s, expected a function or variable definition", 
+				token_name(cur_token).c_str());
 			break;
 		}
 		
@@ -1188,10 +1264,12 @@ case TOKEN_ROUNDBRACKET_LEFT:
 	
 	cur_token = tok_get();
 	if (cur_token.type != TOKEN_CURLYBRACKET_LEFT)
-		parse_error(cur_token.position, "Missing {, functions can only have blocks as body.");
+		parse_error(cur_token.position, 
+			"Missing {, functions can only have blocks as body.");
 	tok_unget(cur_token);
 	
-	functions.push_back(new ast_fundecl(type, name, arguments, parse_statement(true, false)));
+	functions.push_back(new ast_fundecl(type, name, arguments, 
+		parse_statement(true, false)));
 }
 break;
 @
@@ -1204,7 +1282,9 @@ ast_funarg *parse_funarg()
 	token cur_token = tok_get();
 	if (cur_token.type != TOKEN_ID)
 	{
-		parse_error(cur_token.position, "Unexpected %s, expected argument name", token_name(cur_token).c_str());
+		parse_error(cur_token.position, 
+			"Unexpected %s, expected argument name", 
+			token_name(cur_token).c_str());
 		tok_unget(cur_token);
 		return new ast_funarg(type, "");
 	}
@@ -1224,7 +1304,8 @@ void match_token(token_type t)
 		// most likely the needed token is missing, so correct on that assumption
 		tok_unget(cur_token);
 		
-		// to generate the error message we need a full token, not just a type, so build one
+		// to generate the error message we need a full token, not just a type, 
+		//  so build one
 		token expected_token;
 		expected_token.type = t;
 		expected_token.id = "";
@@ -1232,7 +1313,8 @@ void match_token(token_type t)
 		expected_token.intval = 0;
 		
 		// Error
-		parse_error(cur_token.position, "Missing %s", token_name(expected_token).c_str());
+		parse_error(cur_token.position, 
+			"Missing %s", token_name(expected_token).c_str());
 	}
 }
 @
