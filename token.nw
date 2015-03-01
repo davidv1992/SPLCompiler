@@ -227,7 +227,7 @@ case '|':
 	if (next_char != '|')
 	{
 		// Easy error to fix
-		tok_error("Incomplete operator &, did you mean &&?");
+		tok_error("Incomplete operator |, did you mean ||?");
 	}
 	cur_token.type = TOKEN_OR;
 	break;
