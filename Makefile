@@ -1,7 +1,7 @@
 .PHONY: clean test version.h
 #force version.h on every build
 
-CXXFLAGS = -I. -g -Wall -Wextra -Werror -std=c++11
+CXXFLAGS = -I. -g -Wall -Wextra -Wno-unused-parameter -Werror -std=c++11
 
 test: test/tokentest test/parsetest
 

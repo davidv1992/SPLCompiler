@@ -13,7 +13,7 @@ public:
 	source_position position;
 
 	virtual ~ast_base(){};
-	virtual void print()=0;
+	virtual void print(int tabdepth)=0;
 };
 @
 
@@ -35,7 +35,7 @@ public:
 	ast_simple_type(source_position pos, std::string _id) 
 		{ position = pos; type_id=_id; }
 	virtual ~ast_simple_type() {}
-	virtual void print() {printf("%s", type_id.c_str());}
+	virtual void print(int tabdepth) {printf("%s", type_id.c_str());}
 };
 class ast_tuple_type : public ast_type
 {
@@ -53,12 +53,12 @@ public:
 		delete type_first; 
 		delete type_second;
 	}
-	virtual void print()
+	virtual void print(int tabdepth)
 	{
 		printf("(");
-		type_first->print();
+		type_first->print(tabdepth);
 		printf(",");
-		type_second->print();
+		type_second->print(tabdepth);
 		printf(")");
 	}
 };
@@ -70,10 +70,10 @@ public:
 	ast_list_type(source_position pos, ast_type *el) 
 		{ position = pos; type_element = el; }
 	virtual ~ast_list_type() { delete type_element; }
-	virtual void print()
+	virtual void print(int tabdepth)
 	{
 		printf("[");
-		type_element->print();
+		type_element->print(tabdepth);
 		printf("]");
 	}
 };
@@ -161,11 +161,11 @@ public:
 		ast_expression *l, ast_expression *r) 
 		{ position = pos, op =_op; left = l; right = r; }
 	virtual ~ast_expression_binary() { delete left; delete right; }
-	virtual void print() {
+	virtual void print(int tabdepth) {
 		printf("(");
-		left->print();
+		left->print(tabdepth);
 		printf("%s", ast_operator_string(op).c_str());
-		right->print();
+		right->print(tabdepth);
 		printf(")");
 	}
 };
@@ -179,9 +179,9 @@ public:
 		ast_expression *i) 
 		{ position = pos; op = _op; inner = i;}
 	virtual ~ast_expression_unary() {delete inner;}
-	virtual void print() {
+	virtual void print(int tabdepth) {
 		printf("(%s", ast_operator_string(op).c_str());
-		inner->print();
+		inner->print(tabdepth);
 		printf(")");
 	}
 };
@@ -196,7 +196,7 @@ public:
 	ast_expression_variable_base(source_position pos, std::string _id) 
 		{ position = pos; id = _id;}
 	virtual ~ast_expression_variable_base(){}
-	virtual void print() { printf("%s", id.c_str()); }
+	virtual void print(int tabdepth) { printf("%s", id.c_str()); }
 };
 class ast_expression_variable_field : public ast_expression_variable
 {
@@ -207,7 +207,11 @@ public:
 	ast_expression_variable_field(ast_expression_variable *b, std::string f) 
 		{ position = b->position; base = b; field = f; }
 	virtual ~ast_expression_variable_field() { delete base; }
-	virtual void print() { base->print(); printf(".%s", field.c_str()); }
+	virtual void print(int tabdepth)
+	{ 
+		base->print(tabdepth);
+		printf(".%s", field.c_str());
+	}
 };
 class ast_expression_funcall : public ast_expression
 {
@@ -219,7 +223,7 @@ public:
 		std::string fn, std::vector<ast_expression*> args) 
 		{ position = pos; id=fn; arguments = args; }
 	virtual ~ast_expression_funcall() { for (auto ptr : arguments) delete ptr; }
-	virtual void print() {
+	virtual void print(int tabdepth) {
 		bool firstArg = true;
 		printf("%s(", id.c_str());
 		for (auto ptr : arguments)
@@ -228,7 +232,7 @@ public:
 				firstArg = false;
 			else
 				printf(", ");
-			ptr->print();
+			ptr->print(tabdepth);
 		}
 		printf(")");
 	}
@@ -241,7 +245,7 @@ public:
 	ast_expression_intconst(source_position pos, unsigned int v) 
 		{position = pos, value = v;}
 	virtual ~ast_expression_intconst() {}
-	virtual void print() { printf("%d", value); }
+	virtual void print(int tabdepth) { printf("%d", value); }
 };
 class ast_expression_charconst : public ast_expression
 {
@@ -251,7 +255,7 @@ public:
 	ast_expression_charconst(source_position pos, char v) 
 		{ position = pos; value = v; }
 	virtual ~ast_expression_charconst() {}
-	virtual void print() { printf("%c", value); }
+	virtual void print(int tabdepth) { printf("%c", value); }
 };
 class ast_expression_emptylist : public ast_expression
 {
@@ -259,7 +263,7 @@ public:
 	ast_expression_emptylist(source_position pos)
 		{position = pos;}
 	virtual ~ast_expression_emptylist(){}
-	virtual void print() { printf("[]");}
+	virtual void print(int tabdepth) { printf("[]");}
 };
 class ast_expression_pair : public ast_expression
 {
@@ -270,12 +274,12 @@ public:
 		ast_expression *s) 
 		{position = pos; first = f; second = s;}
 	virtual ~ast_expression_pair() {delete first; delete second;}
-	virtual void print()
+	virtual void print(int tabdepth)
 	{
 		printf("("); 
-		first->print(); 
+		first->print(tabdepth); 
 		printf(","); 
-		second->print(); 
+		second->print(tabdepth); 
 		printf(")");
 	}
 };
@@ -723,7 +727,7 @@ public:
 	ast_lvalue_variable(source_position pos, std::string var) 
 		{ position = pos, variable = var; }
 	virtual ~ast_lvalue_variable() {}
-	virtual void print()
+	virtual void print(int tabdepth)
 	{
 		printf("%s", variable.c_str());
 	}
@@ -737,9 +741,9 @@ public:
 	ast_lvalue_field(ast_lvalue *b, std::string f) 
 		{ position = b->position; base = b; field  = f;}
 	virtual ~ast_lvalue_field() { delete base; }
-	virtual void print()
+	virtual void print(int tabdepth)
 	{
-		base->print();
+		base->print(tabdepth);
 		printf(".%s", field.c_str());
 	}
 };
@@ -758,10 +762,17 @@ public:
 	ast_statement_block(source_position pos, std::vector<ast_statement*> b)
 		{ position = pos; body = b; }
 	virtual ~ast_statement_block() {for (auto ptr :body) delete ptr;}
-	virtual void print()
+	virtual void print(int tabdepth)
 	{
 		printf("{\n");
-		for (auto ptr:body) ptr->print();
+		for (auto ptr:body)
+		{
+			for (int i=0; i<tabdepth+1; i++)
+				printf("\t");
+			ptr->print(tabdepth+1);
+		}
+		for (int i=0; i<tabdepth; i++)
+			printf("\t");
 		printf("}\n");
 	}
 };
@@ -775,11 +786,11 @@ public:
 	ast_statement_vardecl(ast_type *t, std::string i, ast_expression *val)
 		{ position = t->position; type = t; id = i; value = val; }
 	virtual ~ast_statement_vardecl() { delete type; delete value; }
-	virtual void print()
+	virtual void print(int tabdepth)
 	{
-		type->print();
+		type->print(tabdepth);
 		printf(" %s = ", id.c_str());
-		value->print();
+		value->print(tabdepth);
 		printf(";\n");
 	}
 };
@@ -792,11 +803,11 @@ public:
 	ast_statement_assign(ast_lvalue * loc, ast_expression *val)
 		{ position = loc->position; location = loc; value = val; }
 	virtual ~ast_statement_assign() { delete location; delete value;}
-	virtual void print()
+	virtual void print(int tabdepth)
 	{
-		location->print();
+		location->print(tabdepth);
 		printf(" = ");
-		value->print();
+		value->print(tabdepth);
 		printf(";\n");
 	}
 };
@@ -808,9 +819,9 @@ public:
 	ast_statement_expression(ast_expression *i) 
 		{ position = i->position; inner = i; }
 	virtual ~ast_statement_expression() { delete inner; }
-	virtual void print()
+	virtual void print(int tabdepth)
 	{
-		inner->print();
+		inner->print(tabdepth);
 		printf(";\n");
 	}
 };
@@ -833,16 +844,18 @@ public:
 		delete true_statement; 
 		if (false_statement != NULL) delete false_statement;
 	}
-	virtual void print()
+	virtual void print(int tabdepth)
 	{
 		printf("if (");
-		condition->print();
+		condition->print(tabdepth);
 		printf(") ");
-		true_statement->print();
+		true_statement->print(tabdepth);
 		if (false_statement != NULL)
 		{
+			for (int i=0; i<tabdepth; i++)
+				printf("\t");
 			printf("else ");
-			false_statement->print();
+			false_statement->print(tabdepth);
 		}
 	}
 };
@@ -855,12 +868,12 @@ public:
 	ast_statement_while (source_position pos, ast_expression *c, ast_statement *b)
 		{ position = pos; condition = c; body = b;}
 	virtual ~ast_statement_while() { delete condition; delete body; }
-	virtual void print()
+	virtual void print(int tabdepth)
 	{
 		printf("while (");
-		condition->print();
+		condition->print(tabdepth);
 		printf(") ");
-		body->print();
+		body->print(tabdepth);
 	}
 };
 class ast_statement_return : public ast_statement
@@ -871,14 +884,14 @@ public:
 	ast_statement_return(source_position pos, ast_expression *val = NULL)
 		{ position = pos; value = val; }
 	virtual ~ast_statement_return() { if (value != NULL) delete value; }
-	virtual void print()
+	virtual void print(int tabdepth)
 	{
 		if (value == NULL)
 			printf("return;");
 		else
 		{
 			printf("return ");
-			value->print();
+			value->print(tabdepth);
 			printf(";\n");
 		}
 	}
@@ -1168,9 +1181,9 @@ public:
 	ast_funarg(ast_type *t, std::string n)
 		{ position = t->position; type = t; name = n; }
 	virtual ~ast_funarg() { delete type; }
-	virtual void print()
+	virtual void print(int tabdepth)
 	{
-		type->print();
+		type->print(tabdepth);
 		printf(" %s", name.c_str());
 	}
 };
@@ -1191,9 +1204,9 @@ public:
 		delete body;
 		for (auto ptr : args) delete ptr;
 	}
-	virtual void print()
+	virtual void print(int tabdepth)
 	{
-		type->print();
+		type->print(tabdepth);
 		printf(" %s(", name.c_str());
 		bool is_firstarg = true;
 		for (auto ptr : args)
@@ -1202,10 +1215,10 @@ public:
 				is_firstarg = false;
 			else
 				printf(",");
-			ptr->print();
+			ptr->print(tabdepth);
 		}
 		printf(") ");
-		body->print();
+		body->print(tabdepth);
 	}
 };
 class ast_program : public ast_base
@@ -1222,15 +1235,15 @@ public:
 		for (auto ptr : globalvars) delete ptr;
 		for (auto ptr : functions) delete ptr;
 	}
-	virtual void print()
+	virtual void print(int tabdepth)
 	{
 		for (auto ptr : globalvars)
 		{
-			ptr->print();
+			ptr->print(tabdepth);
 		}
 		for (auto ptr : functions)
 		{
-			ptr->print();
+			ptr->print(tabdepth);
 		}
 	}
 };

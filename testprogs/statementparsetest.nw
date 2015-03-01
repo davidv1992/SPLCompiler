@@ -11,7 +11,7 @@ int main()
 {
 	tok_setinput_fd("stdin", stdin);
 	
-	parse_statement(false, false)->print();
+	parse_statement(false, false)->print(0);
 	
 	printf("\n");
 	return 0;

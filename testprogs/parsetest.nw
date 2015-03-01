@@ -16,7 +16,7 @@ int main(int argc, char **argv)
 	
 	tok_setinput(string(argv[1]));
 	
-	parse_program()->print();
+	parse_program()->print(0);
 	return 0;
 }
 @
