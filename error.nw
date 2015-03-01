@@ -20,8 +20,11 @@ void eh_writeformat(FILE *out, const char *errortype, source_position pos,
 
 At various points in the compiler we dont want to proceed if the previous step had errors, because internal datastructures might not be completely valid anymore. The easiest way to handle this is to use a global state that indicates if there were any error. Furthermore some errors are serious enough that even the current step cannot proceed any further, and the immediate termination that then follows is also handled here.
 
+Furthermore, it is usefull to have a bailout when we get too many errors, and this is where we implement that.
+
 <<handle errors>>=
 bool have_error = false;
+int error_count = 0;
 
 bool eh_haveerror()
 {
@@ -39,6 +42,12 @@ void eh_error(source_position pos, const char *message, va_list args)
 {
 	eh_writeformat(errout, "ERROR", pos, message, args);
 	have_error = true;
+	error_count++;
+	if (error_count > error_limit)
+	{
+		eh_writeformat(errout, "ERROR", pos, "Too many errors, bailing out.", args);
+		exit(1);
+	}
 }
 
 void eh_warning(source_position pos, const char *message, va_list args)
@@ -71,6 +80,7 @@ Making module source and header from the pieces
 
 <<error.cpp>>=
 #include "error.h"
+#include "settings.h"
 #include <cstdio>
 #include <cstdlib>
 #include <string>

@@ -1,7 +1,7 @@
 .PHONY: clean test version.h
 #force version.h on every build
 
-CXXFLAGS = -I. -g -Wall -Wextra -Wno-unused-parameter -Werror -std=c++11
+CXXFLAGS = -I. -g -Wall -Wextra -Wno-unused-parameter -Wno-unused-variable -Werror -std=c++11
 
 test: test/tokentest test/parsetest
 
@@ -11,7 +11,7 @@ test/tokentest: testprogs/tokentest
 test/parsetest: testprogs/parsetest
 	ls tests/parsing/correct/*.spl | xargs -n 1 valgrind --quiet ./testprogs/parsetest >/dev/null
 
-error.o: error.cpp error.h position.h
+error.o: error.cpp error.h position.h settings.h
 error.h: error.nw
 	notangle -L -Rerror.h error.nw | cpif error.h
 error.cpp: error.nw
@@ -41,7 +41,7 @@ parser.cpp: parser.nw
 version.h:
 	echo \#define VERSION \"`git describe --abbrev=4 --dirty --always --tags`\" | cpif version.h
 
-settings.h:
+settings.h: settings.nw
 	notangle -L -Rsettings.h settings.nw | cpif settings.h
 
 code.tex: header.nw trailer.nw token.nw position.nw error.nw parser.nw settings.nw

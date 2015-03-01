@@ -9,6 +9,13 @@ The language spec allows variable declarations only at the start of a function. 
 static bool strict_vardecl = false;
 @
 
+\subsection{Errors before bailout}
+
+When handling errors, it is usefull to limit the ammount of errors we find acceptable, in case there is some unforseen situation that leads to looping in the recovery process. This needs a cutoff value, defined here:
+<<config variable declarations>>=
+static int error_limit = 100;
+@
+
 \subsection{Header file}
 
 Generating the actual code:
