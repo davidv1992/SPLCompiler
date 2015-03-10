@@ -61,6 +61,11 @@ fi
 echo PASSED: $PASSES
 echo FAILED: $FAILS
 echo -ne '\E[0m'
+
+if [ $FAILS -ne 0 ]
+then
+	exit 1
+fi
 @
 
 \subsection{Test incorrect}
@@ -102,6 +107,11 @@ fi
 echo PASSED: $PASSES
 echo FAILED: $FAILS
 echo -ne '\E[0m'
+
+if [ $FAILS -ne 0 ]
+then
+	exit 1
+fi
 @
 
 \subsection{Test warnings}
@@ -138,6 +148,7 @@ do
 	fi
 	
 	rm -f testTmp.txt
+	rm -f errorTmp.txt
 done
 
 echo Results for parsing/parsewarn suite:
@@ -150,4 +161,9 @@ fi
 echo PASSED: $PASSES
 echo FAILED: $FAILS
 echo -ne '\E[0m'
+
+if [ $FAILS -ne 0 ]
+then
+	exit 1
+fi
 @
