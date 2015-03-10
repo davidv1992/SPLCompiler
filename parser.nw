@@ -1,10 +1,63 @@
 \section{Parsing}
 
+With the issue of recognizing the individual tokens out of the way, we can turn to the actual problem of parsing the input. The choice was made to build a hand-written recursive descent parser. A recursive descent parser is one of the easiest ways of writing a parser without some form of parser-generating tooling, and allows both descent error messages and some form of error recovery in the parser itself.
+
+Recursive descent has a few drawbacks, such as some dificulties with left recursion. Luckily, the occurences of this in the SPL language are of such a nature that they can be easily handled by parsing them as left-recursive constructs whilst using an accumulator to change the resulting parse tree to representing right recursion.
+
+The parser itself is subdivided into three major parts, each representing a part of the SPL language. These are presented in sequence, followed by the glue that enables us to parse entire programs.
+
+The first major segment of the parser is the type parser. This segment of the language has no ambiguities or other problems, which is reflected in the simplicity of this parser.
+
+This is followed by the brunt of the parser, the expression parser. This handles the parsing of everything that produces a value as end result. This part is responsible for dealing with operator precedence, association and related problems. Consequently, allmost all of the occurences of left recursion in the language are in this part of the parser, and handled as mentioned above.
+
+The final major segment is the statement parsing. It is responsible for parsing function bodies, and handles everything from blocks to assigns to return statements. It also handles the parsing of left-hand sides of assignments, and it deals with variable declarations and the problems arising in handling these.
+
+The glue contains the code that detects whether the current top-level declaration is that of a function, or whether it represents a variable. It has the issue that it can only make this distinction fairly late in the process of parsing the declaration, but since the first two nonterminals of both are completely identical, this turns out to be fairly straightforward to deal with.
+
 \subsection{Grammar}
-The grammar as given in the SPL specification has a number of ambiguities, which need to be resolved before we can get to work on the parser proper. The most important of these is the fact that expression parsing is defined using operator precedence. However, for the purpose of parsing it is more usefull to write it in the grammar itself. For this purpose we introduce several new non-terminals opl0 through opl6, which contain the precedence levels
+The grammar as given in the SPL specification has a number of ambiguities, which need to be resolved before we can get to work on the parser proper. The most important of these is the fact that expression parsing is defined using operator precedence. However, for the purpose of parsing it is more usefull to write it in the grammar itself. For this purpose we introduce several new non-terminals opl0 through opl6, which contain the precedence levels.
+
+Also, we need some way to deal with left associative operators. This is done by translating the underlying grammar to a right-recursive one, and then fixing this in the generation of the abstract syntax tree.
+
+On the grammar level, the final issue is that of dangling elses, this is simply resolved by always associating the else with the closest if (leftmost derivation).
+
+Furthermore, we have several extensions that can be enabled, and these are easiest to implement by just parsing as if they are on, and adding extra checks that execute during the parsing that limit the allowed parsetrees when the extensions are off.
+
+This gives us the following grammar as used in implementing the parser. There is roughly a one-to-one mapping between the functions used below and the grammar constructs.
+
+\begin{tabular}{lcl}
+\nonterm{Program}&=&\nonterm{Type} \uterm{id} \term{(} [\nonterm{Funarg} (\term{,} \nonterm{Funarg})*] \term{)} \term{\{} \nonterm{Statement}+ \term{\}}\\
+&\bor& \nonterm{Type} \uterm{id} \term{=} \nonterm{Expression} \term{;}\\
+\nonterm{Funarg}&=&\nonterm{Type} \uterm{id}\\
+\nonterm{Statement} &=& \term{\{} \nonterm{Statement} \term{\}}\\
+&\bor& \nonterm{Lvalue} \term{=} \nonterm{Expression} \term{;}\\
+&\bor& \uterm{id} \term{(} [\nonterm{Expression} (\term{,} \nonterm{Expression})*] \term{)} \term{;}\\
+&\bor& \nonterm{Type} \uterm{id} \term{=} \nonterm{Expression} \term{;}\\
+&\bor& \term{if} \term{(} \nonterm{Expression} \term{)} \nonterm{Statement} [\term{else} \nonterm{Statement}]\\
+&\bor& \term{while} \term{(} \nonterm{Expression} \term{)} \nonterm{Statement}\\
+&\bor& \term{return} [\nonterm{Expression}] \term{;}\\
+\nonterm{Lvalue}&=&\uterm{id} (\term{.} \uterm{id})*\\
+\nonterm{Type}&\bor&\uterm{id}\\
+&\bor&\term{[} \nonterm{Type} \term{]}\\
+&\bor&\term{(} \nonterm{Type} \term{,} \nonterm{Type} \term{)}\\
+\nonterm{Expression}&=&\nonterm{opl6} ( \term{:} \nonterm{opl6} )*\\
+\nonterm{opl6}&=&\nonterm{opl5} ( \term{\bor\bor} \nonterm{opl5} )*\\
+\nonterm{opl5}&=&\nonterm{opl4} ( \term{\&\&} \nonterm{opl4} )*\\
+\nonterm{opl4}&=&\nonterm{opl3} ( ( \term{==} \bor\ \term{!=} ) \nonterm{opl3} )*\\
+\nonterm{opl3}&=&\nonterm{opl2} ( ( \term{\textless} \bor\ \term{\textless =} \bor\ \term{\textgreater} \bor\ \term{\textgreater =} ) \nonterm{opl2} )*\\
+\nonterm{opl2}&=&\nonterm{opl1} ( ( \term{+} \bor\ \term{-} ) \nonterm{opl1} )*\\
+\nonterm{opl1}&=&\nonterm{opl0} ( ( \term{*} \bor\ \term{/} \bor\ \term{\%} ) \nonterm{opl0} )*\\
+\nonterm{opl0}&=&\term{(} \nonterm{Expression} \term{)}\\
+&\bor&\term{(} \nonterm{Expression} \term{,} \nonterm{Expression} \term{)}\\
+&\bor&\uterm{id} \term{(} [ \nonterm{Expression} ( \term{,} \nonterm{Expression} )* ] \term{)}\\
+&\bor&\uterm{id} ( \term{.} \uterm{id} )*\\
+&\bor&\term{-} \nonterm{opl0}\\
+&\bor&\term{!} \nonterm{opl0}\\
+&\bor&\uterm{int} \bor\ \uterm{char} \bor\ \term{[]}\\
+\end{tabular}
 
 \subsection{Abstract Syntax trees}
-Abstract syntax trees are implemented using classes for each of the nodes. Each node is responsible for managing the memory used by itself and its subtrees. Upon passing pointers of an ast to a constructor for a node, that node acquires ownership of the memory associated with the ast, and should free it when it gets deleted. Also, each node should be able to print a readable representation of itsef.
+Abstract syntax trees are implemented using classes for each of the nodes. Each node is responsible for managing the memory used by itself and its subtrees. Upon passing pointers of an ast to a constructor for a node, that node acquires ownership of the memory associated with the ast, and should free it when it gets deleted. Also, each node is able to print a human-readable representation of itsef.
 
 <<ast base>>=
 class ast_base
@@ -436,7 +489,7 @@ ast_expression_variable *val = new ast_expression_variable_base
 while (next_token.type == TOKEN_DOT)
 {
 	next_token = tok_get();
-	string field = "";
+	string field = "<missing>";
 	if (next_token.type == TOKEN_ID)
 	{
 		field = next_token.id;
@@ -965,7 +1018,7 @@ ast_lvalue *parse_lvalue()
 		string field;
 		if (cur_token.type != TOKEN_ID)
 		{
-			field = "";
+			field = "<missing>";
 			parse_error(next_token.position, 
 				"Missing field name, got %s", token_name(next_token).c_str());
 		}
@@ -1089,7 +1142,7 @@ case TOKEN_SQUAREBRACKET_LEFT:
 	{
 		parse_error(cur_token.position, "Missing variable name.");
 		tok_unget(cur_token);
-		name = "";
+		name = "<missing>";
 	}
 	else
 	{
@@ -1320,7 +1373,7 @@ ast_program *parse_program()
 				"Unexpected %s, expected identifier.", 
 				token_name(cur_token).c_str());
 			tok_unget(cur_token);
-			name = "";
+			name = "<missing>";
 		}
 		
 		cur_token = tok_get();
@@ -1417,7 +1470,7 @@ ast_funarg *parse_funarg()
 			"Unexpected %s, expected argument name", 
 			token_name(cur_token).c_str());
 		tok_unget(cur_token);
-		return new ast_funarg(type, "");
+		return new ast_funarg(type, "<missing>");
 	}
 	return new ast_funarg(type, cur_token.id);
 }
