@@ -6,8 +6,9 @@ CXXFLAGS := -I. -g -Wall -Wextra -Wno-unused-parameter -Wno-unused-variable -Wer
 
 test: test/tokentest test/parsetest
 
-test/tokentest: testprogs/tokentest
-	ls tests/parsing/correct/*.spl | xargs -n 1 valgrind --quiet ./testprogs/tokentest >/dev/null
+test/tokentest: testprogs/tokentest testprogs/tokencorrect.sh testprogs/tokenfail.sh
+	$(BASH) ./testprogs/tokencorrect.sh
+	$(BASH) ./testprogs/tokenfail.sh
 
 test/parsetest: testprogs/parsetest testprogs/parsecorrect.sh testprogs/parsefail.sh testprogs/parsewarn.sh
 	$(BASH) ./testprogs/parsecorrect.sh
@@ -95,6 +96,14 @@ testprogs/parsewarn.sh: testprogs/parsetest.nw
 	notangle -L -Rparsewarn.sh testprogs/parsetest.nw > testprogs/parsewarn.sh
 	chmod +x testprogs/parsewarn.sh
 
+testprogs/tokencorrect.sh: testprogs/tokentest.nw
+	notangle -L -Rtokencorrect.sh testprogs/tokentest.nw > testprogs/tokencorrect.sh
+	chmod +x testprogs/tokencorrect.sh
+
+testprogs/tokenfail.sh : testprogs/tokentest.nw
+	notangle -L -Rtokenfail.sh testprogs/tokentest.nw > testprogs/tokenfail.sh
+	chmod +x testprogs/tokenfail.sh
+
 clean:
 	rm -f error.h error.cpp error.o
 	rm -f token.h token.cpp token.o
@@ -106,5 +115,6 @@ clean:
 	rm -f testprogs/exprparsetest.cpp testprogs/exprparsetest.o testprogs/exprparsetest
 	rm -f testprogs/statementparsetest.cpp testprogs/statementparsetest.o testprogs/statementparsetest
 	rm -f testprogs/parsecorrect.sh testprogs/parsefail.sh testprogs/parsewarn.sh
+	rm -f testprogs/tokencorrect.sh testprogs/tokenfail.sh
 	rm -f position.h version.h settings.h
 	rm -f code.tex code.pdf code.bbl

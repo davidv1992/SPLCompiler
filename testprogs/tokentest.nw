@@ -1,6 +1,6 @@
 \section{Tokenizer test program}
 
-The program presented in this section is intended to test the tokenizer on its own. It simply prints every token as it comes out the tokenizer. IO is simple, using just standard input and output, and no configuration arguments for the whole.
+The program presented in this section is intended to test the tokenizer on its own. It simply prints every token as it comes out the tokenizer. Input is via file, output via stdout
 
 <<tokentest.cpp>>=
 #include "token.h"
@@ -24,4 +24,99 @@ int main(int argc, char **argv)
 	}
 	return 0;
 }
+@
+
+\subsection{Correct tokenizing}
+
+Test the output of the tokenizer against known good outputs.
+
+<<tokencorrect.sh>>=
+#!/bin/bash
+
+PASSES=0
+FAILS=0
+
+for SPL_FILE in $(ls tests/parsing/correct/*.spl)
+do
+	valgrind --error-exitcode=1 --quiet ./testprogs/tokentest $SPL_FILE > testTmp.txt
+	if [ $? -ne 0 ]
+	then
+		echo Failure in testcase $SPL_FILE
+		FAILS=$((FAILS+1))
+	else
+		diff -q testTmp.txt $SPL_FILE.token
+		if [ $? -ne 0 ]
+		then
+			echo Failure in testcase $SPL_FILE
+			FAILS=$((FAILS+1))
+		else
+			PASSES=$((PASSES+1))
+		fi
+	fi
+	
+	rm -f testTmp.txt
+done
+
+echo Results for parsing/correct \(tokenizer\) suite:
+if [ $FAILS -eq 0 ]
+then
+	echo -ne '\E[32m'
+else
+	echo -ne '\E[31m'
+fi
+echo PASSED: $PASSES
+echo FAILED: $FAILS
+echo -ne '\E[0m'
+
+if [ $FAILS -ne 0 ]
+then
+	exit 1
+fi
+@
+
+\subsection{Errors detected in the tokenizer}
+
+This script tests the errors that should be detected in the tokenizer.
+
+<<tokenfail.sh>>=
+#!/bin/bash
+
+PASSES=0
+FAILS=0
+
+for SPL_FILE in $(ls tests/parsing/tokenfail/*.spl)
+do
+	valgrind --error-exitcode=1 --quiet ./testprogs/tokentest $SPL_FILE 2> testTmp.txt > /dev/null
+	if [ $? -ne 0 ]
+	then
+		echo Failure in testcase $SPL_FILE
+		FAILS=$((FAILS+1))
+	else
+		if [ -s testTmp.txt ]
+		then
+			PASSES=$((PASSES+1))
+		else
+			echo Failure in testcase $SPL_FILE
+			FAILS=$((FAILS+1))
+		fi
+	fi
+	
+	rm -f testTmp.txt
+done
+
+echo Results for parsing/tokenfail \(tokenizer\) suite:
+if [ $FAILS -eq 0 ]
+then
+	echo -ne '\E[32m'
+else
+	echo -ne '\E[31m'
+fi
+echo PASSED: $PASSES
+echo FAILED: $FAILS
+echo -ne '\E[0m'
+
+if [ $FAILS -ne 0 ]
+then
+	exit 1
+fi
 @
