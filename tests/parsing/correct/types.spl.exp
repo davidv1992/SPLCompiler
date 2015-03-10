@@ -1,0 +1,7 @@
+Int a = 0;
+[Int] b = [];
+(Int,Bool) c = (0,False);
+Char d = 'a';
+([(Int,Char)],Bool) e = (((1,'a'):[]),True);
+(Int,(Int,Int)) f = (1,(2,3));
+[[Int]] g = ((1:[]):([]:[]));

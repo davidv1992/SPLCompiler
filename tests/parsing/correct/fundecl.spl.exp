@@ -1,0 +1,15 @@
+Int main() {
+	return 1;
+}
+t id(t a) {
+	return a;
+}
+t id(t a,t b,t c) {
+	return ((a<b)&&(b<c));
+}
+Int f(Int a,t b,Char c) {
+	return 1;
+}
+Void g() {
+	return;
+}

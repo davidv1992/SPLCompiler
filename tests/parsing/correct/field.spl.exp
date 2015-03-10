@@ -1,0 +1,9 @@
+Int main((Int,(Int,Int)) a) {
+	return a.fst.snd;
+}
+t first((t,b) a) {
+	return a.fst;
+}
+t second((b,t) a) {
+	return a.snd;
+}

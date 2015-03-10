@@ -1,6 +1,6 @@
 \section{Parsing test program}
 
-The program here tests the tokenizer and parser
+The program here tests the tokenizer and parser as a combination. This test program is primarily used by the test scripts below
 
 <<parsetest.cpp>>=
 #include "token.h"
@@ -19,4 +19,135 @@ int main(int argc, char **argv)
 	parse_program()->print(0);
 	return 0;
 }
+@
+
+\subsection{Test correct}
+
+This test script handles the testing of the behaviour of the parser on correct input, and checks whether it produces the expected output.
+<<parsecorrect.sh>>=
+#!/bin/bash
+
+PASSES=0
+FAILS=0
+
+for SPL_FILE in $(ls tests/parsing/correct/*.spl)
+do
+	valgrind --error-exitcode=1 --quiet ./testprogs/parsetest $SPL_FILE > testTmp.txt
+	if [ $? -ne 0 ]
+	then
+		echo Failure in testcase $SPL_FILE
+		FAILS=$((FAILS+1))
+	else
+		diff -q testTmp.txt $SPL_FILE.exp
+		if [ $? -ne 0 ]
+		then
+			echo Failure in testcase $SPL_FILE
+			FAILS=$((FAILS+1))
+		else
+			PASSES=$((PASSES+1))
+		fi
+	fi
+	
+	rm -f testTmp.txt
+done
+
+echo Results for parsing/correct suite:
+if [ $FAILS -eq 0 ]
+then
+	echo -ne '\E[32m'
+else
+	echo -ne '\E[31m'
+fi
+echo PASSED: $PASSES
+echo FAILED: $FAILS
+echo -ne '\E[0m'
+@
+
+\subsection{Test incorrect}
+
+This test script handles the testing fo the behaviour of the parser on incorrect input, and verifies that it produces some error message.
+<<parsefail.sh>>=
+#!/bin/bash
+
+PASSES=0
+FAILS=0
+
+for SPL_FILE in $(ls tests/parsing/parsefail/*.spl tests/parsing/tokenfail/*.spl)
+do
+	valgrind --error-exitcode=1 --quiet ./testprogs/parsetest $SPL_FILE 2> testTmp.txt > /dev/null
+	if [ $? -ne 0 ]
+	then
+		echo Failure in testcase $SPL_FILE
+		FAILS=$((FAILS+1))
+	else
+		if [ -s testTmp.txt ]
+		then
+			PASSES=$((PASSES+1))
+		else
+			echo Failure in testcase $SPL_FILE
+			FAILS=$((FAILS+1))
+		fi
+	fi
+	
+	rm -f testTmp.txt
+done
+
+echo Results for parsing/parsefail and parsing/tokenfail suite:
+if [ $FAILS -eq 0 ]
+then
+	echo -ne '\E[32m'
+else
+	echo -ne '\E[31m'
+fi
+echo PASSED: $PASSES
+echo FAILED: $FAILS
+echo -ne '\E[0m'
+@
+
+\subsection{Test warnings}
+
+This script handles the tests that should produce warnings:
+<<parsewarn.sh>>=
+#!/bin/bash
+
+PASSES=0
+FAILS=0
+
+for SPL_FILE in $(ls tests/parsing/parsewarn/*.spl)
+do
+	valgrind --error-exitcode=1 --quiet ./testprogs/parsetest $SPL_FILE > testTmp.txt 2> errorTmp.txt
+	if [ $? -ne 0 ]
+	then
+		echo Failure in testcase $SPL_FILE
+		FAILS=$((FAILS+1))
+	else
+		diff -q testTmp.txt $SPL_FILE.exp
+		if [ $? -ne 0 ]
+		then
+			echo Failure in testcase $SPL_FILE
+			FAILS=$((FAILS+1))
+		else
+			if [ -s errorTmp.txt ]
+			then
+				PASSES=$((PASSES+1))
+			else
+				echo Failure in testcase $SPL_FILE
+				FAILS=$((FAILS+1))
+			fi
+		fi
+	fi
+	
+	rm -f testTmp.txt
+done
+
+echo Results for parsing/parsewarn suite:
+if [ $FAILS -eq 0 ]
+then
+	echo -ne '\E[32m'
+else
+	echo -ne '\E[31m'
+fi
+echo PASSED: $PASSES
+echo FAILED: $FAILS
+echo -ne '\E[0m'
 @

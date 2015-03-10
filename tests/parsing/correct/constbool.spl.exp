@@ -1,0 +1,5 @@
+Int main() {
+	Bool a = False;
+	Bool b = True;
+	return 1;
+}

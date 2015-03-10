@@ -1,0 +1,14 @@
+Int main(Int a) {
+	Int b = 0;
+	while ((a>0)) {
+		a = (a-1);
+		b = (b+1);
+	}
+	return b;
+}
+Int f(Int g) {
+	while ((g>0)) {
+		g = (g-3);
+	}
+	return g;
+}

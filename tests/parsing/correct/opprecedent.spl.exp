@@ -1,0 +1,48 @@
+Int main() {
+	return 1;
+}
+Int unary() {
+	return (-(-1));
+}
+Int addsub() {
+	return ((1-2)+3);
+}
+Int muldiv() {
+	return ((4/2)*3);
+}
+Bool comp() {
+	return ((5<3)>=False);
+}
+Bool eq() {
+	return ((5==3)!=False);
+}
+Bool And() {
+	return ((False&&True)&&True);
+}
+Bool or() {
+	return ((False||True)||True);
+}
+[Int] colon() {
+	return (1:(2:[]));
+}
+Int unarymul() {
+	return (2*(-3));
+}
+Int addmul() {
+	return (2+(3*5));
+}
+Bool addcomp() {
+	return ((2+3)<5);
+}
+Bool compeq() {
+	return ((2<3)==False);
+}
+Bool eqand() {
+	return ((2==3)&&(4==4));
+}
+Bool andor() {
+	return (((False||(True&&False))||(True&&True))||False);
+}
+[Bool] orlist() {
+	return ((False||True):[]);
+}

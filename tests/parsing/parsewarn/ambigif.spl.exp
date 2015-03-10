@@ -1,0 +1,11 @@
+Int main(Int a) {
+	if ((a<0)) {
+		if ((a<(-1))) {
+			return (-1);
+		}
+		else {
+			return 0;
+		}
+	}
+	return 1;
+}

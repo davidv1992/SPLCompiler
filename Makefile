@@ -1,15 +1,18 @@
 .PHONY: clean test version.h
 #force version.h on every build
 
-CXXFLAGS = -I. -g -Wall -Wextra -Wno-unused-parameter -Wno-unused-variable -Werror -std=c++11
+BASH := /bin/bash
+CXXFLAGS := -I. -g -Wall -Wextra -Wno-unused-parameter -Wno-unused-variable -Werror -std=c++11
 
 test: test/tokentest test/parsetest
 
 test/tokentest: testprogs/tokentest
 	ls tests/parsing/correct/*.spl | xargs -n 1 valgrind --quiet ./testprogs/tokentest >/dev/null
 
-test/parsetest: testprogs/parsetest
-	ls tests/parsing/correct/*.spl | xargs -n 1 valgrind --quiet ./testprogs/parsetest >/dev/null
+test/parsetest: testprogs/parsetest testprogs/parsecorrect.sh testprogs/parsefail.sh testprogs/parsewarn.sh
+	$(BASH) ./testprogs/parsecorrect.sh
+	$(BASH) ./testprogs/parsefail.sh
+	$(BASH) ./testprogs/parsewarn.sh
 
 error.o: error.cpp error.h position.h settings.h
 error.h: error.nw
@@ -80,6 +83,18 @@ testprogs/statementparsetest.o: testprogs/statementparsetest.cpp token.h parser.
 testprogs/statementparsetest.cpp: testprogs/statementparsetest.nw
 	notangle -L -Rstatementparsetest.cpp testprogs/statementparsetest.nw | cpif testprogs/statementparsetest.cpp
 
+testprogs/parsecorrect.sh: testprogs/parsetest.nw
+	notangle -L -Rparsecorrect.sh testprogs/parsetest.nw > testprogs/parsecorrect.sh
+	chmod +x testprogs/parsecorrect.sh
+
+testprogs/parsefail.sh: testprogs/parsetest.nw
+	notangle -L -Rparsefail.sh testprogs/parsetest.nw > testprogs/parsefail.sh
+	chmod +x testprogs/parsefail.sh
+
+testprogs/parsewarn.sh: testprogs/parsetest.nw
+	notangle -L -Rparsewarn.sh testprogs/parsetest.nw > testprogs/parsewarn.sh
+	chmod +x testprogs/parsewarn.sh
+
 clean:
 	rm -f error.h error.cpp error.o
 	rm -f token.h token.cpp token.o
@@ -90,5 +105,6 @@ clean:
 	rm -f testprogs/typeparsetest.cpp testprogs/typeparsetest.o testprogs/typeparsetest
 	rm -f testprogs/exprparsetest.cpp testprogs/exprparsetest.o testprogs/exprparsetest
 	rm -f testprogs/statementparsetest.cpp testprogs/statementparsetest.o testprogs/statementparsetest
+	rm -f testprogs/parsecorrect.sh testprogs/parsefail.sh testprogs/parsewarn.sh
 	rm -f position.h version.h settings.h
 	rm -f code.tex code.pdf code.bbl
