@@ -3,6 +3,12 @@
 \usepackage{amsmath}
 \usepackage{noweb}
 \usepackage[margin=1.5in]{geometry}
+\usepackage{textcomp}
+\usepackage{hyperref}
+\newcommand{\nonterm}[1]{\textlangle #1\textrangle}
+\newcommand{\bor}{\textbar}
+\newcommand{\term}[1]{'\textbf{#1}'}
+\newcommand{\uterm}[1]{\textbf{#1}}
 \pagestyle{noweb}\noweboptions{}
 \title{SPL compiler}
 \author{David Venhoek}

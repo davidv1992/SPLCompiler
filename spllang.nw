@@ -1,0 +1,92 @@
+\section{The spl language definition}
+For ease of reference the SPL language definition is included (almost) verbatim below. The original material comes from \cite{cc_ex1}. It is followed by notes on the choices and clarifications used in the rest of the code.
+
+\subsection{Grammar}
+\begin{tabular}{lcl}
+\nonterm{SPL}&=&\nonterm{Decl}+\\
+\nonterm{Decl}&=&\nonterm{VarDecl}\\
+&\bor&\nonterm{FunDecl}\\
+\nonterm{VarDecl}&=&\nonterm{Type} \uterm{id} \term{=} \nonterm{Exp} \term{;}\\
+\nonterm{FunDecl}&=&\nonterm{RetType} \uterm{id} \term{(} [ \nonterm{FArgs} ] \term{)} \term{\{} \nonterm{VarDecl}* \nonterm{Stmt}+ \term{\}}\\
+\nonterm{RetType}&=&\nonterm{Type}\\
+&\bor&\term{Void}\\
+\nonterm{Type}&=&\nonterm{BasicType}\\
+&\bor&\term{(} \nonterm{Type} \term{,} \nonterm{Type} \term{)}\\
+&\bor&\term{[} \nonterm{Type} \term{]}\\
+&\bor&\uterm{id}\\
+\nonterm{BasicType}&=&\term{Int}\\
+&\bor&\term{Bool}\\
+&\bor&\term{Char}\\
+\nonterm{FArgs}&=&\term{[} \nonterm{FArgs} \term{]} \nonterm{Type} \uterm{id}\\
+\nonterm{Stmt}&=&\term{\{} \nonterm{Stmt}* \term{\}}\\
+&\bor&\term{if} \term{(} \nonterm{Exp} \term{)} \nonterm{Stmt} [ \term{else} \nonterm{Stmt} ]\\
+&\bor&\term{while} \term{(} \nonterm{Exp} \term{)} \nonterm{Stmt}\\
+&\bor&\uterm{id} \nonterm{Field} \term{=} \nonterm{Exp} \term{;}\\
+&\bor&\nonterm{FunCall} \term{;}\\
+&\bor&\term{return} [ \nonterm{Exp} ] \term{;}\\
+\nonterm{Exp}&=&\uterm{id} \nonterm{Field}\\
+&\bor&\nonterm{Exp} \nonterm{Op2} \nonterm{Exp}\\
+&\bor&\nonterm{Op1} \nonterm{Exp}\\
+&\bor&\uterm{int}\\
+&\bor&\uterm{char}\\
+&\bor&\term{False}\bor\ \term{True}\\
+&\bor&\term{(} \nonterm{Exp} \term{)}\\
+&\bor&\nonterm{FunCall}\\
+&\bor&\term{(} \nonterm{Exp} \term{,} \nonterm{Exp} \term{)}\\
+\nonterm{Field}&=&[ \nonterm{Field} \term{.} ( \term{hd} \bor\ \term{tl} \bor\ \term{fst} \bor\ \term{snd} ) ]\\
+\nonterm{FunCall}&=&\uterm{id} \term{(} [ \nonterm{ActArgs} ] \term{)}\\
+\nonterm{ActArgs}&=&\nonterm{Exp} [ \term{,} \nonterm{ActArgs} ]\\
+\nonterm{Op2}&=&\term{+} \bor\ \term{-} \bor\ \term{*} \bor\ \term{/} \bor\ \term{\%}\\
+&\bor&\term{==} \bor\ \term{\textless} \bor\ \term{\textgreater} \bor\ \term{\textless =} \bor\ \term{\textgreater =} \bor\ \term{!=}\\
+&\bor&\term{\&\&} \bor\ \term{\bor\bor}\\
+&\bor&\term{:}\\
+\nonterm{Op1}&=&\term{!} \bor\ \term{-}\\
+\end{tabular}
+
+The \nonterm{SPL} symbol is the goal.
+
+\uterm{id} tokens are sequences of alphanumeric characters or underscores, starting with an alphanumeric character. \uterm{int} are sequences of numerics, possibly starting with a minus sign. \uterm{char} are character constants (simple C-like style). The SPL language ignores whitespace, with the exception that it is a seperator for the other tokens. Comments are either line comments, which start with "//" and are ended by a newline, or multiline comments, which are delimited by "/*" and "*/".
+
+\subsection{Semantics}
+
+SPL has three buildin functions: \term{print}, \term{read} and \term{isEmpty}. \term{print} has type \term{t}, and \term{isEmpty} type \term{[t]}. The buildin operators have the following types:
+
+\begin{tabular}{l|l l}
+operator(s) & type\\
+\hline
+\term{*}, \term{\%}, \term{/} & $\text{\term{Int}} \times \text{\term{Int}} \rightarrow \text{\term{Int}}$\\
+\term{+}, \term{-}(binary) & $\text{\term{t}} \times \text{\term{t}} \rightarrow \text{\term{t}}$ & \term{t} represents either \term{Int} or \term{Char}\\
+\term{==}, \term{\textless}, \term{\textgreater}, \term{\textless =}, \term{\textgreater =} & $\text{\term{t}} \times \text{\term{t}} \rightarrow \text{\term{Bool}}$\\
+\term{-}(unary) & $\text{\term{Int}} \rightarrow \text{\term{Int}}$\\
+\term{!} & $\text{\term{Bool}} \rightarrow \text{\term{Bool}}$\\
+\end{tabular}
+
+The SPL language is strict, everything is always evaluated. The evaluation order of function arguments and operators is implementation defined. The basic types are always passed by reference, compound structures such as list and pairs are passed by reference.
+
+Compound structures are created implicitly. Each \term{(} \nonterm{Exp} \term{,} \nonterm{Exp} \term{)} construction creates a new pair, and each \term{:} a new list node.
+
+All operators obey the usual binding powers and directions.
+
+\subsection{Comments, problems and decisions}
+The specification as given above has a umber of issues and is, at least in it's current form, quite a bit underspecified.
+
+To start with the first point, the operator binding power and direction. Since there is some variation in this between programming languages and mathematics, a baseline must be chosen. I made the choice to use the C operator binding powers and directions as a base, since it is something I am familiar with. This leaves the colon operator undecided, since it is not in the C language. I chose to make it the weakest binding operator, and make it right associative. Right associative is the better choice here because it allows \term{1:2:3:[]} to be interpreted as intended (the list with elements $1$,$2$,$3$ in that order). Making it weakest binding allows us to easily append the results of all sorts of expressions into the list without having to worry about brackets, making it also natural to work with lists of booleans. This gives us the following ordering of the operators (from strong binding to weak) with their associativity:
+
+\begin{tabular}{l|l}
+Operators & Associativity\\
+\hline
+\term{-}, \term{!} (both unary) & Right\\
+\term{*}, \term{/}, \term{\%} & Left\\
+\term{+}, \term{-}(binary) & Left\\
+\term{\textless}, \term{\textgreater}, \term{\textless =}, \term{\textgreater =} & Left\\
+\term{==}, \term{!=} & Left\\
+\term{\&\&} & Left\\
+\term{\bor\bor} & Left\\
+\term{:} & Right\\
+\end{tabular}
+
+The second issue we need to treat is that of the dangling else. In the grammar as written above, there are two interpretations of "\term{if (a) if (b)} \nonterm{Stmt} \term{else} \nonterm{Stmt}", namely "\term{if (a) \{ if (b)} \nonterm{Stmt} \term{\}} \term{else} \nonterm{Stmt}" and "\term{if (a) \{ if (b)} \nonterm{Stmt} \term{else} \nonterm{Stmt} \term{\}}". I personally prefer the second interpretation because it allows us to easily match an arbitrary number of \term{else} terms to \term{if}, without changing the meaning of an \term{else} when we add another one after it. Thus, each \term{else} is associated with the closest possible \term{if}.
+
+Finaly, character constants are not really that well specified. Currently, the implementation takes the next character after the opening \term{'} to be the value of it, and then immediately looks for the closing \term{'}. I might change this out at a later time for a more full implementation of the behaviour that C character constants have, since it allows a clearer representation of special characters such as newlines.
+
+All further ambiguities in the semantics that are left after this are treated at a later time, when implementing the relevant parts of the compiler.
