@@ -308,7 +308,7 @@ public:
 	ast_expression_charconst(source_position pos, char v) 
 		{ position = pos; value = v; }
 	virtual ~ast_expression_charconst() {}
-	virtual void print(int tabdepth) { printf("%c", value); }
+	virtual void print(int tabdepth) { printf("'%c'", value); }
 };
 class ast_expression_emptylist : public ast_expression
 {
@@ -980,7 +980,7 @@ public:
 	virtual void print(int tabdepth)
 	{
 		if (value == NULL)
-			printf("return;");
+			printf("return;\n");
 		else
 		{
 			printf("return ");
