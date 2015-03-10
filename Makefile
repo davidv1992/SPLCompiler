@@ -91,4 +91,4 @@ clean:
 	rm -f testprogs/exprparsetest.cpp testprogs/exprparsetest.o testprogs/exprparsetest
 	rm -f testprogs/statementparsetest.cpp testprogs/statementparsetest.o testprogs/statementparsetest
 	rm -f position.h version.h settings.h
-	rm -f code.tex code.pdf
+	rm -f code.tex code.pdf code.bbl
