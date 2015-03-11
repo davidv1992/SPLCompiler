@@ -1,0 +1,104 @@
+\section{Stress testing}
+
+The test programs here are intended to test various special types of programs that put the compiler parts under unusual stresses not usually found in normal programs. The following test program takes a generator and feeds its output to the compiler for various size parameters:
+
+<<runtolim.sh>>=
+LIMIT=5000000
+ACCEPT=$2
+START=1000
+FACTOR=2
+
+CUR=$START
+
+while [ $CUR -lt $LIMIT ]
+do
+	$1 $CUR > tmpTest.spl
+	if [ $? -ne 0 ]
+	then
+		echo Error during test generation
+		exit 1
+	fi
+	
+	valgrind --error-exitcode=1 --quiet ./testprogs/parsetest tmpTest.spl >/dev/null
+	
+	RES=$?
+	
+	rm -f tmpTest.spl
+	
+	if [ $RES -ne 0 ]
+	then
+		if [ $CUR -le $ACCEPT ]
+		then
+			echo -ne '\E[31m'
+		fi
+		echo Failure at $CUR
+		echo -ne '\E[0m'
+		if [ $CUR -gt $ACCEPT ]
+		then
+			exit 0
+		else
+			exit 2
+		fi
+	fi
+	
+	CUR=$((CUR*FACTOR))
+done
+
+echo No failure before end of testing
+exit 0
+@
+
+\subsection{Many comments}
+
+<<commentgen.cpp>>=
+#include <cstdio>
+#include <cstdlib>
+int main(int argc, char **argv)
+{
+	if (argc < 2)
+		return 1;
+	
+	int amm = atoi(argv[1]);
+	
+	for (int i=0; i<amm; i++)
+	{
+		printf("/*a%d*/\n", i);
+	}
+	printf("Int main() {return 1;}\n");
+	for (int i=0; i<amm; i++)
+	{
+		printf("//b%d\n", i);
+	}
+	printf("Int f() {return 5;}\n");
+	
+	return 0;
+}
+@
+
+\subsection{Deep nesting of brackets};
+
+<<bracketgen.cpp>>=
+#include <cstdio>
+#include <cstdlib>
+int main(int argc, char **argv)
+{
+	if (argc < 2)
+		return 1;
+	
+	int amm = atoi(argv[1]);
+	
+	printf("Int main() {\n return ");
+	for (int i=0; i<amm; i++)
+	{
+		printf("(");
+	}
+	printf("1+2");
+	for (int i=0; i<amm; i++)
+	{
+		printf(")");
+	}
+	printf(";\n}\n");
+	
+	return 0;
+}
+@

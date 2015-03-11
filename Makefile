@@ -16,6 +16,15 @@ test/parsetest: testprogs/parsetest testprogs/parsecorrect.sh testprogs/parsefai
 	$(BASH) ./testprogs/parsefail.sh
 	$(BASH) ./testprogs/parsewarn.sh
 
+limittest: limittest/comment limittest/bracket
+	@$(BASH) -c "echo -e '\E[32mAll tests passed\E[0m'"
+
+limittest/comment: testprogs/parsetest testprogs/runtolim.sh testprogs/commentgen
+	$(BASH) ./testprogs/runtolim.sh ./testprogs/commentgen 50000
+
+limittest/bracket: testprogs/parsetest testprogs/runtolim.sh testprogs/bracketgen
+	$(BASH) ./testprogs/runtolim.sh ./testprogs/bracketgen 5000
+
 error.o: error.cpp error.h position.h settings.h
 error.h: error.nw
 	notangle -L -Rerror.h error.nw | cpif error.h
@@ -49,8 +58,8 @@ version.h:
 settings.h: settings.nw
 	notangle -L -Rsettings.h settings.nw | cpif settings.h
 
-test.tex: testprogs/testheader.nw testprogs/testtrailer.nw testprogs/tokentest.nw testprogs/parsetest.nw testprogs/exprparsetest.nw testprogs/typeparsetest.nw testprogs/statementparsetest.nw
-	noweave -t4 -delay testprogs/testheader.nw testprogs/tokentest.nw testprogs/parsetest.nw testprogs/typeparsetest.nw testprogs/exprparsetest.nw testprogs/statementparsetest.nw testprogs/testtrailer.nw | cpif test.tex
+test.tex: testprogs/testheader.nw testprogs/testtrailer.nw testprogs/tokentest.nw testprogs/parsetest.nw testprogs/exprparsetest.nw testprogs/typeparsetest.nw testprogs/statementparsetest.nw testprogs/stresstest.nw
+	noweave -t4 -delay testprogs/testheader.nw testprogs/tokentest.nw testprogs/parsetest.nw testprogs/typeparsetest.nw testprogs/exprparsetest.nw testprogs/statementparsetest.nw testprogs/stresstest.nw testprogs/testtrailer.nw | cpif test.tex
 test.pdf: test.tex
 	latexmk -pdf test.tex
 	latexmk -c
@@ -111,6 +120,18 @@ testprogs/tokenfail.sh : testprogs/tokentest.nw
 	notangle -L -Rtokenfail.sh testprogs/tokentest.nw > testprogs/tokenfail.sh
 	chmod +x testprogs/tokenfail.sh
 
+testprogs/commentgen: testprogs/commentgen.cpp
+testprogs/commentgen.cpp: testprogs/stresstest.nw
+	notangle -L -Rcommentgen.cpp testprogs/stresstest.nw | cpif testprogs/commentgen.cpp
+
+testprogs/bracketgen: testprogs/bracketgen.cpp
+testprogs/bracketgen.cpp: testprogs/stresstest.nw
+	notangle -L -Rbracketgen.cpp testprogs/stresstest.nw | cpif testprogs/bracketgen.cpp
+
+testprogs/runtolim.sh: testprogs/stresstest.nw
+	notangle -L -Rruntolim.sh testprogs/stresstest.nw > testprogs/runtolim.sh
+	chmod +x testprogs/runtolim.sh
+
 clean:
 	rm -f error.h error.cpp error.o
 	rm -f token.h token.cpp token.o
@@ -123,6 +144,9 @@ clean:
 	rm -f testprogs/statementparsetest.cpp testprogs/statementparsetest.o testprogs/statementparsetest
 	rm -f testprogs/parsecorrect.sh testprogs/parsefail.sh testprogs/parsewarn.sh
 	rm -f testprogs/tokencorrect.sh testprogs/tokenfail.sh
+	rm -f testprogs/commentgen testprogs/commentgen.cpp
+	rm -f testprogs/bracketgen testprogs/bracketgen.cpp
+	rm -f testprogs/runtolim.sh
 	rm -f position.h version.h settings.h
 	rm -f code.tex code.pdf code.bbl
 	rm -f test.tex test.pdf
