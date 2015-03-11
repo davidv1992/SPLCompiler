@@ -1,0 +1,27 @@
+%header for tex generation using noweb. This allows me to put in extra packages
+\documentclass{article}
+\usepackage{amsmath}
+\usepackage{noweb}
+\usepackage[margin=1.5in]{geometry}
+\usepackage{textcomp}
+\usepackage{hyperref}
+\usepackage{longtable}
+\newcommand{\nonterm}[1]{\textlangle #1\textrangle}
+\newcommand{\bor}{\textbar}
+\newcommand{\term}[1]{'\textbf{#1}'}
+\newcommand{\uterm}[1]{\textbf{#1}}
+\pagestyle{noweb}\noweboptions{}
+\title{SPL compiler test programs}
+\author{David Venhoek}
+\begin{document}
+@
+
+\maketitle
+\tableofcontents
+
+\section*{Introduction}
+This document contains the code for all the test programs used both for manual testing and automated testing.
+
+parsetest and tokentest are test the entire corresponding module of the compiler. These are also used as part of the automated tests run by 'make test'. statementparsetest, exprparsetest and typeparsetest are inteded for testing subsections of the parser, and are only used for manual testing.
+
+The tokenizer is used in all of these test programs since it is the way of feeding input to the parser, and stubbing it out would just be way too much work.

@@ -86,7 +86,8 @@ FAILS=0
 
 for SPL_FILE in $(ls tests/parsing/tokenfail/*.spl)
 do
-	valgrind --error-exitcode=1 --quiet ./testprogs/tokentest $SPL_FILE 2> testTmp.txt > /dev/null
+	valgrind --error-exitcode=1 --quiet ./testprogs/tokentest  \
+		$SPL_FILE 2> testTmp.txt > /dev/null
 	if [ $? -ne 0 ]
 	then
 		echo Failure in testcase $SPL_FILE

@@ -49,6 +49,12 @@ version.h:
 settings.h: settings.nw
 	notangle -L -Rsettings.h settings.nw | cpif settings.h
 
+test.tex: testprogs/testheader.nw testprogs/testtrailer.nw testprogs/tokentest.nw testprogs/parsetest.nw testprogs/exprparsetest.nw testprogs/typeparsetest.nw testprogs/statementparsetest.nw
+	noweave -t4 -delay testprogs/testheader.nw testprogs/tokentest.nw testprogs/parsetest.nw testprogs/typeparsetest.nw testprogs/exprparsetest.nw testprogs/statementparsetest.nw testprogs/testtrailer.nw | cpif test.tex
+test.pdf: test.tex
+	latexmk -pdf test.tex
+	latexmk -c
+
 code.tex: header.nw trailer.nw token.nw position.nw error.nw parser.nw settings.nw spllang.nw
 	noweave -t4 -delay header.nw spllang.nw token.nw parser.nw settings.nw position.nw error.nw trailer.nw | cpif code.tex
 code.pdf: code.tex compiler.bib
@@ -119,3 +125,4 @@ clean:
 	rm -f testprogs/tokencorrect.sh testprogs/tokenfail.sh
 	rm -f position.h version.h settings.h
 	rm -f code.tex code.pdf code.bbl
+	rm -f test.tex test.pdf
