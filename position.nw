@@ -1,4 +1,4 @@
-\section{Position management}
+\chapter{Position management}
 
 In order to generate reasonable error messages, we need some sort of position logging. We implement that here.
 
@@ -12,7 +12,7 @@ struct source_position
 };
 @
 
-\subsection{header and source}
+\section{header and source}
 Making module source and header from the pieces
 
 <<position.h>>=

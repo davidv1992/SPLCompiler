@@ -1,4 +1,4 @@
-\section{Parsing}
+\chapter{Parsing}
 
 With the issue of recognizing the individual tokens out of the way, we can turn to the actual problem of parsing the input. The choice was made to build a hand-written recursive descent parser. A recursive descent parser is one of the easiest ways of writing a parser without some form of parser-generating tooling, and allows both descent error messages and some form of error recovery in the parser itself.
 
@@ -14,7 +14,7 @@ The final major segment is the statement parsing. It is responsible for parsing 
 
 The glue contains the code that detects whether the current top-level declaration is that of a function, or whether it represents a variable. It has the issue that it can only make this distinction fairly late in the process of parsing the declaration, but since the first two nonterminals of both are completely identical, this turns out to be fairly straightforward to deal with.
 
-\subsection{Grammar}
+\section{Grammar}
 The grammar as given in the SPL specification has a number of ambiguities, which need to be resolved before we can get to work on the parser proper. The most important of these is the fact that expression parsing is defined using operator precedence. However, for the purpose of parsing it is more usefull to write it in the grammar itself. For this purpose we introduce several new non-terminals opl0 through opl6, which contain the precedence levels.
 
 Also, we need some way to deal with left associative operators. This is done by translating the underlying grammar to a right-recursive one, and then fixing this in the generation of the abstract syntax tree.
@@ -25,20 +25,20 @@ Furthermore, we have several extensions that can be enabled, and these are easie
 
 This gives us the following grammar as used in implementing the parser. There is roughly a one-to-one mapping between the functions used below and the grammar constructs.
 
-\begin{tabular}{lcl}
-\nonterm{Program}&=&\nonterm{Type} \uterm{id} \term{(} [\nonterm{Funarg} (\term{,} \nonterm{Funarg})*] \term{)} \term{\{} \nonterm{Statement}+ \term{\}}\\
+\begin{longtable}{lcl}
+\nonterm{Program}&=&\nonterm{Type} \uterm{id} \term{(} [\nonterm{Funarg} (\term{,} \nonterm{Funarg})*] \term{)} \term{\{} \nonterm{Statement}+ \term{\}}\\*
 &\bor& \nonterm{Type} \uterm{id} \term{=} \nonterm{Expression} \term{;}\\
 \nonterm{Funarg}&=&\nonterm{Type} \uterm{id}\\
-\nonterm{Statement} &=& \term{\{} \nonterm{Statement} \term{\}}\\
-&\bor& \nonterm{Lvalue} \term{=} \nonterm{Expression} \term{;}\\
-&\bor& \uterm{id} \term{(} [\nonterm{Expression} (\term{,} \nonterm{Expression})*] \term{)} \term{;}\\
-&\bor& \nonterm{Type} \uterm{id} \term{=} \nonterm{Expression} \term{;}\\
-&\bor& \term{if} \term{(} \nonterm{Expression} \term{)} \nonterm{Statement} [\term{else} \nonterm{Statement}]\\
-&\bor& \term{while} \term{(} \nonterm{Expression} \term{)} \nonterm{Statement}\\
+\nonterm{Statement} &=& \term{\{} \nonterm{Statement} \term{\}}\\*
+&\bor& \nonterm{Lvalue} \term{=} \nonterm{Expression} \term{;}\\*
+&\bor& \uterm{id} \term{(} [\nonterm{Expression} (\term{,} \nonterm{Expression})*] \term{)} \term{;}\\*
+&\bor& \nonterm{Type} \uterm{id} \term{=} \nonterm{Expression} \term{;}\\*
+&\bor& \term{if} \term{(} \nonterm{Expression} \term{)} \nonterm{Statement} [\term{else} \nonterm{Statement}]\\*
+&\bor& \term{while} \term{(} \nonterm{Expression} \term{)} \nonterm{Statement}\\*
 &\bor& \term{return} [\nonterm{Expression}] \term{;}\\
 \nonterm{Lvalue}&=&\uterm{id} (\term{.} \uterm{id})*\\
-\nonterm{Type}&\bor&\uterm{id}\\
-&\bor&\term{[} \nonterm{Type} \term{]}\\
+\nonterm{Type}&\bor&\uterm{id}\\*
+&\bor&\term{[} \nonterm{Type} \term{]}\\*
 &\bor&\term{(} \nonterm{Type} \term{,} \nonterm{Type} \term{)}\\
 \nonterm{Expression}&=&\nonterm{opl6} ( \term{:} \nonterm{opl6} )*\\
 \nonterm{opl6}&=&\nonterm{opl5} ( \term{\bor\bor} \nonterm{opl5} )*\\
@@ -47,16 +47,16 @@ This gives us the following grammar as used in implementing the parser. There is
 \nonterm{opl3}&=&\nonterm{opl2} ( ( \term{\textless} \bor\ \term{\textless =} \bor\ \term{\textgreater} \bor\ \term{\textgreater =} ) \nonterm{opl2} )*\\
 \nonterm{opl2}&=&\nonterm{opl1} ( ( \term{+} \bor\ \term{-} ) \nonterm{opl1} )*\\
 \nonterm{opl1}&=&\nonterm{opl0} ( ( \term{*} \bor\ \term{/} \bor\ \term{\%} ) \nonterm{opl0} )*\\
-\nonterm{opl0}&=&\term{(} \nonterm{Expression} \term{)}\\
-&\bor&\term{(} \nonterm{Expression} \term{,} \nonterm{Expression} \term{)}\\
-&\bor&\uterm{id} \term{(} [ \nonterm{Expression} ( \term{,} \nonterm{Expression} )* ] \term{)}\\
-&\bor&\uterm{id} ( \term{.} \uterm{id} )*\\
-&\bor&\term{-} \nonterm{opl0}\\
-&\bor&\term{!} \nonterm{opl0}\\
+\nonterm{opl0}&=&\term{(} \nonterm{Expression} \term{)}\\*
+&\bor&\term{(} \nonterm{Expression} \term{,} \nonterm{Expression} \term{)}\\*
+&\bor&\uterm{id} \term{(} [ \nonterm{Expression} ( \term{,} \nonterm{Expression} )* ] \term{)}\\*
+&\bor&\uterm{id} ( \term{.} \uterm{id} )*\\*
+&\bor&\term{-} \nonterm{opl0}\\*
+&\bor&\term{!} \nonterm{opl0}\\*
 &\bor&\uterm{int} \bor\ \uterm{char} \bor\ \term{[]}\\
-\end{tabular}
+\end{longtable}
 
-\subsection{Abstract Syntax trees}
+\section{Abstract Syntax trees}
 Abstract syntax trees are implemented using classes for each of the nodes. Each node is responsible for managing the memory used by itself and its subtrees. Upon passing pointers of an ast to a constructor for a node, that node acquires ownership of the memory associated with the ast, and should free it when it gets deleted. Also, each node is able to print a human-readable representation of itsef.
 
 <<ast base>>=
@@ -70,7 +70,7 @@ public:
 };
 @
 
-\subsection{Parsing types}
+\section{Parsing types}
 Type expressions are simple, there are no issues with precedence and ambiguities that require extra rules to resolve, so we can just implement the given rules.
 
 <<type parsing header>>=
@@ -170,10 +170,10 @@ ast_type *parse_type()
 }
 @
 
-\subsection{Parsing expressions}
+\section{Parsing expressions}
 Expressions are the most complicated part of the grammar, because of the extra non-terminals introduced to insure good handling of operator precedence. As stated before, the extra tokens are named after the precedence level they represent.
 
-\subsubsection{Expression ast}
+\subsection{Expression ast}
 The ast representing all this however is straightforward, one node type for binary operators and one for unary:
 <<expression ast>>=
 enum ast_binary_operator {
@@ -392,13 +392,13 @@ string ast_operator_string(ast_unary_operator op)
 }
 @
 
-\subsubsection{Parsing expression header}
+\subsection{Parsing expression header}
 Since expressions can contain brackets, we need recursion across multiple functions, hence we pre-declare the expr parser:
 <<parse expression header>>=
 ast_expression *parse_expression();
 @
 
-\subsubsection{opl0}
+\subsection{opl0}
 Highest precedence, brackets, constants, variables, function calls and unary operators. Because there is actually quite a lot happening here, split it up in more than one piece.
 <<parse opl0>>=
 ast_expression *parse_opl0()
@@ -527,7 +527,7 @@ case TOKEN_SQUAREBRACKET_LEFT:
 
 @
 
-\subsubsection{opl1}
+\subsection{opl1}
 Second highest precedence, division, multiplication and modulo
 <<parse opl1>>=
 ast_expression *parse_opl1()
@@ -566,7 +566,7 @@ ast_expression *parse_opl1()
 }
 @
 
-\subsubsection{opl2}
+\subsection{opl2}
 Third highest precedence, plus and minus
 <<parse opl2>>=
 ast_expression *parse_opl2()
@@ -601,7 +601,7 @@ ast_expression *parse_opl2()
 }
 @
 
-\subsubsection{opl3}
+\subsection{opl3}
 Next up are ordering operators
 <<parse opl3>>=
 ast_expression *parse_opl3()
@@ -644,7 +644,7 @@ ast_expression *parse_opl3()
 }	
 @
 
-\subsubsection{opl4}
+\subsection{opl4}
 Next up equality and its inverse
 <<parse opl4>>=
 ast_expression *parse_opl4()
@@ -679,7 +679,7 @@ ast_expression *parse_opl4()
 }
 @
 
-\subsubsection{opl5}
+\subsection{opl5}
 Logical and
 <<parse opl5>>=
 ast_expression *parse_opl5()
@@ -710,7 +710,7 @@ ast_expression *parse_opl5()
 }
 @
 
-\subsubsection{opl6}
+\subsection{opl6}
 Logical or
 <<parse opl6>>=
 ast_expression *parse_opl6()
@@ -741,7 +741,7 @@ ast_expression *parse_opl6()
 }
 @
 
-\subsubsection{Toplevel expression parsing}
+\subsection{Toplevel expression parsing}
 And were at the highest precedence level (hence using parse\_expr), the colon operator:
 <<parse expression>>=
 ast_expression *parse_expression()
@@ -763,10 +763,10 @@ ast_expression *parse_expression()
 }
 @
 
-\subsection{Parsing statements}
+\section{Parsing statements}
 Statements are relatively simple. There are only two notable things. In order to avoid having two representations of function calls, a function call statement is represented as an expression statement where the expression is a function call. Furthermore, because it is very easy to implement, variable declarations are seen as statements inside functions, using a flag and boolean argument to the parsing routines to enforce the strict rules.
 
-\subsubsection{Statement ast}
+\subsection{Statement ast}
 For assignment statements we need a concept of lvalue.
 <<lvalue ast>>=
 class ast_lvalue : public ast_base
@@ -991,7 +991,7 @@ public:
 };
 @
 
-\subsubsection{Parsing lvalues}
+\subsection{Parsing lvalues}
 Parsing lvalues is straightforward, because there really is only one thing going on. The only problem is that there is left recursion, but we solve that in the same way as for expressions.
 <<parse lvalue>>=
 ast_lvalue *parse_lvalue()
@@ -1036,7 +1036,7 @@ ast_lvalue *parse_lvalue()
 }
 @
 
-\subsubsection{Parsing statements}
+\subsection{Parsing statements}
 Parsing statements has two modes, depending on whether vardecls are allowed in strict mode. Furthermore, we keep track if the current statement is part of "if <stmt>", to give warnings for the dangling else problem.
 If we cannot generate a statement starting with the current input, we declare an error and consume it. This is likely to give us a reasonable state, unless it is an eof token, which is handled seperately in a few cases.
 <<parse statement header>>=
@@ -1069,7 +1069,7 @@ ast_statement *parse_statement(bool vardecl_allowed, bool direct_in_if)
 }
 @
 
-\subsubsection{Assignments, function calls and variable declarations}
+\subsection{Assignments, function calls and variable declarations}
 Id first has a few options, either it is a vardecl with simple type, a function call, or an assign, so we need extra lookahead
 <<parse statements starting with id>>=
 case TOKEN_ID:
@@ -1166,7 +1166,7 @@ Assignments come only from ids, hence we dont need seperate case statement:
 }
 @
 
-\subsubsection{if statements}
+\subsection{if statements}
 For an else the corresponding if might be ambigue. We always bind to the last started if that we can still bind it to (eg if if stmt; else stmt; is parsed as if {if stmt; else stmt;}).
 <<parse if>>=
 case TOKEN_IF:
@@ -1193,7 +1193,7 @@ case TOKEN_IF:
 break;
 @
 
-\subsubsection{return statements}
+\subsection{return statements}
 There are two types of returns, those that return values, and those that do not. We recognize those that do not by the semicolon directly following the return.
 <<parse return>>=
 case TOKEN_RETURN:
@@ -1214,7 +1214,7 @@ case TOKEN_RETURN:
 break;
 @
 
-\subsubsection{Statement blocks}
+\subsection{Statement blocks}
 If we find an eof while checking whether we are at the end, something is wrong and we should wrap up.
 <<parse block>>=
 case TOKEN_CURLYBRACKET_LEFT:
@@ -1248,7 +1248,7 @@ case TOKEN_CURLYBRACKET_LEFT:
 break;
 @
 
-\subsubsection{while statements}
+\subsection{while statements}
 A while is the simple one:
 <<parse while>>=
 case TOKEN_WHILE:
@@ -1262,7 +1262,7 @@ case TOKEN_WHILE:
 break;
 @
 
-\subsection{Parsing programs}
+\section{Parsing programs}
 Representing the whole program is a single top-level object, containing two lists, variable definitions and function definitions. Variable declarations can be handled as statements, so do that (saves code later on). Functions need something new.
 <<program ast>>=
 class ast_funarg : public ast_base
@@ -1476,7 +1476,7 @@ ast_funarg *parse_funarg()
 }
 @
 
-\subsection{Auxilary functions}
+\section{Auxilary functions}
 Matching a token we know should be there, and that does not contain additional info, is a fairly common task. Generating error messages for them is also not difficult, hence it is usefull to make a single function handling this.
 <<match token>>=
 void match_token(token_type t)
@@ -1503,7 +1503,7 @@ void match_token(token_type t)
 }
 @
 
-\subsection{Error handling}
+\section{Error handling}
 <<parser error handling>>=
 void parse_warning(source_position pos, const char *message, ...)
 {
@@ -1536,7 +1536,7 @@ void parse_fatal(source_position pos, const char *message, ...)
 }
 @
 
-\subsection{Source and headers}
+\section{Source and headers}
 <<ast.h>>=
 #ifndef AST_H
 #define AST_H

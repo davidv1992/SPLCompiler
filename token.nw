@@ -1,4 +1,5 @@
-\section{Tokenizer}
+\chapter{Tokenizer}
+\label{sec:tokenizer}
 
 In order to make the eventual parsing process a lot easier, the compiler first splits up the input into tokens. Because this is a handwritten tokenizer, the choice has been made to do this in two steps, one running directly after the other per token. The first generates the tokens all non-keyword tokens, and tokenizes keywords as identifiers. The second stage then filters out those identifiers that are actually keywords, and changes the produced token to reflect that.
 
@@ -6,7 +7,7 @@ This approach makes identifier tokenizing a lot easier, since at first there is 
 
 The second stage is simple since the entire text string of the identifier is then available, and a string comparison will suffice.
 
-\subsection{Tokens}
+\section{Tokens}
 Datastructure for tokens is simple, just type with associated data:
 <<token struct>>=
 struct token
@@ -36,7 +37,7 @@ enum token_type
 };
 @
 
-\subsection{Tokenizing}
+\section{Tokenizing}
 
 Going from plain text to a token stream is a two step process. First we generate tokens, with everything that is id-like becomes an id token. In this step the first character is almost always enough to determine the type of the entire token, so we just do a huge switch on it.
 <<generate basic token>>=
@@ -53,7 +54,7 @@ switch(cur_char)
 }
 @
 
-\subsubsection{Brackets}
+\subsection{Brackets}
 Bracket tokens are simple, one character with no surprises:
 <<token type bracket>>=
 TOKEN_SQUAREBRACKET_LEFT,	// [
@@ -98,7 +99,7 @@ case TOKEN_ROUNDBRACKET_RIGHT:
 	return ")";
 @
 
-\subsubsection{Math operators}
+\subsection{Math operators}
 The same holds for the math operators:
 <<token type math operators>>=
 TOKEN_PLUS,					// +
@@ -137,7 +138,7 @@ case TOKEN_MOD:
 	return "%";
 @
 
-\subsubsection{Comparison operators}
+\subsection{Comparison operators}
 The comparison operators are a little trickier. Both assignment and equality start with an equals sign, and both smaller than and greater than have also or equal variants. However maximal matching works for spl:
 
 <<token type comparison and assign>>=
@@ -203,7 +204,7 @@ case TOKEN_GE:
 	return ">=";
 @
 
-\subsubsection{Logic operators}
+\subsection{Logic operators}
 The logic operators are a bit weird. Most of them are double character tokens, but we know what the second character needs to be entirely from the first. Hence we just verify that they are there (or report error). The exclamation mark can be two things, depending on the next character.
 
 <<token type logic operators>>=
@@ -255,7 +256,7 @@ case TOKEN_NE:
 	return "!=";
 @
 
-\subsubsection{Other simple tokens}
+\subsection{Other simple tokens}
 This leaves only a few other simple (1 character) tokens.
 
 <<token type other simple tokens>>=
@@ -289,7 +290,7 @@ case TOKEN_SEMICOLON:
 	return ";";
 @
 
-\subsubsection{Compound tokens}
+\subsection{Compound tokens}
 This leaves us with the more complicated tokens, those that actually have values attached to them. Of these, character constants are the easiest, as they will always start with a quote. Numeric and identifier tokens start with such large classes of characters that using the switch for them (though faster) is not the best way. For these we just fall back to the builtin character classification functions.
 <<token types with associated values>>=
 TOKEN_NUMERIC,				// Int value
@@ -380,7 +381,7 @@ case TOKEN_NUMERIC:
 	}
 @
 
-\subsubsection{Keywords}
+\subsection{Keywords}
 As a second stage, keywords are filtered out from the id tokens:
 <<token type keywords>>=
 TOKEN_IF,					// if
@@ -412,7 +413,7 @@ case TOKEN_RETURN:
 	return "return";
 @
 
-\subsubsection{Whitespace, comments and end of file}
+\subsection{Whitespace, comments and end of file}
 Of course, this is not the whole story, we also need to handle whitespace and comments and end of file:
 <<filter whitespace>>=
 char cur_char = tok_getchar();
@@ -489,7 +490,7 @@ if (cur_char == 0)
 }
 @
 
-\subsubsection{Final tokenizing function}
+\subsection{Final tokenizing function}
 Finaly, we put it all together:
 <<token from stream>>=
 token tok_getfromstream()
@@ -506,7 +507,7 @@ token tok_getfromstream()
 }
 @
 
-\subsection{Tokenizer input interface}
+\section{Tokenizer input interface}
 
 The tokenizer proper uses a few function calls to manage it's input stream, and the current location associated with it, we need to implement those.
 
@@ -566,7 +567,7 @@ source_position tok_curpos()
 }
 @
 
-\subsection{Tokenizer application interface}
+\section{Tokenizer application interface}
 
 We also need some interface to the rest of the compiler, this implements that.
 
@@ -626,7 +627,7 @@ token tok_get();
 void tok_unget(token t);
 @
 
-\subsection{Tokenizer error interface}
+\section{Tokenizer error interface}
 In the tokenizer, almost all errors are generated at the point they really are, hence positions are added to errors/warnings in the actual error functions themselves.
 <<tokenizer errors>>=
 void tok_error(const char *message, ...)
@@ -662,7 +663,7 @@ void tok_fatal(const char *message, ...)
 }
 @
 
-\subsection{token printing}
+\section{token printing}
 When generating error messages it is very usefull to have a string represtation of token to indicate to the user what went wrong.
 <<token name header>>=
 std::string token_name(token t);
@@ -686,7 +687,7 @@ string token_name(token t)
 }
 @
 
-\subsection{header and source}
+\section{header and source}
 Combining the pieces:
 
 <<token.h>>=

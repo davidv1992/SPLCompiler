@@ -1,4 +1,4 @@
-\section{Error handling}
+\chapter{Error handling}
 The compiler can generate a wide variety of errors, and handling them in a consistent way helps tremendously for the experience of the end user. To this end every error message in the compiler eventually ends up here.
 
 Formatting and writing is identical across all types of warning and errors, so lets also implement it in a central place:
@@ -75,7 +75,7 @@ void eh_redirecterror(FILE *f)
 void eh_redirecterror(FILE *f);
 @
 
-\subsection{header and source}
+\section{header and source}
 Making module source and header from the pieces
 
 <<error.cpp>>=

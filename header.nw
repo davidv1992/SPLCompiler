@@ -1,10 +1,11 @@
 %header for tex generation using noweb. This allows me to put in extra packages
-\documentclass{article}
+\documentclass{report}
 \usepackage{amsmath}
 \usepackage{noweb}
 \usepackage[margin=1.5in]{geometry}
 \usepackage{textcomp}
 \usepackage{hyperref}
+\usepackage{longtable}
 \newcommand{\nonterm}[1]{\textlangle #1\textrangle}
 \newcommand{\bor}{\textbar}
 \newcommand{\term}[1]{'\textbf{#1}'}
@@ -13,5 +14,15 @@
 \title{SPL compiler}
 \author{David Venhoek}
 \begin{document}
+@
+
 \maketitle
 \tableofcontents
+
+\chapter*{Introduction}
+
+Before you is the pretty-printed version of the sourcecode of my SPL compiler. This document contains all the modules that will eventually be part of the compiler. If you are looking for the test programs and their supporting infrastructure, these can be found in a seperate document, test.pdf.
+
+Currently, there are only two major modules implemented, that together handle the first step of compilation, translating the source code to an abstract syntax tree. The remaining segments are smaller more utility oriented modules that implement tasks such as error handling and settings management.
+
+The tokenizer (section \ref{sec:tokenizer}) splits the input stream into tokens, and provides the input interface for the actual parser proper. This split was made because it significantly reduces the ammount of code in the parser itself, which makes this more manageable to implement and maintain.
