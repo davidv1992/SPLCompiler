@@ -5,6 +5,7 @@ BASH := /bin/bash
 CXXFLAGS := -I. -g -Wall -Wextra -Wno-unused-parameter -Wno-unused-variable -Werror -std=c++11
 
 test: test/tokentest test/parsetest
+	@$(BASH) -c "echo -e '\E[32mAll tests passed\E[0m'"
 
 test/tokentest: testprogs/tokentest testprogs/tokencorrect.sh testprogs/tokenfail.sh
 	$(BASH) ./testprogs/tokencorrect.sh
