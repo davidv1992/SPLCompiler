@@ -56,80 +56,11 @@ This gives us the following grammar as used in implementing the parser. There is
 &\bor&\uterm{int} \bor\ \uterm{char} \bor\ \term{[]}\\
 \end{longtable}
 
-\section{Abstract Syntax trees}
-Abstract syntax trees are implemented using classes for each of the nodes. Each node is responsible for managing the memory used by itself and its subtrees. Upon passing pointers of an ast to a constructor for a node, that node acquires ownership of the memory associated with the ast, and should free it when it gets deleted. Also, each node is able to print a human-readable representation of itsef.
-
-<<ast base>>=
-class ast_base
-{
-public:
-	source_position position;
-
-	virtual ~ast_base(){};
-	virtual void print(int tabdepth)=0;
-};
-@
-
 \section{Parsing types}
 Type expressions are simple, there are no issues with precedence and ambiguities that require extra rules to resolve, so we can just implement the given rules.
 
 <<type parsing header>>=
 ast_type *parse_type();
-@
-<<type expression ast>>=
-class ast_type : public ast_base
-{
-};
-class ast_simple_type : public ast_type
-{
-public:
-	std::string type_id;
-
-	ast_simple_type(source_position pos, std::string _id) 
-		{ position = pos; type_id=_id; }
-	virtual ~ast_simple_type() {}
-	virtual void print(int tabdepth) {printf("%s", type_id.c_str());}
-};
-class ast_tuple_type : public ast_type
-{
-public:
-	ast_type *type_first, *type_second;
-
-	ast_tuple_type(source_position pos, ast_type *first, ast_type *second)
-	{
-		position = pos;
-		type_first = first; 
-		type_second = second;
-	}
-	virtual ~ast_tuple_type() 
-	{
-		delete type_first; 
-		delete type_second;
-	}
-	virtual void print(int tabdepth)
-	{
-		printf("(");
-		type_first->print(tabdepth);
-		printf(",");
-		type_second->print(tabdepth);
-		printf(")");
-	}
-};
-class ast_list_type : public ast_type
-{
-public:
-	ast_type *type_element;
-
-	ast_list_type(source_position pos, ast_type *el) 
-		{ position = pos; type_element = el; }
-	virtual ~ast_list_type() { delete type_element; }
-	virtual void print(int tabdepth)
-	{
-		printf("[");
-		type_element->print(tabdepth);
-		printf("]");
-	}
-};
 @
 <<parse simple type>>=
 case TOKEN_ID:
@@ -172,225 +103,6 @@ ast_type *parse_type()
 
 \section{Parsing expressions}
 Expressions are the most complicated part of the grammar, because of the extra non-terminals introduced to insure good handling of operator precedence. As stated before, the extra tokens are named after the precedence level they represent.
-
-\subsection{Expression ast}
-The ast representing all this however is straightforward, one node type for binary operators and one for unary:
-<<expression ast>>=
-enum ast_binary_operator {
-	OP_ADD,
-	OP_SUB,
-	OP_MUL,
-	OP_DIV,
-	OP_MOD,
-	
-	OP_AND,
-	OP_OR,
-	
-	OP_EQ,
-	OP_NE,
-	OP_LT,
-	OP_GT,
-	OP_LE,
-	OP_GE,
-	
-	OP_COLON,
-};
-enum ast_unary_operator{
-	OP_NEG,
-	OP_NOT,
-};
-std::string ast_operator_string(ast_binary_operator op);
-std::string ast_operator_string(ast_unary_operator op);
-class ast_expression : public ast_base
-{
-};
-class ast_expression_binary : public ast_expression
-{
-public:
-	ast_expression *left, *right;
-	ast_binary_operator op;
-	
-	ast_expression_binary(source_position pos, ast_binary_operator _op, 
-		ast_expression *l, ast_expression *r) 
-		{ position = pos, op =_op; left = l; right = r; }
-	virtual ~ast_expression_binary() { delete left; delete right; }
-	virtual void print(int tabdepth) {
-		printf("(");
-		left->print(tabdepth);
-		printf("%s", ast_operator_string(op).c_str());
-		right->print(tabdepth);
-		printf(")");
-	}
-};
-class ast_expression_unary : public ast_expression
-{
-public:
-	ast_expression *inner;
-	ast_unary_operator op;
-	
-	ast_expression_unary(source_position pos, ast_unary_operator _op, 
-		ast_expression *i) 
-		{ position = pos; op = _op; inner = i;}
-	virtual ~ast_expression_unary() {delete inner;}
-	virtual void print(int tabdepth) {
-		printf("(%s", ast_operator_string(op).c_str());
-		inner->print(tabdepth);
-		printf(")");
-	}
-};
-class ast_expression_variable : public ast_expression
-{
-};
-class ast_expression_variable_base : public ast_expression_variable
-{
-public:
-	std::string id;
-	
-	ast_expression_variable_base(source_position pos, std::string _id) 
-		{ position = pos; id = _id;}
-	virtual ~ast_expression_variable_base(){}
-	virtual void print(int tabdepth) { printf("%s", id.c_str()); }
-};
-class ast_expression_variable_field : public ast_expression_variable
-{
-public:
-	ast_expression_variable *base;
-	std::string field;
-	
-	ast_expression_variable_field(ast_expression_variable *b, std::string f) 
-		{ position = b->position; base = b; field = f; }
-	virtual ~ast_expression_variable_field() { delete base; }
-	virtual void print(int tabdepth)
-	{ 
-		base->print(tabdepth);
-		printf(".%s", field.c_str());
-	}
-};
-class ast_expression_funcall : public ast_expression
-{
-public:
-	std::string id;
-	std::vector<ast_expression*> arguments;
-	
-	ast_expression_funcall(source_position pos, 
-		std::string fn, std::vector<ast_expression*> args) 
-		{ position = pos; id=fn; arguments = args; }
-	virtual ~ast_expression_funcall() { for (auto ptr : arguments) delete ptr; }
-	virtual void print(int tabdepth) {
-		bool firstArg = true;
-		printf("%s(", id.c_str());
-		for (auto ptr : arguments)
-		{
-			if (firstArg)
-				firstArg = false;
-			else
-				printf(", ");
-			ptr->print(tabdepth);
-		}
-		printf(")");
-	}
-};
-class ast_expression_intconst : public ast_expression
-{
-public:
-	unsigned int value;
-	
-	ast_expression_intconst(source_position pos, unsigned int v) 
-		{position = pos, value = v;}
-	virtual ~ast_expression_intconst() {}
-	virtual void print(int tabdepth) { printf("%d", value); }
-};
-class ast_expression_charconst : public ast_expression
-{
-public:
-	char value;
-	
-	ast_expression_charconst(source_position pos, char v) 
-		{ position = pos; value = v; }
-	virtual ~ast_expression_charconst() {}
-	virtual void print(int tabdepth) { printf("'%c'", value); }
-};
-class ast_expression_emptylist : public ast_expression
-{
-public:
-	ast_expression_emptylist(source_position pos)
-		{position = pos;}
-	virtual ~ast_expression_emptylist(){}
-	virtual void print(int tabdepth) { printf("[]");}
-};
-class ast_expression_pair : public ast_expression
-{
-public:
-	ast_expression *first, *second;
-	
-	ast_expression_pair(source_position pos, ast_expression *f, 
-		ast_expression *s) 
-		{position = pos; first = f; second = s;}
-	virtual ~ast_expression_pair() {delete first; delete second;}
-	virtual void print(int tabdepth)
-	{
-		printf("("); 
-		first->print(tabdepth); 
-		printf(","); 
-		second->print(tabdepth); 
-		printf(")");
-	}
-};
-@
-<<expression ast implementation>>=
-string ast_operator_string(ast_binary_operator op)
-{
-	switch(op)
-	{
-	case OP_ADD:
-		return "+";
-	case OP_SUB:
-		return "-";
-	case OP_MUL:
-		return "*";
-	case OP_DIV:
-		return "/";
-	case OP_MOD:
-		return "%";
-	
-	case OP_AND:
-		return "&&";
-	case OP_OR:
-		return "||";
-	
-	case OP_EQ:
-		return "==";
-	case OP_NE:
-		return "!=";
-	case OP_LT:
-		return "<";
-	case OP_GT:
-		return ">";
-	case OP_LE:
-		return "<=";
-	case OP_GE:
-		return ">=";
-	
-	case OP_COLON:
-		return ":";
-	}
-	
-	return "";
-}
-
-string ast_operator_string(ast_unary_operator op)
-{
-	switch(op)
-	{
-	case OP_NEG:
-		return "-";
-	case OP_NOT:
-		return "!";
-	}
-	
-	return "";
-}
-@
 
 \subsection{Parsing expression header}
 Since expressions can contain brackets, we need recursion across multiple functions, hence we pre-declare the expr parser:
@@ -482,8 +194,19 @@ if (next_token.type != TOKEN_ROUNDBRACKET_RIGHT)
 return new ast_expression_funcall(cur_token.position, cur_token.id, args);
 @
 
-Variable references are a bit more difficult, because field access has a right-recursive structure. This is fixed by ussing an accumulator and a loop, and parsing it in a more bottom-up style (the same way as other operators with this behaviour are parsed).
+Variable references are a bit more difficult, because field access has a right-recursive structure. This is fixed by ussing an accumulator and a loop, and parsing it in a more bottom-up style (the same way as other operators with this behaviour are parsed). Furthermore, we need to recognize the boolean constants here.
 <<parse variable>>=
+if (cur_token.id == "True")
+{
+	tok_unget(next_token);
+	return new ast_expression_boolconst(cur_token.position, true);
+}
+if (cur_token.id == "False")
+{
+	tok_unget(next_token);
+	return new ast_expression_boolconst(cur_token.position, false);
+}
+
 ast_expression_variable *val = new ast_expression_variable_base
 	(cur_token.position, cur_token.id);
 while (next_token.type == TOKEN_DOT)
@@ -765,231 +488,6 @@ ast_expression *parse_expression()
 
 \section{Parsing statements}
 Statements are relatively simple. There are only two notable things. In order to avoid having two representations of function calls, a function call statement is represented as an expression statement where the expression is a function call. Furthermore, because it is very easy to implement, variable declarations are seen as statements inside functions, using a flag and boolean argument to the parsing routines to enforce the strict rules.
-
-\subsection{Statement ast}
-For assignment statements we need a concept of lvalue.
-<<lvalue ast>>=
-class ast_lvalue : public ast_base
-{
-};
-class ast_lvalue_variable : public ast_lvalue
-{
-public:
-	std::string variable;
-	
-	ast_lvalue_variable(source_position pos, std::string var) 
-		{ position = pos, variable = var; }
-	virtual ~ast_lvalue_variable() {}
-	virtual void print(int tabdepth)
-	{
-		printf("%s", variable.c_str());
-	}
-};
-class ast_lvalue_field : public ast_lvalue
-{
-public:
-	ast_lvalue *base;
-	std::string field;
-	
-	ast_lvalue_field(ast_lvalue *b, std::string f) 
-		{ position = b->position; base = b; field  = f;}
-	virtual ~ast_lvalue_field() { delete base; }
-	virtual void print(int tabdepth)
-	{
-		base->print(tabdepth);
-		printf(".%s", field.c_str());
-	}
-};
-@
-
-And of course we need to be able to store statements
-<<statement ast>>=
-class ast_statement : public ast_base
-{
-};
-class ast_statement_block : public ast_statement
-{
-public:
-	std::vector<ast_statement*> body;
-	
-	ast_statement_block(source_position pos, std::vector<ast_statement*> b)
-		{ position = pos; body = b; }
-	virtual ~ast_statement_block() {for (auto ptr :body) delete ptr;}
-	virtual void print(int tabdepth)
-	{
-		printf("{\n");
-		for (auto ptr:body)
-		{
-			for (int i=0; i<tabdepth+1; i++)
-				printf("\t");
-			ptr->print(tabdepth+1);
-		}
-		for (int i=0; i<tabdepth; i++)
-			printf("\t");
-		printf("}\n");
-	}
-};
-class ast_statement_vardecl : public ast_statement
-{
-public:
-	ast_type *type;
-	std::string id;
-	ast_expression *value;
-	
-	ast_statement_vardecl(ast_type *t, std::string i, ast_expression *val)
-		{ position = t->position; type = t; id = i; value = val; }
-	virtual ~ast_statement_vardecl() { delete type; delete value; }
-	virtual void print(int tabdepth)
-	{
-		type->print(tabdepth);
-		printf(" %s = ", id.c_str());
-		value->print(tabdepth);
-		printf(";\n");
-	}
-};
-class ast_statement_assign : public ast_statement
-{
-public:
-	ast_lvalue *location;
-	ast_expression *value;
-	
-	ast_statement_assign(ast_lvalue * loc, ast_expression *val)
-		{ position = loc->position; location = loc; value = val; }
-	virtual ~ast_statement_assign() { delete location; delete value;}
-	virtual void print(int tabdepth)
-	{
-		location->print(tabdepth);
-		printf(" = ");
-		value->print(tabdepth);
-		printf(";\n");
-	}
-};
-class ast_statement_expression : public ast_statement
-{
-public:
-	ast_expression *inner;
-	
-	ast_statement_expression(ast_expression *i) 
-		{ position = i->position; inner = i; }
-	virtual ~ast_statement_expression() { delete inner; }
-	virtual void print(int tabdepth)
-	{
-		inner->print(tabdepth);
-		printf(";\n");
-	}
-};
-class ast_statement_if : public ast_statement
-{
-public:
-	ast_expression *condition;
-	ast_statement *true_statement;
-	ast_statement *false_statement;
-	
-	ast_statement_if(source_position pos, ast_expression *cond,
-		ast_statement *t, ast_statement *f=NULL) 
-	{
-		position = pos;
-		condition = cond;
-		true_statement = t;
-		false_statement = f;
-	}
-	virtual ~ast_statement_if () {
-		delete true_statement; 
-		if (false_statement != NULL) delete false_statement;
-	}
-	virtual void print(int tabdepth)
-	{
-		printf("if (");
-		condition->print(tabdepth);
-		printf(") ");
-		if (typeid(*true_statement) != typeid(ast_statement_block))
-		{
-			printf("{\n");
-			for (int i=0; i<tabdepth+1; i++)
-				printf("\t");
-			true_statement->print(tabdepth+1);
-			for (int i=0; i<tabdepth; i++)
-				printf("\t");
-			printf("}\n");
-		}
-		else
-		{
-			true_statement->print(tabdepth);
-		}
-		if (false_statement != NULL)
-		{
-			for (int i=0; i<tabdepth; i++)
-				printf("\t");
-			printf("else ");
-			
-			if (typeid(*false_statement) != typeid(ast_statement_block))
-			{
-				printf("{\n");
-				for (int i=0; i<tabdepth+1; i++)
-					printf("\t");
-				false_statement->print(tabdepth+1);
-				for (int i=0; i<tabdepth; i++)
-					printf("\t");
-				printf("}\n");
-			}
-			else
-			{
-				false_statement->print(tabdepth);
-			}
-		}
-	}
-};
-class ast_statement_while : public ast_statement
-{
-public:
-	ast_expression *condition;
-	ast_statement *body;
-	
-	ast_statement_while (source_position pos, ast_expression *c, ast_statement *b)
-		{ position = pos; condition = c; body = b;}
-	virtual ~ast_statement_while() { delete condition; delete body; }
-	virtual void print(int tabdepth)
-	{
-		printf("while (");
-		condition->print(tabdepth);
-		printf(") ");
-		if (typeid(*body) != typeid(ast_statement_block))
-		{
-			printf("{\n");
-			for (int i=0; i<tabdepth+1; i++)
-				printf("\t");
-			body->print(tabdepth+1);
-			for (int i=0; i<tabdepth; i++)
-				printf("\t");
-			printf("}\n");
-		}
-		else
-		{
-			body->print(tabdepth);
-		}
-	}
-};
-class ast_statement_return : public ast_statement
-{
-public:
-	ast_expression *value;
-	
-	ast_statement_return(source_position pos, ast_expression *val = NULL)
-		{ position = pos; value = val; }
-	virtual ~ast_statement_return() { if (value != NULL) delete value; }
-	virtual void print(int tabdepth)
-	{
-		if (value == NULL)
-			printf("return;\n");
-		else
-		{
-			printf("return ");
-			value->print(tabdepth);
-			printf(";\n");
-		}
-	}
-};
-@
 
 \subsection{Parsing lvalues}
 Parsing lvalues is straightforward, because there really is only one thing going on. The only problem is that there is left recursion, but we solve that in the same way as for expressions.
@@ -1385,6 +883,7 @@ ast_program *parse_program()
 			parse_error(cur_token.position, 
 				"Unexpected %s, expected a function or variable definition", 
 				token_name(cur_token).c_str());
+			delete type;
 			break;
 		}
 		
@@ -1537,30 +1036,6 @@ void parse_fatal(source_position pos, const char *message, ...)
 @
 
 \section{Source and headers}
-<<ast.h>>=
-#ifndef AST_H
-#define AST_H
-#include "position.h"
-#include <cstdio>
-#include <string>
-#include <vector>
-#include <typeinfo>
-
-<<ast base>>
-<<type expression ast>>
-<<expression ast>>
-<<lvalue ast>>
-<<statement ast>>
-<<program ast>>
-#endif
-@
-<<ast.cpp>>=
-#include "ast.h"
-using namespace std;
-
-<<expression ast implementation>>
-@
-
 <<parser.h>>=
 #ifndef PARSER_H
 #define PARSER_H

@@ -41,10 +41,10 @@ token.cpp: token.nw
 	notangle -L -Rtoken.cpp token.nw | cpif token.cpp
 
 ast.o: ast.cpp ast.h
-ast.h: parser.nw
-	notangle -L -Rast.h parser.nw | cpif ast.h
-ast.cpp: parser.nw
-	notangle -L -Rast.cpp parser.nw | cpif ast.cpp
+ast.h: ast.nw
+	notangle -L -Rast.h ast.nw | cpif ast.h
+ast.cpp: ast.nw
+	notangle -L -Rast.cpp ast.nw | cpif ast.cpp
 
 parser.o: parser.cpp parser.h ast.h token.h error.h position.h settings.h
 parser.h: parser.nw
