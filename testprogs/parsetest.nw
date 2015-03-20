@@ -16,7 +16,10 @@ int main(int argc, char **argv)
 	
 	tok_setinput(string(argv[1]));
 	
-	parse_program()->print(0);
+	ast_program *result = parse_program();
+	result->print(0);
+	delete result;
+	
 	return 0;
 }
 @
@@ -32,7 +35,7 @@ FAILS=0
 
 for SPL_FILE in $(ls tests/parsing/correct/*.spl)
 do
-	valgrind --error-exitcode=1 --quiet ./testprogs/parsetest $SPL_FILE > testTmp.txt
+	valgrind --leak-check=full --error-exitcode=1 --quiet ./testprogs/parsetest $SPL_FILE > testTmp.txt
 	if [ $? -ne 0 ]
 	then
 		echo Failure in testcase $SPL_FILE
@@ -79,7 +82,7 @@ FAILS=0
 
 for SPL_FILE in $(ls tests/parsing/parsefail/*.spl tests/parsing/tokenfail/*.spl)
 do
-	valgrind --error-exitcode=1 --quiet ./testprogs/parsetest \
+	valgrind --leak-check=full --error-exitcode=1 --quiet ./testprogs/parsetest \
 		$SPL_FILE 2> testTmp.txt > /dev/null
 	if [ $? -ne 0 ]
 	then
@@ -126,7 +129,7 @@ FAILS=0
 
 for SPL_FILE in $(ls tests/parsing/parsewarn/*.spl)
 do
-	valgrind --error-exitcode=1 --quiet ./testprogs/parsetest \
+	valgrind --leak-check=full --error-exitcode=1 --quiet ./testprogs/parsetest \
 		$SPL_FILE > testTmp.txt 2> errorTmp.txt
 	if [ $? -ne 0 ]
 	then
