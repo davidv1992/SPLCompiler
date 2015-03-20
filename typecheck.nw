@@ -365,6 +365,33 @@ void cleanup_associations(map<string, ast_type*> &associations)
 }
 @
 
+\section{Checking for voids}
+Void types are not allowed unless as standalone function type, so we need to be able to check for that.
+<<check void>>=
+bool contains_void(ast_type *type)
+{
+	if (typeid(*type) == typeid(ast_void_type))
+	{
+		return true;
+	}
+	else if (typeid(*type) == typeid(ast_list_type))
+	{
+		ast_list_type *list = (ast_list_type*)type;
+		return contains_void(list->type_element);
+	}
+	else if (typeid(*type) == typeid(ast_tuple_type))
+	{
+		ast_tuple_type *tuple = (ast_tuple_type*)type;
+		return contains_void(tuple->type_first) ||
+			contains_void(tuple->type_second);
+	}
+	else
+	{
+		return false;
+	}
+}
+@
+
 \section{Typechecking expressions}
 
 Now that we have all the infrastructure in place, we can start typechecking expressions.
@@ -394,18 +421,22 @@ ast_type *typecheck_expression(ast_expression *expression)
 	}
 	else if (typeid(*expression) == typeid(ast_expression_intconst))
 	{
+		expression->type = new ast_int_type();
 		return new ast_int_type();
 	}
 	else if (typeid(*expression) == typeid(ast_expression_charconst))
 	{
+		expression->type = new ast_char_type();
 		return new ast_char_type();
 	}
 	else if (typeid(*expression) == typeid(ast_expression_boolconst))
 	{
+		expression->type = new ast_bool_type();
 		return new ast_bool_type();
 	}
 	else if (typeid(*expression) == typeid(ast_expression_emptylist))
 	{
+		expression->type = new ast_list_type(expression->position, new ast_unknown_type());
 		return new ast_list_type(expression->position, new ast_unknown_type());
 	}
 	else if (typeid(*expression) == typeid(ast_expression_pair))
@@ -448,6 +479,7 @@ case OP_COLON:
 		typecheck_error(binop->position, "Mismatched operand types");
 	}
 	delete type_right;
+	expression->type = (ast_type*)type_left->copy();
 	return type_left;
 }
 @
@@ -467,6 +499,7 @@ case OP_SUB:
 				ast_operator_string(binop->op).c_str());
 		}
 		delete type_right;
+		expression->type = (ast_type*)type_left->copy();
 		return type_left;
 	}
 	else
@@ -486,6 +519,7 @@ case OP_MOD:
 		typeid(*type_right) == typeid(ast_int_type))
 	{
 		delete type_right;
+		expression->type = (ast_type*)type_left->copy();
 		return type_left;
 	}
 	else
@@ -509,6 +543,7 @@ case OP_OR:
 		typeid(*type_right) == typeid(ast_bool_type))
 	{
 		delete type_left;
+		expression->type = (ast_type*)type_right->copy();
 		return type_right;
 	}
 	else
@@ -538,6 +573,7 @@ case OP_GE:
 	}
 	delete type_left;
 	delete type_right;
+	expression->type = new ast_bool_type();
 	return new ast_bool_type();
 }
 @
@@ -558,6 +594,7 @@ case OP_NEG:
 		delete type_inner;
 		return new ast_int_type();
 	}
+	expression->type = (ast_type*)type_inner->copy();
 	return type_inner;
 case OP_NOT:
 	if (typeid(*type_inner) != typeid(ast_bool_type))
@@ -566,6 +603,7 @@ case OP_NOT:
 		delete type_inner;
 		return new ast_bool_type();
 	}
+	expression->type = (ast_type*)type_inner->copy();
 	return type_inner;
 default:
 	typecheck_fatal(unop->position, "Internal compiler error, unknown operator");
@@ -598,6 +636,7 @@ if (vardef == NULL)
 }
 else
 {
+	expression->type = (ast_type*)vardef->type->copy();
 	return (ast_type*)vardef->type->copy();
 }
 @
@@ -616,10 +655,12 @@ if (typeid(*objectType) == typeid(ast_list_type))
 		ast_type *innerType = list->type_element;
 		list->type_element = new ast_unknown_type();
 		delete list;
+		expression->type = (ast_type*)innerType->copy();
 		return innerType;
 	}
 	else if (varfield->field == "tl")
 	{
+		expression->type = (ast_type*)objectType->copy();
 		return objectType;
 	}
 	else
@@ -637,6 +678,7 @@ else if (typeid(*objectType) == typeid(ast_tuple_type))
 		ast_type *innerType = tuple->type_first;
 		tuple->type_first = new ast_unknown_type();
 		delete tuple;
+		expression->type = (ast_type*)innerType->copy();
 		return innerType;
 	}
 	else if (varfield->field == "snd")
@@ -644,6 +686,7 @@ else if (typeid(*objectType) == typeid(ast_tuple_type))
 		ast_type *innerType = tuple->type_second;
 		tuple->type_second = new ast_unknown_type();
 		delete tuple;
+		expression->type = (ast_type*)innerType->copy();
 		return innerType;
 	}
 	else
@@ -690,6 +733,7 @@ for (unsigned int i=0; i<funcall->arguments.size(); i++)
 
 ast_type *ret_type = replace_types(funcall->position, associations, funtype->return_type);
 cleanup_associations(associations);
+expression->type = (ast_type*)ret_type->copy();
 return ret_type;
 @
 
@@ -701,6 +745,8 @@ ast_expression_pair *pair = (ast_expression_pair*)expression;
 ast_type *left = typecheck_expression(pair->first);
 ast_type *right = typecheck_expression(pair->second);
 
+expression->type = new ast_tuple_type(left->position,
+	(ast_type*)left->copy(), (ast_type*)right->copy());
 return new ast_tuple_type(left->position, left, right);
 @
 
@@ -732,6 +778,7 @@ if (vartype == NULL)
 	return new ast_int_type();
 }
 
+lval->type = (ast_type*)vartype->type->copy();
 return (ast_type*)vartype->type->copy();
 @
 
@@ -748,10 +795,12 @@ if (typeid(*base_type) == typeid(ast_list_type))
 		ast_type *result = list->type_element;
 		list->type_element = new ast_unknown_type();
 		delete list;
+		lval->type = (ast_type*)result->copy();
 		return result;
 	}
 	else if (field->field == "tl")
 	{
+		lval->type = (ast_type*)list->copy();
 		return list;
 	}
 	else
@@ -770,6 +819,7 @@ else if (typeid(*base_type) == typeid(ast_tuple_type))
 		ast_type *result = tuple->type_first;
 		tuple->type_first = new ast_unknown_type();
 		delete tuple;
+		lval->type = (ast_type*)result->copy();
 		return result;
 	}
 	else if (field->field == "snd")
@@ -777,6 +827,7 @@ else if (typeid(*base_type) == typeid(ast_tuple_type))
 		ast_type *result = tuple->type_second;
 		tuple->type_second = new ast_unknown_type();
 		delete tuple;
+		lval->type = (ast_type*)result->copy();
 		return result;
 	}
 	else
@@ -852,7 +903,7 @@ For variable declarations, we need to check if they are not for the special name
 ast_statement_vardecl *vardecl = (ast_statement_vardecl*)statement;
 vardecl->type = replace_builtin(vardecl->type);
 
-if (typeid(*vardecl->type) == typeid(ast_void_type))
+if (contains_void(vardecl->type))
 {
 	typecheck_error(vardecl->position, "Void type is only allowed for functions.");
 }
@@ -995,10 +1046,18 @@ void typecheck_program(ast_program *program)
 		for (auto funarg : fundecl->args)
 		{
 			funarg->type = replace_builtin(funarg->type);
+			if (contains_void(funarg->type))
+			{
+				typecheck_error(funarg->position, "Argument types cannot contain void parts");
+			}
 			argTypes.push_back((ast_type*)funarg->type->copy());
 		}
 		
 		fundecl->type = replace_builtin(fundecl->type);
+		if (typeid(*fundecl->type) != typeid(ast_void_type) && contains_void(fundecl->type))
+		{
+			typecheck_error(fundecl->position, "Void is only allowed as full return type, not as part of it.");
+		}
 		add_function(fundecl->name, new function_definition((ast_type*)fundecl->type->copy(), argTypes));
 	}
 	
@@ -1099,6 +1158,9 @@ using namespace std;
 <<match types>>
 <<replace matched types>>
 <<cleanup associations>>
+
+<<check void>>
+
 <<typecheck expression>>
 <<typecheck lvalue>>
 <<typecheck statement>>

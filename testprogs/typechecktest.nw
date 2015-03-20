@@ -23,6 +23,7 @@ int main(int argc, char **argv)
 	
 	ast_program *program = parse_program();
 	typecheck_program(program);
+	program->print(0);
 	delete program;
 	
 	return 0;

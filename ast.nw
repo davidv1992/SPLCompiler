@@ -257,6 +257,12 @@ public:
 		printf("%s", ast_operator_string(op).c_str());
 		right->print(tabdepth);
 		printf(")");
+		if (type != NULL)
+		{
+			printf("/*");
+			type->print(tabdepth);
+			printf("*/");
+		}
 	}
 	virtual ast_base *copy()
 	{
@@ -279,6 +285,12 @@ public:
 		printf("(%s", ast_operator_string(op).c_str());
 		inner->print(tabdepth);
 		printf(")");
+		if (type != NULL)
+		{
+			printf("/*");
+			type->print(tabdepth);
+			printf("*/");
+		}
 	}
 	virtual ast_base *copy()
 	{
@@ -301,7 +313,16 @@ public:
 	ast_expression_variable_base(source_position pos, std::string _id) 
 		{ position = pos; id = _id;}
 	virtual ~ast_expression_variable_base(){}
-	virtual void print(int tabdepth) { printf("%s", id.c_str()); }
+	virtual void print(int tabdepth)
+	{
+		printf("%s", id.c_str());
+		if (type != NULL)
+		{
+			printf("/*");
+			type->print(tabdepth);
+			printf("*/");
+		}
+	}
 	virtual ast_base *copy()
 	{
 		return new ast_expression_variable_base(position, id);
@@ -320,6 +341,12 @@ public:
 	{ 
 		base->print(tabdepth);
 		printf(".%s", field.c_str());
+		if (type != NULL)
+		{
+			printf("/*");
+			type->print(tabdepth);
+			printf("*/");
+		}
 	}
 	virtual ast_base *copy()
 	{
@@ -353,6 +380,12 @@ public:
 			ptr->print(tabdepth);
 		}
 		printf(")");
+		if (type != NULL)
+		{
+			printf("/*");
+			type->print(tabdepth);
+			printf("*/");
+		}
 	}
 	virtual ast_base *copy()
 	{
@@ -375,7 +408,16 @@ public:
 	ast_expression_intconst(source_position pos, unsigned int v) 
 		{position = pos, value = v;}
 	virtual ~ast_expression_intconst() {}
-	virtual void print(int tabdepth) { printf("%d", value); }
+	virtual void print(int tabdepth)
+	{
+		printf("%d", value);
+		if (type != NULL)
+		{
+			printf("/*");
+			type->print(tabdepth);
+			printf("*/");
+		}
+	}
 	virtual ast_base *copy()
 	{
 		return new ast_expression_intconst(position, value);
@@ -389,7 +431,16 @@ public:
 	ast_expression_charconst(source_position pos, char v) 
 		{ position = pos; value = v; }
 	virtual ~ast_expression_charconst() {}
-	virtual void print(int tabdepth) { printf("'%c'", value); }
+	virtual void print(int tabdepth)
+	{
+		printf("'%c'", value);
+		if (type != NULL)
+		{
+			printf("/*");
+			type->print(tabdepth);
+			printf("*/");
+		}
+	}
 	virtual ast_base *copy()
 	{
 		return new ast_expression_charconst(position, value);
@@ -401,7 +452,16 @@ public:
 	ast_expression_emptylist(source_position pos)
 		{position = pos;}
 	virtual ~ast_expression_emptylist(){}
-	virtual void print(int tabdepth) { printf("[]");}
+	virtual void print(int tabdepth)
+	{
+		printf("[]");
+		if (type != NULL)
+		{
+			printf("/*");
+			type->print(tabdepth);
+			printf("*/");
+		}
+	}
 	virtual ast_base *copy()
 	{
 		return new ast_expression_emptylist(position);
@@ -421,6 +481,13 @@ public:
 			printf("True");
 		else
 			printf("False");
+		
+		if (type != NULL)
+		{
+			printf("/*");
+			type->print(tabdepth);
+			printf("*/");
+		}
 	}
 	virtual ast_base *copy()
 	{
@@ -448,6 +515,13 @@ public:
 		printf(","); 
 		second->print(tabdepth); 
 		printf(")");
+		
+		if (type != NULL)
+		{
+			printf("/*");
+			type->print(tabdepth);
+			printf("*/");
+		}
 	}
 	virtual ast_base *copy()
 	{
@@ -464,6 +538,10 @@ Putting it all together, with a base class specifically for expressions:
 <<operator to string header>>
 class ast_expression : public ast_base
 {
+public:
+	ast_type *type;
+	ast_expression() { type = NULL; }
+	virtual ~ast_expression() { if (type != NULL) delete type; }
 };
 <<operator ast>>
 <<variable read ast>>
@@ -477,6 +555,10 @@ For assignment statements we need a concept of lvalue.
 <<lvalue ast>>=
 class ast_lvalue : public ast_base
 {
+public:
+	ast_type *type;
+	ast_lvalue() { type = NULL; }
+	virtual ~ast_lvalue() { if (type != NULL) delete type; }
 };
 class ast_lvalue_variable : public ast_lvalue
 {
@@ -489,6 +571,12 @@ public:
 	virtual void print(int tabdepth)
 	{
 		printf("%s", variable.c_str());
+		if (type != NULL)
+		{
+			printf("/*");
+			type->print(tabdepth);
+			printf("*/");
+		}
 	}
 	virtual ast_base *copy()
 	{
@@ -508,6 +596,12 @@ public:
 	{
 		base->print(tabdepth);
 		printf(".%s", field.c_str());
+		if (type != NULL)
+		{
+			printf("/*");
+			type->print(tabdepth);
+			printf("*/");
+		}
 	}
 	virtual ast_base *copy()
 	{
