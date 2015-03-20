@@ -1,0 +1,1106 @@
+\chapter{Type checking}
+
+\section{Symbol tables}
+
+One of the main things we need to do is keep symbol tables. Since we allow variable declarations as statements, we need some way to keep multiple scopes in check at once. This means we actually have a stack of symbol tables, providing type info on all variables and functions.
+
+For this to work, first we need a way to store definitions:
+<<symbol definition>>=
+class variable_definition
+{
+public:
+	ast_type *type;
+	variable_definition(ast_type *t) { type = t; }
+	virtual ~variable_definition() { delete type; }
+};
+class function_definition
+{
+public:
+	ast_type *return_type;
+	std::vector<ast_type *> argument_types;
+	
+	function_definition(ast_type *rt, std::vector<ast_type*> at)
+	{
+		return_type = rt;
+		argument_types = at;
+	}
+	virtual ~function_definition()
+	{
+		for (auto ptr : argument_types) delete ptr;
+		delete return_type;
+	}
+};
+@
+
+We use a single stack to keep track of various scopes. Since we need to iterate over it, we just use a vector to implement it.
+<<variable tables>>=
+vector<map<string, variable_definition*> > scopeStack;
+@
+
+Creating a new scope is relatively easy, just push back a new, empty map, but popping it requires a bit of cleanup.
+<<manage scopes>>=
+void enter_scope()
+{
+	scopeStack.push_back(map<string, variable_definition*>());
+}
+void leave_scope()
+{
+	for (auto el : scopeStack.back())
+	{
+		delete el.second;
+	}
+	scopeStack.pop_back();
+}
+@
+
+Adding a variable only happens to the current scope:
+<<add definition>>=
+void add_variable(string name, variable_definition *def)
+{
+	scopeStack.back()[name] = def;
+}
+@
+
+Looking up a variable, we iterate over the scopes from back to front. Null is returned if no result is found.
+<<lookup definition>>=
+variable_definition* lookup_variable(string name)
+{
+	for (auto it = scopeStack.rbegin(); it != scopeStack.rend(); it++)
+	{
+		if (it->count(name) != 0)
+			return (*it)[name];
+	}
+	return NULL;
+}
+@
+
+Functions only occur on top level, so we need just a map for them.
+<<function tables>>=
+map<string, function_definition*> functionTable;
+@
+
+<<manage functions>>=
+void add_function(string name, function_definition *def)
+{
+	functionTable[name] = def;
+}
+function_definition *lookup_function(string name)
+{
+	if (functionTable.count(name) == 0)
+		return NULL;
+	return functionTable[name];
+}
+@
+
+Finally, we need to initialize the tables with all built-in variables and the top-level scope:
+<<initialize tables>>=
+void initialize_tables()
+{
+	source_position pos;
+	pos.filename="builtin";
+	pos.lineno = 0;
+	pos.offset = 0;
+	enter_scope(); //enter top-level scope
+	
+	add_function("print", new function_definition(
+		new ast_void_type(),
+		vector<ast_type*>(1, new ast_simple_type(pos, "t"))));
+	add_function("read", new function_definition(
+		new ast_char_type(),
+		vector<ast_type*>(0)));
+	add_function("isEmpty", new function_definition(
+		new ast_bool_type(),
+		vector<ast_type*>(1, new ast_list_type(pos, new ast_simple_type(pos, "t")))));
+}
+@
+
+<<cleanup tables>>=
+void cleanup_tables()
+{
+	while (scopeStack.size())
+		leave_scope();
+	
+	for (auto pair : functionTable)
+		delete pair.second;
+	
+	functionTable.clear();
+}
+@
+
+\section{Converting builtin types}
+
+The parser does not recognize the buildin types, so we implement checking for those here:
+<<replace builtin types header>>=
+ast_type *replace_builtin(ast_type *typeexp);
+@
+<<replace builtin types>>=
+ast_type *replace_builtin(ast_type *typeexp)
+{
+	if (typeid(*typeexp) == typeid(ast_simple_type))
+	{
+		ast_simple_type *simple = (ast_simple_type*)typeexp;
+		if (simple->type_id == "Int")
+		{
+			delete typeexp;
+			return new ast_int_type();
+		}
+		else if (simple->type_id == "Char")
+		{
+			delete typeexp;
+			return new ast_char_type();
+		}
+		else if (simple->type_id == "Void")
+		{
+			delete typeexp;
+			return new ast_void_type();
+		}
+		else if (simple->type_id == "Bool")
+		{
+			delete typeexp;
+			return new ast_bool_type();
+		}
+		else
+		{	
+			return simple;
+		}
+	}
+	else if (typeid(*typeexp) == typeid(ast_list_type))
+	{
+		ast_list_type *list = (ast_list_type*)typeexp;
+		list->type_element = replace_builtin(list->type_element);
+		return list;
+	}
+	else if (typeid(*typeexp) == typeid(ast_tuple_type))
+	{
+		ast_tuple_type *tuple = (ast_tuple_type*)typeexp;
+		tuple->type_first = replace_builtin(tuple->type_first);
+		tuple->type_second = replace_builtin(tuple->type_second);
+		return tuple;
+	}
+	else
+	{
+		return typeexp;
+	}
+}
+@
+
+\section{Comparing types}
+
+Comparing types is one of the main tasks being done in this stage, so lets implement that here too:
+
+<<compare types>>=
+bool operator==(ast_type &a, ast_type &b)
+{
+	if (typeid(a) != typeid(b))
+		return false;
+	
+	if (typeid(a) == typeid(ast_simple_type))
+	{
+		ast_simple_type *_a = (ast_simple_type*)&a;
+		ast_simple_type *_b = (ast_simple_type*)&b;
+		return _a->type_id == _b->type_id;
+	}
+	else if (typeid(a) == typeid(ast_list_type))
+	{
+		ast_list_type *_a = (ast_list_type*)&a;
+		ast_list_type *_b = (ast_list_type*)&b;
+		return _a->type_element == _b->type_element;
+	}
+	else if (typeid(a) == typeid(ast_tuple_type))
+	{
+		ast_tuple_type *_a = (ast_tuple_type*)&a;
+		ast_tuple_type *_b = (ast_tuple_type*)&b;
+		return _a->type_first == _b->type_first && 
+			_a->type_second == _b->type_second;
+	}
+	else
+	{
+		// builtin type, differentiated on typeid only.
+		return true;
+	}
+}
+bool operator!=(ast_type &a, ast_type &b)
+{
+	return !(a == b);
+}
+@
+
+However, to deal with polymorphic typing, it is also usefull to be able to check whether a type is matching nicely on a polymorphic type. This function checks this, producing the proper error messages if it is not a valid match, and builds a map of the associations (or a best guess at it in case of errors). For this we also need unification of types where there are (potentially) unknowns.
+
+Unification produce no error messages
+<<unify types>>=
+bool unify(ast_type *&target, ast_type *input)
+{
+	if (typeid(*target) == typeid(ast_unknown_type))
+	{
+		delete target;
+		target = (ast_type*)input->copy();
+		return true;
+	}
+	else if (typeid(*input) == typeid(ast_unknown_type))
+	{
+		return true;
+	}
+	else if (typeid(*target) != typeid(*input))
+	{
+		return false;
+	}
+	else if (typeid(*target) == typeid(ast_list_type))
+	{
+		ast_list_type *ltarget = (ast_list_type*)target;
+		ast_list_type *linput = (ast_list_type*)input;
+		return unify(ltarget->type_element, linput->type_element);
+	}
+	else if (typeid(*target) == typeid(ast_tuple_type))
+	{
+		ast_tuple_type *ttarget = (ast_tuple_type*)target;
+		ast_tuple_type *tinput = (ast_tuple_type*)input;
+		return unify(ttarget->type_first, tinput->type_first)
+			&& unify(ttarget->type_second, tinput->type_second);
+	}
+	else
+	{
+		return true;
+	}
+}
+@
+
+<<match types header>>=
+void match_types(source_position pos, std::map<std::string, ast_type*> &associations, ast_type *temp, ast_type *fillin);
+@
+<<match types>>=
+void match_types(source_position pos, map<string, ast_type*> &associations, ast_type *temp, ast_type *fillin)
+{
+	if (typeid(*temp) == typeid(ast_simple_type))
+	{
+		ast_simple_type *temp_simple = (ast_simple_type*)temp;
+		if (associations.count(temp_simple->type_id) != 0)
+		{
+			if (!unify(associations[temp_simple->type_id], fillin))
+			{
+				typecheck_error(pos, "Type incompatible");
+			}
+		}
+		else
+		{
+			associations[temp_simple->type_id] = (ast_type*)fillin->copy();
+		}
+	}
+	else if (typeid(*temp) != typeid(*fillin))
+	{
+		typecheck_error(pos, "Type incompatible");
+	}
+	else
+	{
+		if (typeid(*temp) == typeid(ast_list_type))
+		{
+			ast_list_type *listtemp = (ast_list_type*)temp;
+			ast_list_type *listfillin = (ast_list_type*)fillin;
+			match_types(pos, associations, listtemp->type_element,
+				listfillin->type_element);
+		}
+		else if (typeid(*temp) == typeid(ast_tuple_type))
+		{
+			ast_tuple_type *tupletemp = (ast_tuple_type*)temp;
+			ast_tuple_type *tuplefill = (ast_tuple_type*)fillin;
+			match_types(pos, associations,
+				tupletemp->type_first,
+				tuplefill->type_first);
+			match_types(pos, associations,
+				tupletemp->type_second,
+				tuplefill->type_second);
+		}
+	}
+}
+@
+
+For the return type of functions, we need to replace polymorphic parts with their actual values. This does that:
+<<replace matched types header>>=
+ast_type *replace_types(source_position pos, std::map<std::string, ast_type*> &associations, ast_type *target);
+@
+<<replace matched types>>=
+ast_type *replace_types(source_position pos, map<string, ast_type*> &associations, ast_type *target)
+{
+	if (typeid(*target) == typeid(ast_simple_type))
+	{
+		ast_simple_type *target_simple = (ast_simple_type*) target;
+		if (associations.count(target_simple->type_id) == 0)
+		{
+			return new ast_unknown_type();
+		}
+		else
+		{
+			return (ast_type*)associations[target_simple->type_id]->copy();
+		}
+	}
+	else if (typeid(*target) == typeid(ast_list_type))
+	{
+		ast_list_type *target_list = (ast_list_type*)target;
+		return new ast_list_type(target_list->position,
+			replace_types(pos, associations, target_list->type_element));
+	}
+	else if (typeid(*target) == typeid(ast_tuple_type))
+	{
+		ast_tuple_type *target_tuple = (ast_tuple_type*)target;
+		return new ast_tuple_type(target_tuple->position,
+			replace_types(pos, associations, target_tuple->type_first),
+			replace_types(pos, associations, target_tuple->type_second));
+	}
+	else
+	{
+		return (ast_type*)target->copy();
+	}
+}
+@
+
+Cleaning up the associations is some work, so do it in a special function
+<<cleanup associations header>>=
+void cleanup_associations(std::map<std::string, ast_type*> &associations);
+@
+<<cleanup associations>>=
+void cleanup_associations(map<string, ast_type*> &associations)
+{
+	for (auto i : associations) delete i.second;
+	associations.clear();
+}
+@
+
+\section{Typechecking expressions}
+
+Now that we have all the infrastructure in place, we can start typechecking expressions.
+
+<<typecheck expression header>>=
+ast_type *typecheck_expression(ast_expression *expression);
+@
+<<typecheck expression>>=
+ast_type *typecheck_expression(ast_expression *expression)
+{
+	if (typeid(*expression) == typeid(ast_expression_binary))
+	{
+		<<typecheck binary operator>>
+	}
+	else if (typeid(*expression) == typeid(ast_expression_unary))
+	{
+		<<typecheck unary operator>>
+	}
+	else if (typeid(*expression) == typeid(ast_expression_variable_base)
+		|| typeid(*expression) == typeid(ast_expression_variable_field))
+	{
+		<<typecheck variable expressions>>
+	}
+	else if (typeid(*expression) == typeid(ast_expression_funcall))
+	{
+		<<typecheck function call>>
+	}
+	else if (typeid(*expression) == typeid(ast_expression_intconst))
+	{
+		return new ast_int_type();
+	}
+	else if (typeid(*expression) == typeid(ast_expression_charconst))
+	{
+		return new ast_char_type();
+	}
+	else if (typeid(*expression) == typeid(ast_expression_boolconst))
+	{
+		return new ast_bool_type();
+	}
+	else if (typeid(*expression) == typeid(ast_expression_emptylist))
+	{
+		return new ast_list_type(expression->position, new ast_unknown_type());
+	}
+	else if (typeid(*expression) == typeid(ast_expression_pair))
+	{
+		<<typecheck pair expression>>
+	}
+	typecheck_fatal(expression->position, "Internal compiler error");
+	return new ast_unknown_type();
+}
+@
+
+\subsection{Binary operators}
+Binary operators split up in a few cases:
+<<typecheck binary operator>>=
+ast_expression_binary *binop = (ast_expression_binary*)expression;
+
+ast_type* type_left = typecheck_expression(binop->left);
+ast_type* type_right = typecheck_expression(binop->right);
+
+switch(binop->op)
+{
+<<typecheck list operator>>
+<<typecheck math operators>>
+<<typecheck logic operators>>
+<<typecheck comparison operators>>
+default:
+	typecheck_fatal(binop->position, "Internal compiler error, unknown operator");
+	return new ast_unknown_type();
+}
+@
+
+\subsubsection{List prepend}
+The list operator is a special case, since we have different types on the lhs and the rhs.
+<<typecheck list operator>>=
+case OP_COLON:
+{
+	type_left = new ast_list_type(type_left->position, type_left);
+	if (!unify(type_left, type_right))
+	{
+		typecheck_error(binop->position, "Mismatched operand types");
+	}
+	delete type_right;
+	return type_left;
+}
+@
+
+\subsubsection{Math operators}
+Math operators are only for ints and sometimes chars:
+<<typecheck math operators>>=
+case OP_ADD:
+case OP_SUB:
+{
+	if (typeid(*type_left) == typeid(ast_int_type) ||
+		typeid(*type_left) == typeid(ast_char_type))
+	{
+		if (typeid(*type_left) != typeid(*type_right))
+		{
+			typecheck_error(binop->position, "Mismatched types on %s operator",
+				ast_operator_string(binop->op).c_str());
+		}
+		delete type_right;
+		return type_left;
+	}
+	else
+	{
+		typecheck_error(binop->position, "%s operator only works on ints or chars", 
+			ast_operator_string(binop->op).c_str());
+		delete type_left;
+		delete type_right;
+		return new ast_int_type();
+	}
+}
+case OP_MUL:
+case OP_DIV:
+case OP_MOD:
+{
+	if (typeid(*type_left) == typeid(ast_int_type) && 
+		typeid(*type_right) == typeid(ast_int_type))
+	{
+		delete type_right;
+		return type_left;
+	}
+	else
+	{
+		typecheck_error(binop->position, "%s operator only works on ints",
+			ast_operator_string(binop->op).c_str());
+		delete type_left;
+		delete type_right;
+		return new ast_int_type();
+	}
+}
+@
+
+\subsubsection{Logic operators}
+Logic operators only work on booleans:
+<<typecheck logic operators>>=
+case OP_AND:
+case OP_OR:
+{
+	if (typeid(*type_left) == typeid(ast_bool_type) &&
+		typeid(*type_right) == typeid(ast_bool_type))
+	{
+		delete type_left;
+		return type_right;
+	}
+	else
+	{
+		typecheck_error(binop->position, "%s operator only works on bools",
+			ast_operator_string(binop->op).c_str());
+		delete type_left;
+		delete type_right;
+		return new ast_bool_type();
+	}
+}
+@
+
+\subsubsection{Comparison operators}
+Comparison just needs matching (eg unifying to deal with emptylists) types:
+<<typecheck comparison operators>>=
+case OP_EQ:
+case OP_NE:
+case OP_LT:
+case OP_GT:
+case OP_LE:
+case OP_GE:
+{
+	if (!unify(type_left, type_right))
+	{
+		typecheck_error(binop->position, "Mismatched operand types");
+	}
+	delete type_left;
+	delete type_right;
+	return new ast_bool_type();
+}
+@
+
+\subsection{Unary operators}
+Unary operators are somewhat easier, only one type involved that needs to be correct:
+<<typecheck unary operator>>=
+ast_expression_unary *unop = (ast_expression_unary*)expression;
+
+ast_type *type_inner = typecheck_expression(unop->inner);
+
+switch(unop->op)
+{
+case OP_NEG:
+	if (typeid(*type_inner) != typeid(ast_int_type))
+	{
+		typecheck_error(unop->position, "- operator works only on ints.");
+		delete type_inner;
+		return new ast_int_type();
+	}
+	return type_inner;
+case OP_NOT:
+	if (typeid(*type_inner) != typeid(ast_bool_type))
+	{
+		typecheck_error(unop->position, "! operator works only on bools.");
+		delete type_inner;
+		return new ast_bool_type();
+	}
+	return type_inner;
+default:
+	typecheck_fatal(unop->position, "Internal compiler error, unknown operator");
+	return new ast_unknown_type();
+}
+@
+
+\subsection{variable expressions}
+Two suboptions:
+<<typecheck variable expressions>>=
+if (typeid(*expression) == typeid(ast_expression_variable_base))
+{
+	<<typecheck variable lookup>>
+}
+else if (typeid(*expression) == typeid(ast_expression_variable_field))
+{
+	<<typecheck field expression>>
+}
+@
+
+The variable lookup does not do the error handling, so we need to do that here.
+<<typecheck variable lookup>>=
+ast_expression_variable_base *var = (ast_expression_variable_base*)expression;
+variable_definition *vardef = lookup_variable(var->id);
+
+if (vardef == NULL)
+{
+	typecheck_error(var->position, "Unknown variable %s", var->id.c_str());
+	return new ast_int_type();
+}
+else
+{
+	return (ast_type*)vardef->type->copy();
+}
+@
+
+Fields are only for lists and tuples, and we check their names here too.
+<<typecheck field expression>>=
+ast_expression_variable_field *varfield = (ast_expression_variable_field*)expression;
+
+ast_type *objectType = typecheck_expression(varfield->base);
+
+if (typeid(*objectType) == typeid(ast_list_type))
+{
+	ast_list_type *list = (ast_list_type*)objectType;
+	if (varfield->field == "hd")
+	{
+		ast_type *innerType = list->type_element;
+		list->type_element = new ast_unknown_type();
+		delete list;
+		return innerType;
+	}
+	else if (varfield->field == "tl")
+	{
+		return objectType;
+	}
+	else
+	{
+		delete objectType;
+		typecheck_error(varfield->position, "Unknown field %s", varfield->field.c_str());
+		return new ast_int_type();
+	}
+}
+else if (typeid(*objectType) == typeid(ast_tuple_type))
+{
+	ast_tuple_type *tuple = (ast_tuple_type*)objectType;
+	if (varfield->field == "fst")
+	{
+		ast_type *innerType = tuple->type_first;
+		tuple->type_first = new ast_unknown_type();
+		delete tuple;
+		return innerType;
+	}
+	else if (varfield->field == "snd")
+	{
+		ast_type *innerType = tuple->type_second;
+		tuple->type_second = new ast_unknown_type();
+		delete tuple;
+		return innerType;
+	}
+	else
+	{
+		delete objectType;
+		typecheck_error(varfield->position, "Unknown field %s", varfield->field.c_str());
+		return new ast_int_type();
+	}
+}
+else
+{
+	typecheck_error(varfield->position, "Variable has no fields");
+	delete objectType;
+	return new ast_int_type();
+}
+@
+
+\subsection{function calls}
+Function calls need the full matching mechanism to get the return type, but other than that are not that difficult.
+<<typecheck function call>>=
+ast_expression_funcall *funcall = (ast_expression_funcall*)expression;
+function_definition *funtype = lookup_function(funcall->id);
+if (funtype == NULL)
+{
+	typecheck_error(funcall->position, "Unknown function %s", funcall->id.c_str());
+	return new ast_int_type();
+}
+
+if (funtype->argument_types.size() != funcall->arguments.size())
+{	
+	typecheck_error(funcall->position, "Wrong number of arguments for function %s", funcall->id.c_str());
+	return new ast_int_type();
+}
+
+map<string, ast_type*> associations;
+
+for (unsigned int i=0; i<funcall->arguments.size(); i++)
+{
+	ast_type *argtype = typecheck_expression(funcall->arguments[i]);
+	match_types(funcall->arguments[i]->position, associations, 
+		funtype->argument_types[i], argtype);
+	delete argtype;
+}
+
+ast_type *ret_type = replace_types(funcall->position, associations, funtype->return_type);
+cleanup_associations(associations);
+return ret_type;
+@
+
+\subsection{pair expressions}
+Pair expressions cannot generate type errors on their own, so this is really straightforward.
+<<typecheck pair expression>>=
+ast_expression_pair *pair = (ast_expression_pair*)expression;
+
+ast_type *left = typecheck_expression(pair->first);
+ast_type *right = typecheck_expression(pair->second);
+
+return new ast_tuple_type(left->position, left, right);
+@
+
+\section{Typechecking lvalues}
+
+Lvalues are like expressions, only with fewer options
+<<typecheck lvalue>>=
+ast_type *typecheck_lvalue(ast_lvalue *lval)
+{
+	if (typeid(*lval) == typeid(ast_lvalue_variable))
+	{
+		<<typecheck variable lvalue>>
+	}
+	else if (typeid(*lval) == typeid(ast_lvalue_field))
+	{
+		<<typecheck field lvalue>>
+	}
+	typecheck_fatal(lval->position, "Internal compiler error");
+	return new ast_unknown_type();
+}
+@
+
+<<typecheck variable lvalue>>=
+ast_lvalue_variable *var = (ast_lvalue_variable*)lval;
+variable_definition *vartype = lookup_variable(var->variable);
+if (vartype == NULL)
+{
+	typecheck_error(lval->position, "Unknown variable %s", var->variable.c_str());
+	return new ast_int_type();
+}
+
+return (ast_type*)vartype->type->copy();
+@
+
+<<typecheck field lvalue>>=
+ast_lvalue_field *field = (ast_lvalue_field*)lval;
+ast_type *base_type = typecheck_lvalue(field->base);
+
+if (typeid(*base_type) == typeid(ast_list_type))
+{
+	ast_list_type *list = (ast_list_type*)base_type;
+	
+	if (field->field == "hd")
+	{
+		ast_type *result = list->type_element;
+		list->type_element = new ast_unknown_type();
+		delete list;
+		return result;
+	}
+	else if (field->field == "tl")
+	{
+		return list;
+	}
+	else
+	{
+		typecheck_error(lval->position, "Unknown field %s", field->field.c_str());
+		delete list;
+		return new ast_int_type();
+	}
+}
+else if (typeid(*base_type) == typeid(ast_tuple_type))
+{
+	ast_tuple_type *tuple = (ast_tuple_type*)base_type;
+	
+	if (field->field == "fst")
+	{
+		ast_type *result = tuple->type_first;
+		tuple->type_first = new ast_unknown_type();
+		delete tuple;
+		return result;
+	}
+	else if (field->field == "snd")
+	{
+		ast_type *result = tuple->type_second;
+		tuple->type_second = new ast_unknown_type();
+		delete tuple;
+		return result;
+	}
+	else
+	{
+		typecheck_error(lval->position, "Unknown field %s", field->field.c_str());
+		delete tuple;
+		return new ast_int_type();
+	}
+}
+else
+{
+	typecheck_error(lval->position, "Type has no fields.");
+	delete base_type;
+	return new ast_int_type();
+}
+@
+
+\section{Typechecking statements}
+
+Statements dont have types themselves, but parts of them do, and we need to check those.
+<<typecheck statement>>=
+void typecheck_statement(ast_statement *statement)
+{
+	if (typeid(*statement) == typeid(ast_statement_block))
+	{
+		<<typecheck block statement>>
+	}
+	else if (typeid(*statement) == typeid(ast_statement_vardecl))
+	{
+		<<typecheck variable declaration>>
+	}
+	else if (typeid(*statement) == typeid(ast_statement_assign))
+	{
+		<<typecheck assignments>>
+	}
+	else if (typeid(*statement) == typeid(ast_statement_expression))
+	{
+		<<typecheck expression statement>>
+	}
+	else if (typeid(*statement) == typeid(ast_statement_if))
+	{
+		<<typecheck if statement>>
+	}
+	else if (typeid(*statement) == typeid(ast_statement_while))
+	{
+		<<typecheck while statement>>
+	}
+	else if (typeid(*statement) == typeid(ast_statement_return))
+	{
+		<<typecheck return statement>>
+	}
+	else
+	{
+		typecheck_fatal(statement->position, "Internal compiler error");
+	}
+}
+@
+
+\subsection{Block statement}
+For block statements we just check every inner statement:
+<<typecheck block statement>>=
+enter_scope();
+ast_statement_block *block = (ast_statement_block*)statement;
+for (auto stat : block->body)
+	typecheck_statement(stat);
+leave_scope();
+@
+
+
+\subsection{Variable declaration}
+For variable declarations, we need to check if they are not for the special names true or false, and whether the expression is of proper type. Furthermore, we need to pass the explicit type given in it through the filtering:
+<<typecheck variable declaration>>=
+ast_statement_vardecl *vardecl = (ast_statement_vardecl*)statement;
+vardecl->type = replace_builtin(vardecl->type);
+
+if (typeid(*vardecl->type) == typeid(ast_void_type))
+{
+	typecheck_error(vardecl->position, "Void type is only allowed for functions.");
+}
+
+if (vardecl->id == "True")
+{
+	typecheck_error(vardecl->position, "Cannot define variable with name True");
+}
+if (vardecl->id == "False")
+{
+	typecheck_error(vardecl->position, "Cannot define variable with name False");
+}
+
+ast_type *value_type = typecheck_expression(vardecl->value);
+
+if (!unify(vardecl->type, value_type))
+{
+	typecheck_error(vardecl->position, "Assigned value is of incorrect type");
+}
+
+delete value_type;
+
+add_variable(vardecl->id, new variable_definition((ast_type*)vardecl->type->copy()));
+@
+
+\subsection{Assignment}
+Assignments follow the same form as vardecls:
+<<typecheck assignments>>=
+ast_statement_assign *assign = (ast_statement_assign*)statement;
+ast_type *lh_type = typecheck_lvalue(assign->location);
+ast_type *rh_type = typecheck_expression(assign->value);
+
+if (!unify(lh_type, rh_type))
+{
+	typecheck_error(assign->position, "Assigned value is of incorrect type");
+}
+
+delete lh_type;
+delete rh_type;
+@
+
+\subsection{Expression statements}
+For expression statements we just need to typecheck the statement itself, discarding the result.
+<<typecheck expression statement>>=
+ast_statement_expression *exprstat = (ast_statement_expression*)statement;
+ast_type *result = typecheck_expression(exprstat->inner);
+delete result;
+@
+
+\subsection{If statements}
+For if statements we need to check whether the condition is a boolean, and the statements associated with it.
+<<typecheck if statement>>=
+ast_statement_if *ifstat = (ast_statement_if*)statement;
+
+ast_type *cond_type = typecheck_expression(ifstat->condition);
+if (typeid(*cond_type) != typeid(ast_bool_type))
+{
+	typecheck_error(ifstat->position, "Condition in if statement should give boolean value.");
+}
+delete cond_type;
+
+typecheck_statement(ifstat->true_statement);
+if (ifstat->false_statement != NULL)
+	typecheck_statement(ifstat->false_statement);
+@
+
+\subsection{While statements}
+While is almost like an if, but with only one body:
+<<typecheck while statement>>=
+ast_statement_while *whilestat = (ast_statement_while*)statement;
+
+ast_type *cond_type = typecheck_expression(whilestat->condition);
+if (typeid(*cond_type) != typeid(ast_bool_type))
+{
+	typecheck_error(whilestat->position, "Condition in while statement should give boolean value.");
+}
+delete cond_type;
+
+typecheck_statement(whilestat->body);
+@
+
+\subsection{Return statements}
+For return statements we need to keep track of the current return type:
+<<track current return type>>=
+ast_type *current_return_type=NULL;
+void set_return_type(ast_type *type)
+{
+	current_return_type = type;
+}
+void clear_return_type()
+{
+	delete current_return_type;
+}
+@
+We use this to check the type of expressions in return statements:
+<<typecheck return statement>>=
+ast_statement_return *retstat = (ast_statement_return*)statement;
+
+ast_type *expression_type = NULL;
+if (retstat->value != NULL)
+	expression_type = typecheck_expression(retstat->value);
+
+if (typeid(*current_return_type) == typeid(ast_void_type) && expression_type != NULL)
+{
+	typecheck_error(retstat->position, "return statement with value is not allowed in void function");
+}
+else if (typeid(*current_return_type) != typeid(ast_void_type) && expression_type == NULL)
+{
+	typecheck_error(retstat->position, "return statement without value in non-void function");
+}
+else if (typeid(*current_return_type) != typeid(ast_void_type))
+{
+	if (!unify(current_return_type, expression_type))
+	{
+		typecheck_error(retstat->position, "returned value of wrong type");
+	}
+}
+
+if (expression_type != NULL)
+	delete expression_type;
+@
+
+\section{typecheck program}
+Typechecking programs is a three-stage process. First we handle the globals, thus making sure their value expressions contain no function calls. Next we make a first pass over the functions assuring that we can have recursion accross multiple functions, and then a second pass over the functions typechecking their bodies. Since this is the main interface to the rest of the compiler, we also handle the initialization and cleanup needs of the typechecking module here.
+<<typecheck program header>>=
+void typecheck_program(ast_program *program);
+@
+<<typecheck program>>=
+void typecheck_program(ast_program *program)
+{
+	initialize_tables();
+
+	for (auto vardecl : program->globalvars)
+		typecheck_statement(vardecl);
+	
+	for (auto fundecl : program->functions)
+	{
+		vector<ast_type*> argTypes;
+		
+		for (auto funarg : fundecl->args)
+		{
+			funarg->type = replace_builtin(funarg->type);
+			argTypes.push_back((ast_type*)funarg->type->copy());
+		}
+		
+		fundecl->type = replace_builtin(fundecl->type);
+		add_function(fundecl->name, new function_definition((ast_type*)fundecl->type->copy(), argTypes));
+	}
+	
+	for (auto fundecl : program->functions)
+	{
+		enter_scope();
+		set_return_type((ast_type*)fundecl->type->copy());
+		for (auto funarg : fundecl->args)
+		{
+			add_variable(funarg->name, new variable_definition((ast_type*)funarg->type->copy()));
+		}
+		typecheck_statement(fundecl->body);
+		clear_return_type();
+		leave_scope();
+	}
+	
+	cleanup_tables();		
+}
+@
+
+\section{Error handling}
+<<typechecker error handling>>=
+void typecheck_warning(source_position pos, const char *message, ...)
+{
+	va_list args;
+	va_start(args, message);
+	
+	eh_warning(pos, message, args);
+	
+	va_end(args);
+}
+void typecheck_error(source_position pos, const char *message, ...)
+{
+	va_list args;
+	va_start(args, message);
+	
+	eh_error(pos, message, args);
+	
+	va_end(args);
+}
+void typecheck_fatal(source_position pos, const char *message, ...)
+{
+	va_list args;
+	va_start(args, message);
+	
+	eh_error(pos, message, args);
+	
+	va_end(args);
+	
+	exit(1);
+}
+@
+
+\section{Source and header}
+
+<<typecheck.h>>=
+#ifndef TYPECHECK_H
+#define TYPECHECK_H
+#include "ast.h"
+#include <map>
+#include <string>
+
+<<replace builtin types header>>
+<<match types header>>
+<<replace matched types header>>
+<<cleanup associations header>>
+<<typecheck expression header>>
+<<typecheck program header>>
+#endif
+@
+
+<<typecheck.cpp>>=
+#include "typecheck.h"
+#include "error.h"
+#include <map>
+#include <cstdarg>
+
+using namespace std;
+
+<<symbol definition>>
+
+<<typechecker error handling>>
+
+<<variable tables>>
+<<manage scopes>>
+<<add definition>>
+<<lookup definition>>
+<<function tables>>
+<<manage functions>>
+<<initialize tables>>
+<<cleanup tables>>
+
+<<track current return type>>
+
+<<replace builtin types>>
+<<compare types>>
+<<unify types>>
+<<match types>>
+<<replace matched types>>
+<<cleanup associations>>
+<<typecheck expression>>
+<<typecheck lvalue>>
+<<typecheck statement>>
+<<typecheck program>>
+@

@@ -1,0 +1,30 @@
+\section{Test type matching}
+
+The following is a simple program to test type matching
+
+<<typechecktest.cpp>>=
+#include "token.h"
+#include "parser.h"
+#include "typecheck.h"
+#include <cstdio>
+#include <map>
+
+using namespace std;
+
+void initialize_tables();
+void cleanup_tables();
+
+int main(int argc, char **argv)
+{
+	if (argc < 2)
+		return 1;
+	
+	tok_setinput(string(argv[1]));
+	
+	ast_program *program = parse_program();
+	typecheck_program(program);
+	delete program;
+	
+	return 0;
+}
+@

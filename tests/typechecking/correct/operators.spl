@@ -1,0 +1,67 @@
+Int main(Int a, Int b) {
+	return a+b;
+}
+
+Int sub(Int a, Int b) {
+	return a-b;
+}
+
+Int mul(Int a, Int b) {
+	return a*b;
+}
+
+Int div(Int a, Int b) {
+	return a/b;
+}
+
+Char cadd(Char a, Char b) {
+	return a+b;
+}
+
+Char csub(Char a, Char b) {
+	return a-b;
+}
+
+Bool eq(t a, t b) {
+	return a==b;
+}
+
+Bool sm(t a, t b) {
+	return a<b;
+}
+
+Bool gt(t a, t b) {
+	return a>b;
+}
+
+Bool se(t a, t b) {
+	return a<=b;
+}
+
+Bool ge(t a, t b) {
+	return a>=b;
+}
+
+Bool ne(t a, t b) {
+	return a != b;
+}
+
+[t] col(t a, [t] b) {
+	return a:b;
+}
+
+Bool and(Bool a, Bool b) {
+	return a && b;
+}
+
+Bool or(Bool a, Bool b) {
+	return a || b;
+}
+
+Bool not(Bool a) {
+	return !a;
+}
+
+Int neg(Int a) {
+	return -a;
+}

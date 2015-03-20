@@ -52,6 +52,12 @@ parser.h: parser.nw
 parser.cpp: parser.nw
 	notangle -L -Rparser.cpp parser.nw | cpif parser.cpp
 
+typecheck.o: typecheck.cpp ast.h typecheck.h error.h
+typecheck.h: typecheck.nw
+	notangle -L -Rtypecheck.h typecheck.nw | cpif typecheck.h
+typecheck.cpp: typecheck.nw
+	notangle -L -Rtypecheck.cpp typecheck.nw | cpif typecheck.cpp
+
 version.h:
 	echo \#define VERSION \"`git describe --abbrev=4 --dirty --always --tags`\" | cpif version.h
 
@@ -64,8 +70,8 @@ test.pdf: test.tex
 	latexmk -pdf test.tex
 	latexmk -c
 
-code.tex: header.nw trailer.nw token.nw position.nw error.nw parser.nw settings.nw spllang.nw
-	noweave -t4 -delay header.nw spllang.nw token.nw parser.nw settings.nw position.nw error.nw trailer.nw | cpif code.tex
+code.tex: header.nw trailer.nw token.nw position.nw error.nw parser.nw settings.nw spllang.nw ast.nw typecheck.nw
+	noweave -t4 -delay header.nw spllang.nw ast.nw token.nw parser.nw typecheck.nw settings.nw position.nw error.nw trailer.nw | cpif code.tex
 code.pdf: code.tex compiler.bib
 	latexmk -pdf code.tex
 	latexmk -c
@@ -120,6 +126,12 @@ testprogs/tokenfail.sh : testprogs/tokentest.nw
 	notangle -L -Rtokenfail.sh testprogs/tokentest.nw > testprogs/tokenfail.sh
 	chmod +x testprogs/tokenfail.sh
 
+testprogs/typechecktest: testprogs/typechecktest.o token.o parser.o ast.o error.o typecheck.o
+	g++ $(CXXFLAGS) -o testprogs/typechecktest testprogs/typechecktest.o token.o parser.o ast.o error.o typecheck.o
+testprogs/typechecktest.o: testprogs/typechecktest.cpp token.h parser.h ast.h position.h typecheck.h
+testprogs/typechecktest.cpp: testprogs/typechecktest.nw
+	notangle -L -Rtypechecktest.cpp testprogs/typechecktest.nw | cpif testprogs/typechecktest.cpp
+
 testprogs/commentgen: testprogs/commentgen.cpp
 testprogs/commentgen.cpp: testprogs/stresstest.nw
 	notangle -L -Rcommentgen.cpp testprogs/stresstest.nw | cpif testprogs/commentgen.cpp
@@ -137,11 +149,13 @@ clean:
 	rm -f token.h token.cpp token.o
 	rm -f ast.h ast.cpp ast.o
 	rm -f parser.h parser.cpp parser.o
+	rm -f typecheck.h typecheck.cpp typecheck.o
 	rm -f testprogs/tokentest.cpp testprogs/tokentest.o testprogs/tokentest
 	rm -f testprogs/parsetest.cpp testprogs/parsetest.o testprogs/parsetest
 	rm -f testprogs/typeparsetest.cpp testprogs/typeparsetest.o testprogs/typeparsetest
 	rm -f testprogs/exprparsetest.cpp testprogs/exprparsetest.o testprogs/exprparsetest
 	rm -f testprogs/statementparsetest.cpp testprogs/statementparsetest.o testprogs/statementparsetest
+	rm -f testprogs/typechecktest.cpp testprogs/typechecktest.o testprogs/typechecktest
 	rm -f testprogs/parsecorrect.sh testprogs/parsefail.sh testprogs/parsewarn.sh
 	rm -f testprogs/tokencorrect.sh testprogs/tokenfail.sh
 	rm -f testprogs/commentgen testprogs/commentgen.cpp
