@@ -59,7 +59,7 @@ void add_variable(source_position position, string name, variable_definition *de
 {
 	if (scopeStack.back().count(name) != 0)
 	{
-		typecheck_warning(position, "Definition masks earlier of %s", name.c_str());
+		typecheck_error(position, "Definition masks earlier of %s", name.c_str());
 		delete scopeStack.back()[name];
 	}
 	scopeStack.back()[name] = def;
@@ -89,7 +89,7 @@ void add_function(source_position position, string name, function_definition *de
 {
 	if (functionTable.count(name) != 0)
 	{
-		typecheck_warning(position, "Definition masks earlier of %s", name.c_str());
+		typecheck_error(position, "Definition masks earlier of %s", name.c_str());
 		delete functionTable[name];
 	}
 	functionTable[name] = def;
