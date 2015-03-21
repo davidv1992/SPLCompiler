@@ -1,5 +1,5 @@
 \chapter{The spl language definition}
-Before we can start with the compiler proper, we need to discuss the language we are going to compile. By the nature of the language specification given to us there are several points that require some attention beyond what is specified. For this reason the SPL language definition is included (almost) verbatim below. The original material comes from \cite{cc_ex1}. It is followed by notes on the choices and clarifications used in the rest of the code.
+Before we can start with the compiler proper, we need to discuss the language we are going to compile. By the nature of the language specification given to us there are several points that require some attention beyond what is specified. For this reason the SPL language definition is included (almost) verbatim below. The original material comes from \cite{cc_ex1} and \cite{cc_ex2}. It is followed by notes on the choices and clarifications used in the rest of the code.
 
 \section{Grammar}
 \begin{longtable}{lcl}
@@ -67,9 +67,12 @@ Compound structures are created implicitly. Each \term{(} \nonterm{Exp} \term{,}
 
 All operators obey the usual binding powers and directions.
 
+Global variables and functions can be used before they are defined, and since we only have first order functions, functions and variables should have seperate namespaces (ie. we should be able to have a function and variable with the same name.)
+
 \section{Comments, problems and decisions}
 The specification as given above has a umber of issues and is, at least in it's current form, quite a bit underspecified.
 
+\subsection{Parsing issues}
 To start with the first point, the operator binding power and direction. Since there is some variation in this between programming languages and mathematics, a baseline must be chosen. I made the choice to use the C operator binding powers and directions as a base, since it is something I am familiar with. This leaves the colon operator undecided, since it is not in the C language. I chose to make it the weakest binding operator, and make it right associative. Right associative is the better choice here because it allows \term{1:2:3:[]} to be interpreted as intended (the list with elements $1$,$2$,$3$ in that order). Making it weakest binding allows us to easily append the results of all sorts of expressions into the list without having to worry about brackets, making it also natural to work with lists of booleans. This gives us the following ordering of the operators (from strong binding to weak) with their associativity:
 
 \begin{tabular}{l|l}
@@ -89,4 +92,9 @@ The second issue we need to treat is that of the dangling else. In the grammar a
 
 Finaly, character constants are not really that well specified. Currently, the implementation takes the next character after the opening \term{'} to be the value of it, and then immediately looks for the closing \term{'}. I might change this out at a later time for a more full implementation of the behaviour that C character constants have, since it allows a clearer representation of special characters such as newlines.
 
+\subsection{Typechecking issues}
+
+The specification does not give an entire definition of what is allowed where. Most problematic, it does not specify any conditions on the initialization values of global variables. This is problematic as allowing all expressions for this gives no guarantee on whether those initializations can be carried out in an order that guarantees that each of them is initialized before it's first use. I therefore make the choice of restricting the initializations of global variables to expressions without functions, and requiring that each global variable that is used in the initializer of another global variable is defined before it's first use in that context.
+
+\subsection{Final remark}
 All further ambiguities in the semantics that are left after this are treated at a later time, when implementing the relevant parts of the compiler.
