@@ -120,7 +120,8 @@ void initialize_tables()
 		vector<ast_type*>(0)));
 	add_function(pos, "isEmpty", new function_definition(
 		new ast_bool_type(),
-		vector<ast_type*>(1, new ast_list_type(pos, new ast_simple_type(pos, "t")))));
+		vector<ast_type*>(1, 
+			new ast_list_type(pos, new ast_simple_type(pos, "t")))));
 }
 @
 
@@ -140,9 +141,6 @@ void cleanup_tables()
 \section{Converting builtin types}
 
 The parser does not recognize the buildin types, so we implement checking for those here:
-<<replace builtin types header>>=
-ast_type *replace_builtin(ast_type *typeexp);
-@
 <<replace builtin types>>=
 ast_type *replace_builtin(ast_type *typeexp)
 {
@@ -275,11 +273,9 @@ bool unify(ast_type *&target, ast_type *input)
 }
 @
 
-<<match types header>>=
-void match_types(source_position pos, std::map<std::string, ast_type*> &associations, ast_type *temp, ast_type *fillin);
-@
 <<match types>>=
-void match_types(source_position pos, map<string, ast_type*> &associations, ast_type *temp, ast_type *fillin)
+void match_types(source_position pos, map<string, ast_type*> &associations, 
+	ast_type *temp, ast_type *fillin)
 {
 	if (typeid(*temp) == typeid(ast_simple_type))
 	{
@@ -325,11 +321,9 @@ void match_types(source_position pos, map<string, ast_type*> &associations, ast_
 @
 
 For the return type of functions, we need to replace polymorphic parts with their actual values. This does that:
-<<replace matched types header>>=
-ast_type *replace_types(source_position pos, std::map<std::string, ast_type*> &associations, ast_type *target);
-@
 <<replace matched types>>=
-ast_type *replace_types(source_position pos, map<string, ast_type*> &associations, ast_type *target)
+ast_type *replace_types(source_position pos, 
+	map<string, ast_type*> &associations, ast_type *target)
 {
 	if (typeid(*target) == typeid(ast_simple_type))
 	{
@@ -364,9 +358,6 @@ ast_type *replace_types(source_position pos, map<string, ast_type*> &association
 @
 
 Cleaning up the associations is some work, so do it in a special function
-<<cleanup associations header>>=
-void cleanup_associations(std::map<std::string, ast_type*> &associations);
-@
 <<cleanup associations>>=
 void cleanup_associations(map<string, ast_type*> &associations)
 {
@@ -406,9 +397,6 @@ bool contains_void(ast_type *type)
 
 Now that we have all the infrastructure in place, we can start typechecking expressions.
 
-<<typecheck expression header>>=
-ast_type *typecheck_expression(ast_expression *expression);
-@
 <<typecheck expression>>=
 ast_type *typecheck_expression(ast_expression *expression)
 {
@@ -446,7 +434,8 @@ ast_type *typecheck_expression(ast_expression *expression)
 	}
 	else if (typeid(*expression) == typeid(ast_expression_emptylist))
 	{
-		expression->type = new ast_list_type(expression->position, new ast_unknown_type());
+		expression->type = new ast_list_type(expression->position, 
+			new ast_unknown_type());
 		return new ast_list_type(expression->position, new ast_unknown_type());
 	}
 	else if (typeid(*expression) == typeid(ast_expression_pair))
@@ -676,7 +665,8 @@ if (typeid(*objectType) == typeid(ast_list_type))
 	else
 	{
 		delete objectType;
-		typecheck_error(varfield->position, "Unknown field %s", varfield->field.c_str());
+		typecheck_error(varfield->position, 
+			"Unknown field %s", varfield->field.c_str());
 		return new ast_int_type();
 	}
 }
@@ -702,7 +692,8 @@ else if (typeid(*objectType) == typeid(ast_tuple_type))
 	else
 	{
 		delete objectType;
-		typecheck_error(varfield->position, "Unknown field %s", varfield->field.c_str());
+		typecheck_error(varfield->position, 
+			"Unknown field %s", varfield->field.c_str());
 		return new ast_int_type();
 	}
 }
@@ -727,7 +718,8 @@ if (funtype == NULL)
 
 if (funtype->argument_types.size() != funcall->arguments.size())
 {	
-	typecheck_error(funcall->position, "Wrong number of arguments for function %s", funcall->id.c_str());
+	typecheck_error(funcall->position, 
+		"Wrong number of arguments for function %s", funcall->id.c_str());
 	return new ast_int_type();
 }
 
@@ -741,7 +733,8 @@ for (unsigned int i=0; i<funcall->arguments.size(); i++)
 	delete argtype;
 }
 
-ast_type *ret_type = replace_types(funcall->position, associations, funtype->return_type);
+ast_type *ret_type = replace_types(funcall->position, 
+	associations, funtype->return_type);
 cleanup_associations(associations);
 expression->type = (ast_type*)ret_type->copy();
 return ret_type;
@@ -936,7 +929,8 @@ if (!unify(vardecl->type, value_type))
 
 delete value_type;
 
-add_variable(vardecl->position, vardecl->id, new variable_definition((ast_type*)vardecl->type->copy()));
+add_variable(vardecl->position, vardecl->id, 
+	new variable_definition((ast_type*)vardecl->type->copy()));
 @
 
 \subsection{Assignment}
@@ -971,7 +965,8 @@ ast_statement_if *ifstat = (ast_statement_if*)statement;
 ast_type *cond_type = typecheck_expression(ifstat->condition);
 if (typeid(*cond_type) != typeid(ast_bool_type))
 {
-	typecheck_error(ifstat->position, "Condition in if statement should give boolean value.");
+	typecheck_error(ifstat->position, 
+		"Condition in if statement should give boolean value.");
 }
 delete cond_type;
 
@@ -988,7 +983,8 @@ ast_statement_while *whilestat = (ast_statement_while*)statement;
 ast_type *cond_type = typecheck_expression(whilestat->condition);
 if (typeid(*cond_type) != typeid(ast_bool_type))
 {
-	typecheck_error(whilestat->position, "Condition in while statement should give boolean value.");
+	typecheck_error(whilestat->position, 
+		"Condition in while statement should give boolean value.");
 }
 delete cond_type;
 
@@ -1016,13 +1012,17 @@ ast_type *expression_type = NULL;
 if (retstat->value != NULL)
 	expression_type = typecheck_expression(retstat->value);
 
-if (typeid(*current_return_type) == typeid(ast_void_type) && expression_type != NULL)
+if (typeid(*current_return_type) == typeid(ast_void_type) 
+	&& expression_type != NULL)
 {
-	typecheck_error(retstat->position, "return statement with value is not allowed in void function");
+	typecheck_error(retstat->position, 
+		"return statement with value is not allowed in void function");
 }
-else if (typeid(*current_return_type) != typeid(ast_void_type) && expression_type == NULL)
+else if (typeid(*current_return_type) != typeid(ast_void_type) 
+	&& expression_type == NULL)
 {
-	typecheck_error(retstat->position, "return statement without value in non-void function");
+	typecheck_error(retstat->position, 
+		"return statement without value in non-void function");
 }
 else if (typeid(*current_return_type) != typeid(ast_void_type))
 {
@@ -1058,17 +1058,21 @@ void typecheck_program(ast_program *program)
 			funarg->type = replace_builtin(funarg->type);
 			if (contains_void(funarg->type))
 			{
-				typecheck_error(funarg->position, "Argument types cannot contain void parts");
+				typecheck_error(funarg->position, 
+					"Argument types cannot contain void parts");
 			}
 			argTypes.push_back((ast_type*)funarg->type->copy());
 		}
 		
 		fundecl->type = replace_builtin(fundecl->type);
-		if (typeid(*fundecl->type) != typeid(ast_void_type) && contains_void(fundecl->type))
+		if (typeid(*fundecl->type) != typeid(ast_void_type) 
+			&& contains_void(fundecl->type))
 		{
-			typecheck_error(fundecl->position, "Void is only allowed as full return type, not as part of it.");
+			typecheck_error(fundecl->position, 
+				"Void is only allowed as full return type, not as part of it.");
 		}
-		add_function(fundecl->position, fundecl->name, new function_definition((ast_type*)fundecl->type->copy(), argTypes));
+		add_function(fundecl->position, fundecl->name, 
+			new function_definition((ast_type*)fundecl->type->copy(), argTypes));
 	}
 	
 	for (auto fundecl : program->functions)
@@ -1077,7 +1081,8 @@ void typecheck_program(ast_program *program)
 		set_return_type((ast_type*)fundecl->type->copy());
 		for (auto funarg : fundecl->args)
 		{
-			add_variable(funarg->position, funarg->name, new variable_definition((ast_type*)funarg->type->copy()));
+			add_variable(funarg->position, funarg->name,
+				new variable_definition((ast_type*)funarg->type->copy()));
 		}
 		typecheck_statement(fundecl->body);
 		clear_return_type();
@@ -1130,11 +1135,6 @@ void typecheck_fatal(source_position pos, const char *message, ...)
 #include <map>
 #include <string>
 
-<<replace builtin types header>>
-<<match types header>>
-<<replace matched types header>>
-<<cleanup associations header>>
-<<typecheck expression header>>
 <<typecheck program header>>
 #endif
 @
