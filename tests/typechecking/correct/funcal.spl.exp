@@ -1,0 +1,14 @@
+Int sqr(Int x) {
+	return (x/*Int*/*x/*Int*/)/*Int*/;
+}
+Int sqrprod(Int x,Int y) {
+	sqrprod(x/*Int*/, y/*Int*/)/*Int*/;
+	return (sqr(x/*Int*/)/*Int*/*sqr(y/*Int*/)/*Int*/)/*Int*/;
+}
+Int emptycall() {
+	emptycall()/*Int*/;
+	return emptycall()/*Int*/;
+}
+Int main(Int a,Int b) {
+	return sqrprod(a/*Int*/, b/*Int*/)/*Int*/;
+}

@@ -1,0 +1,12 @@
+Bool a(t b) {
+	Bool b = True/*Bool*/;
+	return b/*Bool*/;
+}
+Bool b(t c) {
+	t d = c/*t*/;
+	{
+		Bool d = True/*Bool*/;
+		return d/*Bool*/;
+	}
+	return (d/*t*/==c/*t*/)/*Bool*/;
+}

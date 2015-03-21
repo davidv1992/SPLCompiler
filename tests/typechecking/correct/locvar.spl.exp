@@ -1,0 +1,13 @@
+Int f(Int a) {
+	Int b = a/*Int*/;
+	return b/*Int*/;
+}
+Bool g(Int a,Int b) {
+	Int c = a/*Int*/;
+	Int d = b/*Int*/;
+	return (c/*Int*/<d/*Int*/)/*Bool*/;
+}
+Void h(Int a,Int b) {
+	Int e = 1/*Int*/;
+	return;
+}

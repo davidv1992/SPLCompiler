@@ -1,0 +1,51 @@
+Int main(Int a,Int b) {
+	return (a/*Int*/+b/*Int*/)/*Int*/;
+}
+Int sub(Int a,Int b) {
+	return (a/*Int*/-b/*Int*/)/*Int*/;
+}
+Int mul(Int a,Int b) {
+	return (a/*Int*/*b/*Int*/)/*Int*/;
+}
+Int div(Int a,Int b) {
+	return (a/*Int*//b/*Int*/)/*Int*/;
+}
+Char cadd(Char a,Char b) {
+	return (a/*Char*/+b/*Char*/)/*Char*/;
+}
+Char csub(Char a,Char b) {
+	return (a/*Char*/-b/*Char*/)/*Char*/;
+}
+Bool eq(t a,t b) {
+	return (a/*t*/==b/*t*/)/*Bool*/;
+}
+Bool sm(t a,t b) {
+	return (a/*t*/<b/*t*/)/*Bool*/;
+}
+Bool gt(t a,t b) {
+	return (a/*t*/>b/*t*/)/*Bool*/;
+}
+Bool se(t a,t b) {
+	return (a/*t*/<=b/*t*/)/*Bool*/;
+}
+Bool ge(t a,t b) {
+	return (a/*t*/>=b/*t*/)/*Bool*/;
+}
+Bool ne(t a,t b) {
+	return (a/*t*/!=b/*t*/)/*Bool*/;
+}
+[t] col(t a,[t] b) {
+	return (a/*t*/:b/*[t]*/)/*[t]*/;
+}
+Bool and(Bool a,Bool b) {
+	return (a/*Bool*/&&b/*Bool*/)/*Bool*/;
+}
+Bool or(Bool a,Bool b) {
+	return (a/*Bool*/||b/*Bool*/)/*Bool*/;
+}
+Bool not(Bool a) {
+	return (!a/*Bool*/)/*Bool*/;
+}
+Int neg(Int a) {
+	return (-a/*Int*/)/*Int*/;
+}

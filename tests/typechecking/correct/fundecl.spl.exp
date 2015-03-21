@@ -1,0 +1,15 @@
+Int main() {
+	return 1/*Int*/;
+}
+t id(t a) {
+	return a/*t*/;
+}
+Bool k(t a,t b,t c) {
+	return ((a/*t*/<b/*t*/)/*Bool*/&&(b/*t*/<c/*t*/)/*Bool*/)/*Bool*/;
+}
+Int f(Int a,t b,Char c) {
+	return 1/*Int*/;
+}
+Void g() {
+	return;
+}

@@ -1,0 +1,15 @@
+Bool a(t b)
+{
+	Bool b = True;
+	return b;
+}
+
+Bool b(t c)
+{
+	t d = c;
+	{
+		Bool d = True;
+		return d;
+	}
+	return d == c;
+}

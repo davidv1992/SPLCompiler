@@ -1,0 +1,3 @@
+Int main() {
+	print((([]/*[Unknown]*/,(1/*Int*/:[]/*[Unknown]*/)/*[Int]*/)/*([Unknown],[Int])*/:((('a'/*Char*/:[]/*[Unknown]*/)/*[Char]*/,[]/*[Unknown]*/)/*([Char],[Unknown])*/:[]/*[Unknown]*/)/*[([Char],[Unknown])]*/)/*[([Char],[Int])]*/)/*Void*/;
+}

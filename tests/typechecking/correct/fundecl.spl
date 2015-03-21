@@ -6,7 +6,7 @@ t id(t a) {
 	return a;
 }
 
-Bool id(t a, t b, t c) {
+Bool k(t a, t b, t c) {
 	return a < b && b < c;
 }
 

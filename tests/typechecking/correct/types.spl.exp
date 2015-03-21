@@ -1,0 +1,7 @@
+Int a = 0/*Int*/;
+[Int] b = []/*[Unknown]*/;
+(Int,Bool) c = (0/*Int*/,False/*Bool*/)/*(Int,Bool)*/;
+Char d = 'a'/*Char*/;
+([(Int,Char)],Bool) e = (((1/*Int*/,'a'/*Char*/)/*(Int,Char)*/:[]/*[Unknown]*/)/*[(Int,Char)]*/,True/*Bool*/)/*([(Int,Char)],Bool)*/;
+(Int,(Int,Int)) f = (1/*Int*/,(2/*Int*/,3/*Int*/)/*(Int,Int)*/)/*(Int,(Int,Int))*/;
+[[Int]] g = ((1/*Int*/:[]/*[Unknown]*/)/*[Int]*/:([]/*[Unknown]*/:[]/*[Unknown]*/)/*[[Unknown]]*/)/*[[Int]]*/;

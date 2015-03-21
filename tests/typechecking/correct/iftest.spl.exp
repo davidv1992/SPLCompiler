@@ -1,0 +1,43 @@
+Int main(Int a) {
+	Int b = 0/*Int*/;
+	Int c = 1/*Int*/;
+	if ((a/*Int*/<0/*Int*/)/*Bool*/) {
+		b/*Int*/ = (a/*Int*/+5/*Int*/)/*Int*/;
+		c/*Int*/ = (2/*Int*/*b/*Int*/)/*Int*/;
+	}
+	else {
+		b/*Int*/ = (a/*Int*/-5/*Int*/)/*Int*/;
+		c/*Int*/ = (3/*Int*/*b/*Int*/)/*Int*/;
+	}
+	return c/*Int*/;
+}
+Int abs(Int a) {
+	if ((a/*Int*/<0/*Int*/)/*Bool*/) {
+		a/*Int*/ = (-a/*Int*/)/*Int*/;
+	}
+	return a/*Int*/;
+}
+Int g(Int a,Int b) {
+	if ((a/*Int*/<b/*Int*/)/*Bool*/) {
+		return 1/*Int*/;
+	}
+	else {
+		return 0/*Int*/;
+	}
+}
+Int h(Int a,Int b) {
+	if ((a/*Int*/<b/*Int*/)/*Bool*/) {
+		return 1/*Int*/;
+	}
+	else {
+		return 0/*Int*/;
+	}
+}
+Int i(Int a,Int b) {
+	if ((a/*Int*/<b/*Int*/)/*Bool*/) {
+		return 1/*Int*/;
+	}
+	else {
+		return 0/*Int*/;
+	}
+}

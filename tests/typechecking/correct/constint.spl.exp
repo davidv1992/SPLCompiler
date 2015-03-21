@@ -1,0 +1,11 @@
+Int main() {
+	Int a = 10/*Int*/;
+	Int b = 12345689/*Int*/;
+	Int c = 152438/*Int*/;
+	Int d = 9037256/*Int*/;
+	Int e = 1/*Int*/;
+	Int f = (-5/*Int*/)/*Int*/;
+	Int g = (-14293/*Int*/)/*Int*/;
+	Int h = (-528739/*Int*/)/*Int*/;
+	return 1/*Int*/;
+}

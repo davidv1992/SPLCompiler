@@ -1,0 +1,8 @@
+Int main()
+{
+	(Int, Int) tuple = (1,2);
+	[Int] list = 1:2:[];
+	Int iconst = 5;
+	
+	return tuple.hd + list.snd + iconst.bla;
+}

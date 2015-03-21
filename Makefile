@@ -4,7 +4,7 @@
 BASH := /bin/bash
 CXXFLAGS := -I. -g -Wall -Wextra -Wno-unused-parameter -Wno-unused-variable -Werror -std=c++11
 
-test: test/tokentest test/parsetest
+test: test/tokentest test/parsetest test/typechecktest
 	@$(BASH) -c "echo -e '\E[32mAll tests passed\E[0m'"
 
 test/tokentest: testprogs/tokentest testprogs/tokencorrect.sh testprogs/tokenfail.sh
@@ -15,6 +15,10 @@ test/parsetest: testprogs/parsetest testprogs/parsecorrect.sh testprogs/parsefai
 	$(BASH) ./testprogs/parsecorrect.sh
 	$(BASH) ./testprogs/parsefail.sh
 	$(BASH) ./testprogs/parsewarn.sh
+
+test/typechecktest: testprogs/typechecktest testprogs/typecheckcorrect.sh testprogs/typecheckfail.sh
+	$(BASH) ./testprogs/typecheckcorrect.sh
+	$(BASH) ./testprogs/typecheckfail.sh
 
 limittest: limittest/comment limittest/bracket
 	@$(BASH) -c "echo -e '\E[32mAll tests passed\E[0m'"
@@ -106,6 +110,12 @@ testprogs/statementparsetest.o: testprogs/statementparsetest.cpp token.h parser.
 testprogs/statementparsetest.cpp: testprogs/statementparsetest.nw
 	notangle -L -Rstatementparsetest.cpp testprogs/statementparsetest.nw | cpif testprogs/statementparsetest.cpp
 
+testprogs/typechecktest: testprogs/typechecktest.o token.o parser.o ast.o error.o typecheck.o
+	g++ $(CXXFLAGS) -o testprogs/typechecktest testprogs/typechecktest.o token.o parser.o ast.o error.o typecheck.o
+testprogs/typechecktest.o: testprogs/typechecktest.cpp token.h parser.h ast.h position.h typecheck.h
+testprogs/typechecktest.cpp: testprogs/typechecktest.nw
+	notangle -L -Rtypechecktest.cpp testprogs/typechecktest.nw | cpif testprogs/typechecktest.cpp
+
 testprogs/parsecorrect.sh: testprogs/parsetest.nw
 	notangle -L -Rparsecorrect.sh testprogs/parsetest.nw > testprogs/parsecorrect.sh
 	chmod +x testprogs/parsecorrect.sh
@@ -126,11 +136,13 @@ testprogs/tokenfail.sh : testprogs/tokentest.nw
 	notangle -L -Rtokenfail.sh testprogs/tokentest.nw > testprogs/tokenfail.sh
 	chmod +x testprogs/tokenfail.sh
 
-testprogs/typechecktest: testprogs/typechecktest.o token.o parser.o ast.o error.o typecheck.o
-	g++ $(CXXFLAGS) -o testprogs/typechecktest testprogs/typechecktest.o token.o parser.o ast.o error.o typecheck.o
-testprogs/typechecktest.o: testprogs/typechecktest.cpp token.h parser.h ast.h position.h typecheck.h
-testprogs/typechecktest.cpp: testprogs/typechecktest.nw
-	notangle -L -Rtypechecktest.cpp testprogs/typechecktest.nw | cpif testprogs/typechecktest.cpp
+testprogs/typecheckcorrect.sh: testprogs/typechecktest.nw
+	notangle -L -Rtypecheckcorrect.sh testprogs/typechecktest.nw > testprogs/typecheckcorrect.sh
+	chmod +x testprogs/typecheckcorrect.sh
+
+testprogs/typecheckfail.sh: testprogs/typechecktest.nw
+	notangle -L -Rtypecheckfail.sh testprogs/typechecktest.nw > testprogs/typecheckfail.sh
+	chmod +x testprogs/typecheckfail.sh
 
 testprogs/commentgen: testprogs/commentgen.cpp
 testprogs/commentgen.cpp: testprogs/stresstest.nw
@@ -157,6 +169,7 @@ clean:
 	rm -f testprogs/statementparsetest.cpp testprogs/statementparsetest.o testprogs/statementparsetest
 	rm -f testprogs/typechecktest.cpp testprogs/typechecktest.o testprogs/typechecktest
 	rm -f testprogs/parsecorrect.sh testprogs/parsefail.sh testprogs/parsewarn.sh
+	rm -f testprogs/typecheckcorrect.sh testprogs/typecheckfail.sh
 	rm -f testprogs/tokencorrect.sh testprogs/tokenfail.sh
 	rm -f testprogs/commentgen testprogs/commentgen.cpp
 	rm -f testprogs/bracketgen testprogs/bracketgen.cpp

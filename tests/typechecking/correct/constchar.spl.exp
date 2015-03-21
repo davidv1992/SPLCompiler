@@ -1,0 +1,10 @@
+Int main() {
+	Char a = '''/*Char*/;
+	Char b = 'b'/*Char*/;
+	Char c = 'A'/*Char*/;
+	Char d = '*'/*Char*/;
+	Char e = '/'/*Char*/;
+	Char f = '\'/*Char*/;
+	Char g = '&'/*Char*/;
+	return 1/*Int*/;
+}

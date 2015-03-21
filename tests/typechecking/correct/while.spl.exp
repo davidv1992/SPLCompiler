@@ -1,0 +1,14 @@
+Int main(Int a) {
+	Int b = 0/*Int*/;
+	while ((a/*Int*/>0/*Int*/)/*Bool*/) {
+		a/*Int*/ = (a/*Int*/-1/*Int*/)/*Int*/;
+		b/*Int*/ = (b/*Int*/+1/*Int*/)/*Int*/;
+	}
+	return b/*Int*/;
+}
+Int f(Int g) {
+	while ((g/*Int*/>0/*Int*/)/*Bool*/) {
+		g/*Int*/ = (g/*Int*/-3/*Int*/)/*Int*/;
+	}
+	return g/*Int*/;
+}

@@ -1,0 +1,4 @@
+Int main() {
+	[Int] a = []/*[Unknown]*/;
+	return 1/*Int*/;
+}

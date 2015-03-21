@@ -1,0 +1,93 @@
+Int facR(Int n) {
+	if ((n/*Int*/<2/*Int*/)/*Bool*/) {
+		return 1/*Int*/;
+	}
+	else {
+		return (n/*Int*/*facR((n/*Int*/-1/*Int*/)/*Int*/)/*Int*/)/*Int*/;
+	}
+}
+Int facI(Int n) {
+	Int r = 1/*Int*/;
+	while ((n/*Int*/>1/*Int*/)/*Bool*/) {
+		r/*Int*/ = (r/*Int*/*n/*Int*/)/*Int*/;
+		n/*Int*/ = (n/*Int*/-1/*Int*/)/*Int*/;
+	}
+	return r/*Int*/;
+}
+Void main() {
+	Int n = 0/*Int*/;
+	Int facN = 1/*Int*/;
+	Bool ok = True/*Bool*/;
+	while ((n/*Int*/<20/*Int*/)/*Bool*/) {
+		facN/*Int*/ = facR(n/*Int*/)/*Int*/;
+		if (((facN/*Int*/!=facI(n/*Int*/)/*Int*/)/*Bool*/||(facN/*Int*/!=facL(n/*Int*/)/*Int*/)/*Bool*/)/*Bool*/) {
+			print((n/*Int*/:(facN/*Int*/:(facI(n/*Int*/)/*Int*/:(facL(n/*Int*/)/*Int*/:[]/*[Unknown]*/)/*[Int]*/)/*[Int]*/)/*[Int]*/)/*[Int]*/)/*Void*/;
+			ok/*Bool*/ = False/*Bool*/;
+		}
+		n/*Int*/ = (n/*Int*/+1/*Int*/)/*Int*/;
+	}
+	print(ok/*Bool*/)/*Void*/;
+}
+Int facL(Int n) {
+	return product(fromTo(1/*Int*/, n/*Int*/)/*[Int]*/)/*Int*/;
+}
+Int product([Int] list) {
+	if (isEmpty(list/*[Int]*/)/*Bool*/) {
+		return 1/*Int*/;
+	}
+	else {
+		return (list/*[Int]*/.hd/*Int*/*product(list/*[Int]*/.tl/*[Int]*/)/*Int*/)/*Int*/;
+	}
+}
+[Int] fromTo(Int from,Int to) {
+	if ((from/*Int*/<=to/*Int*/)/*Bool*/) {
+		return (from/*Int*/:fromTo((from/*Int*/+1/*Int*/)/*Int*/, to/*Int*/)/*[Int]*/)/*[Int]*/;
+	}
+	else {
+		return []/*[Unknown]*/;
+	}
+}
+[t] reverse([t] list) {
+	[t] accu = []/*[Unknown]*/;
+	while ((!isEmpty(list/*[t]*/)/*Bool*/)/*Bool*/) {
+		accu/*[t]*/ = (list/*[t]*/.hd/*t*/:accu/*[t]*/)/*[t]*/;
+		list/*[t]*/ = list/*[t]*/.tl/*[t]*/;
+	}
+	return accu/*[t]*/;
+}
+Int abs(Int n) {
+	if ((n/*Int*/<0/*Int*/)/*Bool*/) {
+		return (-n/*Int*/)/*Int*/;
+	}
+	else {
+		return n/*Int*/;
+	}
+}
+(b,a) swapCopy((a,b) pair) {
+	return (pair/*(a,b)*/.snd/*b*/,pair/*(a,b)*/.fst/*a*/)/*(b,a)*/;
+}
+(a,a) swap((a,a) tuple) {
+	a tmp = tuple/*(a,a)*/.fst/*a*/;
+	tuple/*(a,a)*/.fst/*a*/ = tuple/*(a,a)*/.snd/*a*/;
+	tuple/*(a,a)*/.snd/*a*/ = tmp/*a*/;
+	return tuple/*(a,a)*/;
+}
+[t] append([t] l1,[t] l2) {
+	if (isEmpty(l1/*[t]*/)/*Bool*/) {
+		return l2/*[t]*/;
+	}
+	else {
+		l1/*[t]*/.tl/*[t]*/ = append(l1/*[t]*/.tl/*[t]*/, l2/*[t]*/)/*[t]*/;
+		return l1/*[t]*/;
+	}
+}
+[Int] squareOddNumbers([Int] list) {
+	while (((!isEmpty(list/*[Int]*/)/*Bool*/)/*Bool*/&&((list/*[Int]*/.hd/*Int*/%2/*Int*/)/*Int*/==0/*Int*/)/*Bool*/)/*Bool*/) {
+		list/*[Int]*/ = list/*[Int]*/.tl/*[Int]*/;
+	}
+	if ((!isEmpty(list/*[Int]*/)/*Bool*/)/*Bool*/) {
+		list/*[Int]*/.hd/*Int*/ = (list/*[Int]*/.hd/*Int*/*list/*[Int]*/.hd/*Int*/)/*Int*/;
+		list/*[Int]*/.tl/*[Int]*/ = squareOddNumbers(list/*[Int]*/.tl/*[Int]*/)/*[Int]*/;
+	}
+	return list/*[Int]*/;
+}

@@ -1,0 +1,9 @@
+Int main((Int,(Int,Int)) a) {
+	return a/*(Int,(Int,Int))*/.snd/*(Int,Int)*/.fst/*Int*/;
+}
+t first((t,b) a) {
+	return a/*(t,b)*/.fst/*t*/;
+}
+t second((b,t) a) {
+	return a/*(b,t)*/.snd/*t*/;
+}

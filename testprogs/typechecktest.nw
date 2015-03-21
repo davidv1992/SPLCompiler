@@ -29,3 +29,97 @@ int main(int argc, char **argv)
 	return 0;
 }
 @
+
+\subsection{Test correct}
+
+This test script handles the testing of the behaviour of the typechecker on correct input, and checks whether it produces the expected output.
+<<typecheckcorrect.sh>>=
+#!/bin/bash
+
+PASSES=0
+FAILS=0
+
+for SPL_FILE in $(ls tests/typechecking/correct/*.spl)
+do
+	valgrind --leak-check=full --error-exitcode=1 --quiet ./testprogs/typechecktest $SPL_FILE > testTmp.txt
+	if [ $? -ne 0 ]
+	then
+		echo Failure in testcase $SPL_FILE
+		FAILS=$((FAILS+1))
+	else
+		diff -q testTmp.txt $SPL_FILE.exp
+		if [ $? -ne 0 ]
+		then
+			echo Failure in testcase $SPL_FILE
+			FAILS=$((FAILS+1))
+		else
+			PASSES=$((PASSES+1))
+		fi
+	fi
+	
+	rm -f testTmp.txt
+done
+
+echo Results for typechecking/correct suite:
+if [ $FAILS -eq 0 ]
+then
+	echo -ne '\E[32m'
+else
+	echo -ne '\E[31m'
+fi
+echo PASSED: $PASSES
+echo FAILED: $FAILS
+echo -ne '\E[0m'
+
+if [ $FAILS -ne 0 ]
+then
+	exit 1
+fi
+@
+
+\subsection{Test incorrect}
+
+This test script handles the testing fo the behaviour of the typechecker on incorrect input, and verifies that it produces some error message.
+<<typecheckfail.sh>>=
+#!/bin/bash
+
+PASSES=0
+FAILS=0
+
+for SPL_FILE in $(ls tests/typechecking/fail/*.spl)
+do
+	valgrind --leak-check=full --error-exitcode=1 --quiet ./testprogs/typechecktest \
+		$SPL_FILE 2> testTmp.txt > /dev/null
+	if [ $? -ne 0 ]
+	then
+		echo Failure in testcase $SPL_FILE
+		FAILS=$((FAILS+1))
+	else
+		if [ -s testTmp.txt ]
+		then
+			PASSES=$((PASSES+1))
+		else
+			echo Failure in testcase $SPL_FILE
+			FAILS=$((FAILS+1))
+		fi
+	fi
+	
+	rm -f testTmp.txt
+done
+
+echo Results for typechecking/fail suite:
+if [ $FAILS -eq 0 ]
+then
+	echo -ne '\E[32m'
+else
+	echo -ne '\E[31m'
+fi
+echo PASSED: $PASSES
+echo FAILED: $FAILS
+echo -ne '\E[0m'
+
+if [ $FAILS -ne 0 ]
+then
+	exit 1
+fi
+@

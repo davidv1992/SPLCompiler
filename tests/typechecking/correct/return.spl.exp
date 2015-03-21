@@ -1,0 +1,9 @@
+Void main() {
+	return;
+}
+Int f() {
+	return 1/*Int*/;
+}
+Int g(Int a) {
+	return (((a/*Int*/+(a/*Int*/*a/*Int*/)/*Int*/)/*Int*/-((a/*Int*/+a/*Int*/)/*Int*/*a/*Int*/)/*Int*/)/*Int*/+f()/*Int*/)/*Int*/;
+}

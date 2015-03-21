@@ -55,8 +55,13 @@ void leave_scope()
 
 Adding a variable only happens to the current scope:
 <<add definition>>=
-void add_variable(string name, variable_definition *def)
+void add_variable(source_position position, string name, variable_definition *def)
 {
+	if (scopeStack.back().count(name) != 0)
+	{
+		typecheck_warning(position, "Definition masks earlier of %s", name.c_str());
+		delete scopeStack.back()[name];
+	}
 	scopeStack.back()[name] = def;
 }
 @
@@ -80,8 +85,13 @@ map<string, function_definition*> functionTable;
 @
 
 <<manage functions>>=
-void add_function(string name, function_definition *def)
+void add_function(source_position position, string name, function_definition *def)
 {
+	if (functionTable.count(name) != 0)
+	{
+		typecheck_warning(position, "Definition masks earlier of %s", name.c_str());
+		delete functionTable[name];
+	}
 	functionTable[name] = def;
 }
 function_definition *lookup_function(string name)
@@ -102,13 +112,13 @@ void initialize_tables()
 	pos.offset = 0;
 	enter_scope(); //enter top-level scope
 	
-	add_function("print", new function_definition(
+	add_function(pos, "print", new function_definition(
 		new ast_void_type(),
 		vector<ast_type*>(1, new ast_simple_type(pos, "t"))));
-	add_function("read", new function_definition(
+	add_function(pos, "read", new function_definition(
 		new ast_char_type(),
 		vector<ast_type*>(0)));
-	add_function("isEmpty", new function_definition(
+	add_function(pos, "isEmpty", new function_definition(
 		new ast_bool_type(),
 		vector<ast_type*>(1, new ast_list_type(pos, new ast_simple_type(pos, "t")))));
 }
@@ -926,7 +936,7 @@ if (!unify(vardecl->type, value_type))
 
 delete value_type;
 
-add_variable(vardecl->id, new variable_definition((ast_type*)vardecl->type->copy()));
+add_variable(vardecl->position, vardecl->id, new variable_definition((ast_type*)vardecl->type->copy()));
 @
 
 \subsection{Assignment}
@@ -1058,7 +1068,7 @@ void typecheck_program(ast_program *program)
 		{
 			typecheck_error(fundecl->position, "Void is only allowed as full return type, not as part of it.");
 		}
-		add_function(fundecl->name, new function_definition((ast_type*)fundecl->type->copy(), argTypes));
+		add_function(fundecl->position, fundecl->name, new function_definition((ast_type*)fundecl->type->copy(), argTypes));
 	}
 	
 	for (auto fundecl : program->functions)
@@ -1067,7 +1077,7 @@ void typecheck_program(ast_program *program)
 		set_return_type((ast_type*)fundecl->type->copy());
 		for (auto funarg : fundecl->args)
 		{
-			add_variable(funarg->name, new variable_definition((ast_type*)funarg->type->copy()));
+			add_variable(funarg->position, funarg->name, new variable_definition((ast_type*)funarg->type->copy()));
 		}
 		typecheck_statement(fundecl->body);
 		clear_return_type();
