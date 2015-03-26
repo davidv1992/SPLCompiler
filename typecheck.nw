@@ -1,5 +1,98 @@
 \chapter{Type checking}
 
+\section{Type checking rules}
+
+\subsection{Rules for expressions}
+The types of expressions are determined according to the following rules. If there is no rule for a situation it is a type error, and handled in the compiler accordingly:
+
+We start with the rule for constant expressions:
+\begin{mathpar}
+\inferrule{\sigma = \text{boolconst}}{\Gamma \vdash \sigma : \text{Bool}} \and
+\inferrule{\sigma = \text{intconst}}{\Gamma \vdash \sigma : \text{Int}} \and
+\inferrule{\sigma = \text{charconst}}{\Gamma \vdash \sigma : \text{Char}}
+\end{mathpar}
+
+Binary operators use one rule with a table of operators:
+\begin{mathpar}
+\inferrule{\otimes:\sigma_1\rightarrow \sigma_2 \rightarrow \tau \\ \Gamma \vdash e_1 : \sigma_1 \\ \Gamma \vdash e_2 : \sigma_2}{\Gamma \vdash e_1 \otimes e_2 : \tau}
+\end{mathpar}
+
+\begin{tabular}{l|l}
+Operator(s) & Type\\
+\hline
+\term{+} \term{-} & $\text{Char} \rightarrow \text{Char} \rightarrow \text{Char}$\\
+\term{+} \term{-} & $\text{Int} \rightarrow \text{Int} \rightarrow \text{Int}$\\
+\term{*} \term{/} \term{\%} & $\text{Int} \rightarrow \text{Int} \rightarrow \text{Int}$\\
+\term{==} \term{!=} \term{\textgreater} \term{\textgreater =} \term{\textless} \term{\textless =} & $\alpha \rightarrow \alpha \rightarrow \text{Bool}$\\
+\term{\&\&} \term{\bor\bor} & $\text{Bool} \rightarrow \text{Bool} \rightarrow \text{Bool}$\\
+\term{:} & $\alpha \rightarrow [\alpha] \rightarrow [\alpha]$\\
+\end{tabular}
+
+Unary operators are similar, but with only one argument
+
+\begin{mathpar}
+\inferrule{\otimes:\sigma\rightarrow\tau \\ \Gamma \vdash e : \sigma}{\Gamma \vdash \otimes e : \tau}
+\end{mathpar}
+
+\begin{tabular}{l|l}
+Operator & Type\\
+\hline
+\term{!} & $\text{Bool} \rightarrow \text{Bool}$\\
+\term{-} & $\text{Int} \rightarrow \text{Int}$\\
+\end{tabular}
+
+Typechecking rules for field access are written for more general forms than the expressions we apply them to, but are otherwise relatively simple:
+\begin{mathpar}
+\inferrule{\Gamma \vdash e : [\sigma]}{\Gamma \vdash e.\uterm{hd} : \sigma} \and
+\inferrule{\Gamma \vdash e : [\sigma]}{\Gamma \vdash e.\uterm{tl} : [\sigma]} \and
+\inferrule{\Gamma \vdash e : (\sigma_1,\sigma_2)}{\Gamma \vdash e.\uterm{fst} : \sigma_1} \and
+\inferrule{\Gamma \vdash e : (\sigma_1,\sigma_2)}{\Gamma \vdash e.\uterm{snd} : \sigma_2}
+\end{mathpar}
+
+Functions calls can be polymorphic, so we need to do substitution
+\begin{mathpar}
+\inferrule{\Gamma \vdash f : \forall \alpha : \sigma_1 \rightarrow \ldots \rightarrow \sigma_n \rightarrow \tau \\
+\Gamma \vdash e_1 : \sigma_1[\alpha \leftarrow \chi] \\ \ldots \\ \Gamma \vdash e_n : \sigma_n[\alpha \leftarrow \chi]}{\Gamma \vdash f(e_1,\ldots,e_n) : \tau[\alpha \leftarrow \chi]}
+\end{mathpar}
+
+This leaves variable access and tuples:
+\begin{mathpar}
+\inferrule{(v : \sigma) \in \Gamma}{\Gamma \vdash v : \sigma} \and
+\inferrule{\Gamma \vdash e_1 : \sigma_1 \\ \Gamma \vdash e_2 : \sigma_2}{\Gamma \vdash (e_1,e_2) : (\sigma_1,\sigma_2)}
+\end{mathpar}
+
+\subsection{Rules for statements}
+
+Statements are different, they dont have a type themselves, but do impose requirements on expression subparts they contain and they might change the environment. I will present them here statement by statement, with the conditions they impose and any implications for the environment:
+
+\begin{tabular}{|l|}
+\hline
+Variable declaration: $\sigma v \uterm{=} e$\\
+Conditions: $\Gamma \vdash e : \sigma$\\
+Conclusions: $(v : \sigma) \in \Gamma$\\
+\hline
+Assignment: $l = e$\\
+Conditions: $\Gamma \vdash e : \sigma \wedge \Gamma \vdash l : \sigma$\\
+\hline
+If statement: $\text{if } (e) \text{ then } \ldots$\\
+Conditions: $\Gamma \vdash e : \text{Bool}$\\
+\hline
+While statement: $\text{while } (e) \ldots$\\
+Conditions: $\Gamma \vdash e : \text{Bool}$\\
+\hline
+Expression statement: $e$\\
+Conditions: $\Gamma \vdash e : \sigma$\\
+\hline
+Return statement: $\text{return } e$\\
+Conditions: $\Gamma \vdash e : \text{returntype}$\\
+\hline
+Function definition: $\tau \text{ } f (\sigma_1 v_1, \ldots \sigma_n v_n)$\\
+Conditions: None\\
+Conclusions: $(f : \forall \text{FV}(\tau, \sigma_1, \ldots, \sigma_n):\sigma_1 \rightarrow \ldots \rightarrow \sigma_n \rightarrow \tau) \in \Gamma, (v_i : \sigma_i) \in \Gamma$\\
+$\text{returntype} = \tau$\\
+\hline
+\end{tabular}
+
 \section{Symbol tables}
 
 One of the main things we need to do is keep symbol tables. Since we allow variable declarations as statements, we need some way to keep multiple scopes in check at once. This means we actually have a stack of symbol tables, providing type info on all variables and functions.
