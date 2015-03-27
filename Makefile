@@ -91,6 +91,9 @@ compiler: main.o token.o parser.o ast.o error.o typecheck.o irgeneration.o
 version.h:
 	echo \#define VERSION \"`git describe --abbrev=4 --dirty --always --tags`\" | cpif version.h
 
+settings.o: settings.cpp
+settings.cpp: settings.nw token.nw parser.nw typecheck.nw error.nw
+	notangle -L -Rsettings.cpp token.nw parser.nw typecheck.nw error.nw settings.nw | cpif settings.cpp
 settings.h: settings.nw token.nw parser.nw typecheck.nw error.nw
 	notangle -L -Rsettings.h token.nw parser.nw typecheck.nw error.nw settings.nw | cpif settings.h
 
@@ -106,38 +109,38 @@ code.pdf: code.tex compiler.bib
 	latexmk -pdf code.tex
 	latexmk -c
 
-testprogs/tokentest: testprogs/tokentest.o token.o error.o
-	g++ $(CXXFLAGS) -o testprogs/tokentest testprogs/tokentest.o token.o error.o
+testprogs/tokentest: testprogs/tokentest.o token.o error.o settings.o
+	g++ $(CXXFLAGS) -o testprogs/tokentest testprogs/tokentest.o token.o error.o settings.o
 testprogs/tokentest.o: testprogs/tokentest.cpp token.h position.h
 testprogs/tokentest.cpp: testprogs/tokentest.nw
 	notangle -L -Rtokentest.cpp testprogs/tokentest.nw | cpif testprogs/tokentest.cpp
 
-testprogs/parsetest: testprogs/parsetest.o token.o parser.o ast.o error.o
-	g++ $(CXXFLAGS) -o testprogs/parsetest testprogs/parsetest.o token.o parser.o ast.o error.o
+testprogs/parsetest: testprogs/parsetest.o token.o parser.o ast.o error.o settings.o
+	g++ $(CXXFLAGS) -o testprogs/parsetest testprogs/parsetest.o token.o parser.o ast.o error.o settings.o
 testprogs/parsetest.o: testprogs/parsetest.cpp token.h parser.h ast.h position.h
 testprogs/parsetest.cpp: testprogs/parsetest.nw
 	notangle -L -Rparsetest.cpp testprogs/parsetest.nw | cpif testprogs/parsetest.cpp
 
-testprogs/typeparsetest: testprogs/typeparsetest.o token.o parser.o ast.o error.o
-	g++ $(CXXFLAGS) -o testprogs/typeparsetest testprogs/typeparsetest.o token.o parser.o ast.o error.o
+testprogs/typeparsetest: testprogs/typeparsetest.o token.o parser.o ast.o error.o settings.o
+	g++ $(CXXFLAGS) -o testprogs/typeparsetest testprogs/typeparsetest.o token.o parser.o ast.o error.o settings.o
 testprogs/typeparsetest.o: testprogs/typeparsetest.cpp token.h parser.h ast.h position.h
 testprogs/typeparsetest.cpp: testprogs/typeparsetest.nw
 	notangle -L -Rtypeparsetest.cpp testprogs/typeparsetest.nw | cpif testprogs/typeparsetest.cpp
 
-testprogs/exprparsetest: testprogs/exprparsetest.o token.o parser.o ast.o error.o
-	g++ $(CXXFLAGS) -o testprogs/exprparsetest testprogs/exprparsetest.o token.o parser.o ast.o error.o
+testprogs/exprparsetest: testprogs/exprparsetest.o token.o parser.o ast.o error.o settings.o
+	g++ $(CXXFLAGS) -o testprogs/exprparsetest testprogs/exprparsetest.o token.o parser.o ast.o error.o settings.o
 testprogs/exprparsetest.o: testprogs/exprparsetest.cpp token.h parser.h ast.h position.h
 testprogs/exprparsetest.cpp: testprogs/exprparsetest.nw
 	notangle -L -Rexprparsetest.cpp testprogs/exprparsetest.nw | cpif testprogs/exprparsetest.cpp
 
-testprogs/statementparsetest: testprogs/statementparsetest.o token.o parser.o ast.o error.o
-	g++ $(CXXFLAGS) -o testprogs/statementparsetest testprogs/statementparsetest.o token.o parser.o ast.o error.o
+testprogs/statementparsetest: testprogs/statementparsetest.o token.o parser.o ast.o error.o settings.o
+	g++ $(CXXFLAGS) -o testprogs/statementparsetest testprogs/statementparsetest.o token.o parser.o ast.o error.o settings.o
 testprogs/statementparsetest.o: testprogs/statementparsetest.cpp token.h parser.h ast.h position.h
 testprogs/statementparsetest.cpp: testprogs/statementparsetest.nw
 	notangle -L -Rstatementparsetest.cpp testprogs/statementparsetest.nw | cpif testprogs/statementparsetest.cpp
 
-testprogs/typechecktest: testprogs/typechecktest.o token.o parser.o ast.o error.o typecheck.o
-	g++ $(CXXFLAGS) -o testprogs/typechecktest testprogs/typechecktest.o token.o parser.o ast.o error.o typecheck.o
+testprogs/typechecktest: testprogs/typechecktest.o token.o parser.o ast.o error.o typecheck.o settings.o
+	g++ $(CXXFLAGS) -o testprogs/typechecktest testprogs/typechecktest.o token.o parser.o ast.o error.o typecheck.o settings.o
 testprogs/typechecktest.o: testprogs/typechecktest.cpp token.h parser.h ast.h position.h typecheck.h
 testprogs/typechecktest.cpp: testprogs/typechecktest.nw
 	notangle -L -Rtypechecktest.cpp testprogs/typechecktest.nw | cpif testprogs/typechecktest.cpp
@@ -226,6 +229,7 @@ clean:
 	rm -f testprogs/commentgen testprogs/commentgen.cpp
 	rm -f testprogs/bracketgen testprogs/bracketgen.cpp
 	rm -f testprogs/runtolim.sh
-	rm -f position.h version.h settings.h ir.h
+	rm -f settings.h settings.cpp settings.o
+	rm -f position.h version.h ir.h
 	rm -f code.tex code.pdf code.bbl
 	rm -f test.tex test.pdf

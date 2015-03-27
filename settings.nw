@@ -14,12 +14,18 @@ Calls to this macro (and only calls to this macro) are added to the special \tex
 \section{Temporary variable declarations}
 
 <<config variable declarations>>=
-#define COMPILER_SETTING(type, variable, default_value, flags) static type variable = default_value;
+#define COMPILER_SETTING(type, variable, default_value, flags) extern type variable;
 <<compiler settings>>
 #undef COMPILER_SETTING
 @
 
-\section{Header file}
+<<config variable definitions>>=
+#define COMPILER_SETTING(type, variable, default_value, flags) type variable = default_value;
+<<compiler settings>>
+#undef COMPILER_SETTING
+@
+
+\section{Header and source file}
 
 Generating the actual code:
 <<settings.h>>=
@@ -27,4 +33,8 @@ Generating the actual code:
 #define SETTINGS_H
 <<config variable declarations>>
 #endif
+@
+
+<<settings.cpp>>=
+<<config variable definitions>>
 @
