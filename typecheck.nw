@@ -1129,6 +1129,43 @@ if (expression_type != NULL)
 	delete expression_type;
 @
 
+\section{Return statements on all paths}
+
+One final condition is that a function that returns a value always returns a value. We check that simply by checking that every potentially possible control flow path has a return on it. This is not as horrible as it seems, as it just means that anything in the body of a while can be ignored, and an if is only relevant if both options always hit a return statement.
+
+<<check presence of returns>>=
+bool always_hits_return(ast_statement *stat)
+{
+	if (typeid(*stat) == typeid(ast_statement_block))
+	{
+		ast_statement_block *block = (ast_statement_block*)stat;
+		for (auto ptr : block->body)
+		{
+			if (always_hits_return(ptr))
+				return true;
+		}
+		return false;
+	}
+	else if (typeid(*stat) == typeid(ast_statement_return))
+	{
+		return true;
+	}
+	else if (typeid(*stat) == typeid(ast_statement_if))
+	{
+		ast_statement_if *ifstat = (ast_statement_if*)stat;
+		if (ifstat->false_statement == NULL)
+			return false;
+		else
+			return always_hits_return(ifstat->true_statement) &&
+				always_hits_return(ifstat->false_statement);
+	}
+	else
+	{
+		return false;
+	}
+}
+@
+
 \section{typecheck program}
 Typechecking programs is a three-stage process. First we handle the globals, thus making sure their value expressions contain no function calls. Next we make a first pass over the functions assuring that we can have recursion accross multiple functions, and then a second pass over the functions typechecking their bodies. Since this is the main interface to the rest of the compiler, we also handle the initialization and cleanup needs of the typechecking module here.
 <<typecheck program header>>=
@@ -1178,6 +1215,14 @@ void typecheck_program(ast_program *program)
 				new variable_definition((ast_type*)funarg->type->copy()));
 		}
 		typecheck_statement(fundecl->body);
+		
+		if (typeid(*fundecl->type) != typeid(ast_void_type)
+			&& !always_hits_return(fundecl->body))
+		{
+			typecheck_warning(fundecl->position,
+				"Function might not always return value.");
+		}
+		
 		clear_return_type();
 		leave_scope();
 	}
@@ -1267,5 +1312,6 @@ using namespace std;
 <<typecheck expression>>
 <<typecheck lvalue>>
 <<typecheck statement>>
+<<check presence of returns>>
 <<typecheck program>>
 @
