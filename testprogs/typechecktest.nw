@@ -123,3 +123,58 @@ then
 	exit 1
 fi
 @
+
+\subsection{Test warnings}
+
+This script handles the tests that should produce warnings:
+<<typecheckwarn.sh>>=
+#!/bin/bash
+
+PASSES=0
+FAILS=0
+
+for SPL_FILE in $(ls tests/typechecking/warning/*.spl)
+do
+	valgrind --leak-check=full --error-exitcode=1 --quiet ./testprogs/typechecktest \
+		$SPL_FILE > testTmp.txt 2> errorTmp.txt
+	if [ $? -ne 0 ]
+	then
+		echo Failure in testcase $SPL_FILE
+		FAILS=$((FAILS+1))
+	else
+		diff -q testTmp.txt $SPL_FILE.exp
+		if [ $? -ne 0 ]
+		then
+			echo Failure in testcase $SPL_FILE
+			FAILS=$((FAILS+1))
+		else
+			if [ -s errorTmp.txt ]
+			then
+				PASSES=$((PASSES+1))
+			else
+				echo Failure in testcase $SPL_FILE
+				FAILS=$((FAILS+1))
+			fi
+		fi
+	fi
+	
+	rm -f testTmp.txt
+	rm -f errorTmp.txt
+done
+
+echo Results for typechecking/warning suite:
+if [ $FAILS -eq 0 ]
+then
+	echo -ne '\E[32m'
+else
+	echo -ne '\E[31m'
+fi
+echo PASSED: $PASSES
+echo FAILED: $FAILS
+echo -ne '\E[0m'
+
+if [ $FAILS -ne 0 ]
+then
+	exit 1
+fi
+@

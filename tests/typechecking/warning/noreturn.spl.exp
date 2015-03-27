@@ -1,0 +1,3 @@
+Int main() {
+	Bool a = False/*Bool*/;
+}

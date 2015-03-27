@@ -16,9 +16,10 @@ test/parsetest: testprogs/parsetest testprogs/parsecorrect.sh testprogs/parsefai
 	$(BASH) ./testprogs/parsefail.sh
 	$(BASH) ./testprogs/parsewarn.sh
 
-test/typechecktest: testprogs/typechecktest testprogs/typecheckcorrect.sh testprogs/typecheckfail.sh
+test/typechecktest: testprogs/typechecktest testprogs/typecheckcorrect.sh testprogs/typecheckfail.sh testprogs/typecheckwarn.sh
 	$(BASH) ./testprogs/typecheckcorrect.sh
 	$(BASH) ./testprogs/typecheckfail.sh
+	$(BASH) ./testprogs/typecheckwarn.sh
 
 limittest: limittest/comment limittest/bracket
 	@$(BASH) -c "echo -e '\E[32mAll tests passed\E[0m'"
@@ -144,6 +145,10 @@ testprogs/typecheckfail.sh: testprogs/typechecktest.nw
 	notangle -L -Rtypecheckfail.sh testprogs/typechecktest.nw > testprogs/typecheckfail.sh
 	chmod +x testprogs/typecheckfail.sh
 
+testprogs/typecheckwarn.sh: testprogs/typechecktest.nw
+	notangle -L -Rtypecheckwarn.sh testprogs/typechecktest.nw > testprogs/typecheckwarn.sh
+	chmod +x testprogs/typecheckwarn.sh
+
 testprogs/commentgen: testprogs/commentgen.cpp
 testprogs/commentgen.cpp: testprogs/stresstest.nw
 	notangle -L -Rcommentgen.cpp testprogs/stresstest.nw | cpif testprogs/commentgen.cpp
@@ -169,7 +174,7 @@ clean:
 	rm -f testprogs/statementparsetest.cpp testprogs/statementparsetest.o testprogs/statementparsetest
 	rm -f testprogs/typechecktest.cpp testprogs/typechecktest.o testprogs/typechecktest
 	rm -f testprogs/parsecorrect.sh testprogs/parsefail.sh testprogs/parsewarn.sh
-	rm -f testprogs/typecheckcorrect.sh testprogs/typecheckfail.sh
+	rm -f testprogs/typecheckcorrect.sh testprogs/typecheckfail.sh testprogs/typecheckwarn.sh
 	rm -f testprogs/tokencorrect.sh testprogs/tokenfail.sh
 	rm -f testprogs/commentgen testprogs/commentgen.cpp
 	rm -f testprogs/bracketgen testprogs/bracketgen.cpp
