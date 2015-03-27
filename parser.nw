@@ -618,13 +618,17 @@ return new ast_statement_expression(new ast_expression_funcall(cur_token.positio
 	cur_token.id, args));
 @
 
-Variable declarations have two source:
+Variable declarations have two sources so get them both:
 <<parse rest of vardecls>>=
 case TOKEN_ROUNDBRACKET_LEFT:
 case TOKEN_SQUAREBRACKET_LEFT:
 	tok_unget(cur_token);
 	<<parse vardecl>>
 	break;
+@
+We have two modes regarding variable declarations, strict and non-strict. In strict mode we only allow them at the start of functions, but in non-strict mode they are allowed at all points in a function. This is controlled by the following setting:
+<<compiler settings>>=
+COMPILER_SETTING(bool, strict_vardecl, false, {})
 @
 <<parse vardecl>>=
 {

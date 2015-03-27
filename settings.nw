@@ -1,19 +1,22 @@
 \chapter{Settings}
 
-I'm planning to have some of the compiler behaviour, such as language extensions and warning behaviour, configurable with runtime flags. For now though, static boolean values in the header should do.
+\section{Setting datafield}
 
-\section{Strict variable declarations}
+Compiler settings are registered in the various parts of the compiler using the COMPILER\_SETTING macro. Calls to it have the following format:
+\begin{mathpar}
+\text{COMPILER\_SETTING} (\text{\emph{type}}, \text{\emph{variable}}, \text{\emph{default\_value}}, \text{\emph{flags}})
+\end{mathpar}
 
-The language spec allows variable declarations only at the start of a function. Arbitrary positioning of these is easy enough to do, and this flag disables that extension.
+Type and variable specify the type and variable name that provide the settings data to the rest of the compiler. The default value provides it's value when the settings are not yet read or when it is not given on the commandline. For the interpretation of the macro in this file, it is very important that a semicolon is NOT used to terminate the macro call.
+
+Calls to this macro (and only calls to this macro) are added to the special \textless\textless compiler settings\textgreater\textgreater\ environment. This environment is then included everywhere the list is needed and the macro calls preprocessed to the form needed there.
+
+\section{Temporary variable declarations}
+
 <<config variable declarations>>=
-static bool strict_vardecl = false;
-@
-
-\section{Errors before bailout}
-
-When handling errors, it is usefull to limit the ammount of errors we find acceptable, in case there is some unforseen situation that leads to looping in the recovery process. This needs a cutoff value, defined here:
-<<config variable declarations>>=
-static int error_limit = 100;
+#define COMPILER_SETTING(type, variable, default_value, flags) static type variable = default_value;
+<<compiler settings>>
+#undef COMPILER_SETTING
 @
 
 \section{Header file}

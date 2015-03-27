@@ -91,8 +91,8 @@ compiler: main.o token.o parser.o ast.o error.o typecheck.o irgeneration.o
 version.h:
 	echo \#define VERSION \"`git describe --abbrev=4 --dirty --always --tags`\" | cpif version.h
 
-settings.h: settings.nw
-	notangle -L -Rsettings.h settings.nw | cpif settings.h
+settings.h: settings.nw token.nw parser.nw typecheck.nw error.nw
+	notangle -L -Rsettings.h token.nw parser.nw typecheck.nw error.nw settings.nw | cpif settings.h
 
 test.tex: testprogs/testheader.nw testprogs/testtrailer.nw testprogs/tokentest.nw testprogs/parsetest.nw testprogs/exprparsetest.nw testprogs/typeparsetest.nw testprogs/statementparsetest.nw testprogs/stresstest.nw
 	noweave -t4 -delay testprogs/testheader.nw testprogs/tokentest.nw testprogs/parsetest.nw testprogs/typeparsetest.nw testprogs/exprparsetest.nw testprogs/statementparsetest.nw testprogs/stresstest.nw testprogs/testtrailer.nw | cpif test.tex
