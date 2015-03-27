@@ -1,0 +1,8 @@
+Int main()
+{
+	while (1)
+	{
+		Bool a = False;
+	}
+	return 1;
+}

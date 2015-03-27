@@ -1,0 +1,9 @@
+t id (t v)
+{
+	return v;
+}
+
+Int id (Int v)
+{
+	return v;
+}
