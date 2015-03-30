@@ -26,7 +26,7 @@ A suite with test input is provided in the tests/ directory tree. Running the
 
 Since the source is noweb, it can be turned into a pdf. This requires a latex 
  distribution to be available on the system that provides at the least the
- packages amsmath, noweb, geometry, textcomp, hyperref and longtable. Also the 
+ packages amsmath, mathpartir, noweb, geometry, textcomp, hyperref and longtable. Also the 
  tool latexmk needs to be available, it is used to manage the build process.
  
 The pdf of the main compiler code can be produced with
