@@ -72,7 +72,7 @@ public:
 	virtual void print()
 	{
 		printf("function %d -> %d\n", num_args, num_returns);
-		for (int i=0; i<blocks.size(); i++)
+		for (unsigned int i=0; i<blocks.size(); i++)
 		{
 			printf("L%d:\n", i);
 			for (auto stat : blocks[i])
