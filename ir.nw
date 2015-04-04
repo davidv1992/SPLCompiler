@@ -1,0 +1,949 @@
+\chapter{Intermediate representation}
+
+For ease of translation to other targets besides the SSM architecture, I made the decision to incorporate an intermediate representation in the compiler, instead of translating directly into SSM code. This IR is designed to be a bit higher level than the SSM architecture itself, and does not require explicit handling of stack frames and procedure entry, exit and calling. Instead it provides higher level views of these concepts with functions and temporaries for value storage.
+
+It has however explicit manipulations of memory for access to objects on the heap, and explicit non-polymorphic typeing of temporaries. But is untyped. Hence it is at least theoretically possible to typecheck the intermediate code, with the caveat that passing such a typechecking does not give complete protection from type mismatches. In fact, we can use the type system of c++ to do most of this checking for us, on the assumption that we dont do illegal typecastings (typecasting to a type not in the inheritance tree of the object).
+
+Furthermore, at this stage we make the somewhat limiting assumption that all of the defined types are of equal size, namely one memory word, and that memory addressing is per word. Deviations from this can be solved in the actual translation to machine code easily, and the same-size requirement allows us to define all conversion from the unknown type as reinterpret conversions.
+
+The design of this intermediate language is inspired by the intermediate representation presented in \cite{appel}. However, it has a cleaner seperation between expressions and statements, contains all the information necessary to simulate executing the program and has some form of typing.
+
+\section{Implementation outline}
+
+Just as for the AST, all IR classes derive from a single root class that provides the common interface for things such as printing.
+
+<<IR base>>=
+class ir_base
+{
+public:
+	virtual ~ir_base(){}
+	virtual void print()=0;
+	virtual ir_base *copy()=0;
+};
+@
+
+Furthermore, we need a way of keeping track of temporaries, and the statements and basic blocks of those in a function. This done in an overarching function object, that contains all the traces of a function, and a map of temporaries to their types, along with some information on the number of arguments and return values of the function.
+
+Temporaries are referenced by an integer ID (always $>= 0$), which are generated in sequence. The first identifiers are used for the functions arguments. Those directly following these are the functions return values, and the rest are used as general variables.
+
+The function object provides a way of creating new temporaries with a specified type through the add\_temp method. This automatically handles the allocation of identifiers for temporaries.
+
+<<IR function>>=
+class ir_function : public ir_base
+{
+public:
+	std::vector<std::vector<ir_statement*>> blocks;
+	std::vector<ir_type> temp_types;
+	int num_args;
+	int num_returns;
+	
+	ir_function(std::vector<ir_type> arguments, std::vector<ir_type> returns)
+	{
+		num_args = arguments.size();
+		num_returns = returns.size();
+		
+		temp_types = arguments;
+		temp_types.insert(temp_types.end(), returns.begin(), returns.end());
+	}
+	
+	ir_function(ir_function &f)
+	{
+		for (auto block : f.blocks)
+		{
+			blocks.push_back(std::vector<ir_statement*>(0));
+			for (auto stat : block)
+				blocks.back().push_back((ir_statement*)stat->copy());
+		}
+		
+		temp_types = f.temp_types;
+		num_args = f.num_args;
+		num_returns = f.num_returns;
+	}
+	
+	virtual ~ir_function()
+	{
+		for (auto block : blocks)
+		{
+			for (auto ptr : block)
+				delete ptr;
+		}
+	}
+	
+	virtual void print()
+	{
+		printf("function %d -> %d\n", num_args, num_returns);
+		for (int i=0; i<blocks.size(); i++)
+		{
+			printf("L%d:\n", i);
+			for (auto stat : blocks[i])
+			{
+				stat->print();
+			}
+		}
+	}
+	
+	virtual ir_base *copy()
+	{
+		return new ir_function(*this);
+	}
+	
+	int add_temp(ir_type type)
+	{
+		temp_types.push_back(type);
+		return temp_types.size()-1;
+	}
+};
+@
+
+There is also a need to statically allocate and reference global memory. This is done through a list of labels and corresponding memory sizes. It is the job of the final translation to machine code to make sure that each reference to these labels is replaced by a pointer to a memory region of adequate size. This, together with a collection of functions and their names forms the overarching unit of an ir program, a module.
+
+<<IR module>>=
+class ir_module : public ir_base
+{
+public:
+	std::map<std::string, ir_function*> functions;
+	std::map<std::string, int> globals;
+	
+	ir_module() {}
+	ir_module(ir_module &m)
+	{
+		globals = m.globals;
+		for (auto keyvalue : m.functions)
+			functions[keyvalue.first] = (ir_function*)keyvalue.second->copy();
+	}
+	virtual ~ir_module()
+	{
+		for (auto keyvalue : functions)
+			delete keyvalue.second;
+	}
+	virtual void print()
+	{
+		for (auto keyvalue : globals)
+		{
+			printf("%s: <%d>\n", keyvalue.first.c_str(), keyvalue.second);
+		}
+		
+		for (auto keyvalue : functions)
+		{
+			printf("%s: ", keyvalue.first.c_str());
+			keyvalue.second->print();
+		}
+	}
+};
+@
+
+\section{Temporaries and typing}
+
+The IR presented here still is still strongly typed. Every temporary has a type, and there are no implicit type conversions allowed. There are however explicit type conversions between most of the types. The following types are currently present:
+
+\begin{tabular}{l|p{11cm}}
+Int & Standard type for calculations, also used for representing SPL chars.\\
+Bool & Truthy variables, can be used in branching and the like.\\
+Ptr & Reference to a location in memory, offsets in the form of integers can be added or substracted from it.\\
+Unknown & Data word of unknown type, no operation allowed other than store, read, shallow compare with other Unknown or conversion to one of the other types.\\
+\end{tabular}
+
+<<IR types>>=
+enum ir_type
+{
+	IR_TYPE_INT,
+	IR_TYPE_BOOL,
+	IR_TYPE_PTR,
+	IR_TYPE_UNKNOWN,
+};
+@
+
+\section{Expressions}
+
+The IR language itself consists of two major portions, expressions and statements. Expressions produce values, and statements represent actions such as flow control and storing of values. The expressions allowed in the IR are fairly limited, and correspond roughly to what is available as elementary operations on most modern CPU architectures.
+
+For representing expressions we have a base class for each type, allowing the c++ compiler to enforce typechecking here.
+
+<<IR expression base>>=
+class ir_expression : public ir_base
+{
+public:
+	virtual ~ir_expression(){}
+};
+class ir_expression_int : public ir_expression
+{
+public:
+	virtual ~ir_expression_int(){}
+};
+class ir_expression_bool : public ir_expression
+{
+public:
+	virtual ~ir_expression_bool(){}
+};
+class ir_expression_ptr : public ir_expression
+{
+public:
+	virtual ~ir_expression_ptr(){}
+};
+class ir_expression_unknown : public ir_expression
+{
+public:
+	virtual ~ir_expression_unknown(){}
+};
+@
+
+\subsection{Integer arithmetic}
+
+For integer calculations we have five operations, corresponding to each of the basic math operators. Each of these takes two expressions of type int as arguments and produces another expression of type int.
+
+\begin{tabular}{l|p{11cm}}
+IR\_INT\_ADD & Addition\\
+IR\_INT\_SUB & Substraction\\
+IR\_INT\_MUL & Multiplication\\
+IR\_INT\_DIV & Division, behaviour when dividing by 0 is undefined\\
+IR\_INT\_MOD & Remainder, behaviour for 0 division is again undefined\\
+\end{tabular}
+
+These operators are all unsigned, and guaranteed to calculate as if modulo $\text{MAX\_INT}+1$, where $\text{MAX\_INT}$ is the maximum unsigned integer value representable on the system. (Note that this is actually irrelevant for the division based operators.)
+
+<<IR integer arithmetic>>=
+enum ir_intar_op
+{
+	IR_INT_ADD,
+	IR_INT_SUB,
+	IR_INT_MUL,
+	IR_INT_DIV,
+	IR_INT_MOD,
+};
+class ir_expression_intar_binop : public ir_expression_int
+{
+public:
+	ir_expression_int *left, *right;
+	ir_intar_op op;
+	
+	ir_expression_intar_binop(ir_expression_int *l, ir_expression_int *r, ir_intar_op o)
+	{
+		left = l;
+		right = r;
+		op = o;
+	}
+	virtual ~ir_expression_intar_binop()
+	{
+		delete left;
+		delete right;
+	}
+	virtual void print()
+	{
+		printf("(");
+		left->print();
+		switch(op)
+		{
+		case IR_INT_ADD:
+			printf("+");
+			break;
+		case IR_INT_SUB:
+			printf("-");
+			break;
+		case IR_INT_MUL:
+			printf("*");
+			break;
+		case IR_INT_DIV:
+			printf("/");
+			break;
+		case IR_INT_MOD:
+			printf("%%");
+			break;
+		}
+		right->print();
+		printf(")");
+	}
+	virtual ir_base *copy()
+	{
+		return new ir_expression_intar_binop((ir_expression_int*)left->copy(),
+			(ir_expression_int*)right->copy(), op);
+	}
+};
+@
+
+\subsection{Pointer arithmetic}
+
+It is usefull to be able to offset pointer, for example for indexing fields in a structure. The following operators allow us to do that, they have as first argument an expression of type Ptr, as second argument an expression of type Int, and produce an expression of type Ptr:
+
+\begin{tabular}{l|p{11cm}}
+IR\_PTR\_ADD & Positive offsetting of pointer\\
+IR\_PTR\_SUB & Negative offsetting of pointer\\
+\end{tabular}
+
+<<IR pointer arithmetic>>=
+enum ir_ptrar_op
+{
+	IR_PTR_ADD,
+	IR_PTR_SUB,
+};
+class ir_expression_ptrar_binop : public ir_expression_ptr
+{
+public:
+	ir_expression_ptr *left;
+	ir_expression_int *right;
+	ir_ptrar_op op;
+	
+	ir_expression_ptrar_binop(ir_expression_ptr *l, ir_expression_int *r, ir_ptrar_op o)
+	{
+		left = l;
+		right = r;
+		op = o;
+	}
+	virtual ~ir_expression_ptrar_binop()
+	{
+		delete left;
+		delete right;
+	}
+	virtual void print()
+	{
+		printf("(");
+		left->print();
+		switch(op)
+		{
+		case IR_PTR_ADD:
+			printf("+");
+			break;
+		case IR_PTR_SUB:
+			printf("-");
+			break;
+		}
+		right->print();
+		printf(")");
+	}
+	virtual ir_base *copy()
+	{
+		return new ir_expression_ptrar_binop((ir_expression_ptr*)left->copy(),
+			(ir_expression_int*)right->copy(), op);
+	}
+};
+@
+
+\subsection{Integer comparison}
+
+Int is special in that it is the only type for which the IR provides full ordering operators
+
+\begin{tabular}{l|p{11cm}}
+IR\_INT\_GT & Left greater than right\\
+IR\_INT\_GE & Left greater than or equal to right\\
+IR\_INT\_LT & Left less than right\\
+IR\_INT\_LE & Left less than or equal to right\\
+\end{tabular}
+
+<<integer comparison operator>>=
+IR_INT_GT,
+IR_INT_GE,
+IR_INT_LT,
+IR_INT_LE,
+@
+<<print integer comparison operator>>=
+case IR_INT_GT:
+	printf(">");
+	break;
+case IR_INT_GE:
+	printf(">=");
+	break;
+case IR_INT_LT:
+	printf("<");
+	break;
+case IR_INT_LE:
+	printf("<=");
+	break;
+@
+
+\subsection{(In)equality}
+
+There are multiple (in)equality operators, one for each of the types of temporaries. Each of these produces bool as output.
+
+\begin{tabular}{l|p{11cm}}
+IR\_INT\_EQ & Integer\\
+IR\_INT\_NE & \\
+IR\_PTR\_EQ & Pointer\\
+IR\_PTR\_NE & \\
+IR\_BOOL\_EQ & Boolean\\
+IR\_BOOL\_NE & \\
+IR\_UNKNOWN\_EQ & Unknown\\
+IR\_UNKNOWN\_NE & \\
+\end{tabular}
+
+<<integer comparison operator>>=
+IR_INT_EQ,
+IR_INT_NE,
+@
+<<print integer comparison operator>>=
+case IR_INT_EQ:
+	printf("==");
+	break;
+case IR_INT_NE:
+	printf("!=");
+	break;
+@
+<<IR comparison operators>>=
+enum ir_intcmp_op
+{
+	<<integer comparison operator>>
+};
+class ir_expression_intcmp : public ir_expression_bool
+{
+public:
+	ir_expression_int *left, *right;
+	ir_intcmp_op op;
+	
+	ir_expression_intcmp(ir_expression_int *l, ir_expression_int *r, ir_intcmp_op o)
+	{
+		left = l;
+		right = r;
+		op = o;
+	}
+	virtual ~ir_expression_intcmp()
+	{
+		delete left;
+		delete right;
+	}
+	virtual void print()
+	{
+		printf("(");
+		left->print();
+		switch(op)
+		{
+			<<print integer comparison operator>>
+		}
+		right->print();
+		printf(")");
+	}
+	virtual ir_base *copy()
+	{
+		return new ir_expression_intcmp((ir_expression_int*)left->copy(),
+			(ir_expression_int*)right->copy(), op);
+	}
+};
+@
+<<IR comparison operators>>=
+enum ir_ptrcmp_op
+{
+	IR_PTR_EQ,
+	IR_PTR_NE,
+};
+class ir_expression_ptrcmp : public ir_expression_bool
+{
+public:
+	ir_expression_ptr *left, *right;
+	ir_ptrcmp_op op;
+	
+	ir_expression_ptrcmp(ir_expression_ptr *l, ir_expression_ptr *r, ir_ptrcmp_op o)
+	{
+		left = l;
+		right = r;
+		op = o;
+	}
+	virtual ~ir_expression_ptrcmp()
+	{
+		delete left;
+		delete right;
+	}
+	virtual void print()
+	{
+		printf("(");
+		left->print();
+		switch(op)
+		{
+		case IR_PTR_EQ:
+			printf("==");
+			break;
+		case IR_PTR_NE:
+			printf("!=");
+			break;
+		}
+		right->print();
+		printf(")");
+	}
+	virtual ir_base *copy()
+	{	
+		return new ir_expression_ptrcmp((ir_expression_ptr*)left->copy(),
+			(ir_expression_ptr*)right->copy(), op);
+	}
+};
+@
+<<IR comparison operators>>=
+enum ir_boolcmp_op
+{
+	IR_BOOL_EQ,
+	IR_BOOL_NE,
+};
+class ir_expression_boolcmp : public ir_expression_bool
+{
+	ir_expression_bool *left, *right;
+	ir_boolcmp_op op;
+	
+	ir_expression_boolcmp(ir_expression_bool *l, ir_expression_bool *r, ir_boolcmp_op o)
+	{
+		left = l;
+		right = r;
+		op = o;
+	}
+	virtual ~ir_expression_boolcmp()
+	{
+		delete left;
+		delete right;
+	}
+	virtual void print()
+	{
+		printf("(");
+		left->print();
+		switch(op)
+		{
+		case IR_BOOL_EQ:
+			printf("==");
+			break;
+		case IR_BOOL_NE:
+			printf("!=");
+			break;
+		}
+		right->print();
+		printf(")");
+	}
+	virtual ir_base *copy()
+	{
+		return new ir_expression_boolcmp((ir_expression_bool*)left->copy(),
+			(ir_expression_bool*)right->copy(), op);
+	}
+};
+@
+<<IR comparison operators>>=
+enum ir_unknowncmp_op
+{
+	IR_UNKNOWN_EQ,
+	IR_UNKNOWN_NE,
+};
+class ir_expression_unknowncmp : public ir_expression_bool
+{
+	ir_expression_unknown *left, *right;
+	ir_unknowncmp_op op;
+	
+	ir_expression_unknowncmp(ir_expression_unknown *l, ir_expression_unknown *r, ir_unknowncmp_op o)
+	{
+		left = l;
+		right = r;
+		op = o;
+	}
+	virtual ~ir_expression_unknowncmp()
+	{
+		delete left;
+		delete right;
+	}
+	virtual void print()
+	{
+		printf("(");
+		left->print();
+		switch(op)
+		{
+		case IR_UNKNOWN_EQ:
+			printf("==");
+			break;
+		case IR_UNKNOWN_NE:
+			printf("!=");
+			break;
+		}
+		right->print();
+		printf(")");
+	}
+	virtual ir_base *copy()
+	{
+		return new ir_expression_unknowncmp((ir_expression_unknown*)left->copy(),
+			(ir_expression_unknown*)right->copy(), op);
+	}
+};
+@
+
+\subsection{Type conversions}
+
+The IR provides the following type conversions:
+\begin{mathpar}
+\text{Unknown} \rightarrow \text{Int} \and
+\text{Unknown} \rightarrow \text{Bool} \and
+\text{Unknown} \rightarrow \text{Ptr} \and
+\text{Int} \rightarrow \text{Unknown} \and
+\text{Bool} \rightarrow \text{Unknown} \and
+\text{Ptr} \rightarrow \text{Unknown} \and
+\text{Int} \rightarrow \text{Bool}
+\end{mathpar}
+
+The conversions to and from the unknown type are forgetting or assigning the type used to understand a word value of the unknown type. A program in the IR has undefined behaviour when values are converted to non-matching types via the unknown type. The conversion from Int to Bool follows the usual convention, where non-zero values are interpreted as true, and zero as false.
+
+<<IR type conversions>>=
+class ir_expression_unknown_to_int : public ir_expression_int
+{
+public:
+	ir_expression_unknown *inner;
+	
+	ir_expression_unknown_to_int(ir_expression_unknown *i) { inner = i; }
+	virtual ~ir_expression_unknown_to_int() { delete inner; }
+	virtual void print() { printf("INT("); inner->print(); printf(")"); }
+	virtual ir_base *copy()
+	{
+		return new ir_expression_unknown_to_int((ir_expression_unknown*)inner->copy());
+	}
+};
+class ir_expression_unknown_to_ptr : public ir_expression_ptr
+{
+public:
+	ir_expression_unknown *inner;
+	
+	ir_expression_unknown_to_ptr(ir_expression_unknown *i) { inner = i; }
+	virtual ~ir_expression_unknown_to_ptr() { delete inner; }
+	virtual void print() { printf("PTR("); inner->print(); printf(")"); }
+	virtual ir_base *copy()
+	{
+		return new ir_expression_unknown_to_ptr((ir_expression_unknown*)inner->copy());
+	}
+};
+class ir_expression_unknown_to_bool : public ir_expression_bool
+{
+public:
+	ir_expression_unknown *inner;
+	
+	ir_expression_unknown_to_bool(ir_expression_unknown *i) { inner = i; }
+	virtual ~ir_expression_unknown_to_bool() { delete inner; }
+	virtual void print() { printf("BOOL("); inner->print(); printf(")"); }
+	virtual ir_base *copy()
+	{
+		return new ir_expression_unknown_to_bool((ir_expression_unknown*)inner->copy());
+	}
+};
+@
+
+\subsection{Memory reads}
+Memory reading can be part of an expression. It takes a ptr typed expression, and reads the value stored at the location calculated by that. The result is always of unknown type.
+
+<<IR read memory>>=
+class ir_expression_memory : public ir_expression_unknown
+{
+public:
+	ir_expression_ptr *address;
+	
+	ir_expression_memory(ir_expression_ptr *a) { address = a; }
+	virtual ~ir_expression_memory() { delete address; }
+	virtual void print() { printf("MEM("); address->print(); printf(")"); }
+	virtual ir_base *copy()
+	{
+		return new ir_expression_memory((ir_expression_ptr*)address->copy());
+	}
+};
+@
+
+\subsection{Temporary reads}
+
+Values of temporaries can also be used in expression. We have one class for each type of temporary
+
+<<IR read temporary>>=
+class ir_expression_temp_int : public ir_expression_int
+{
+public:
+	int temp_id;
+	
+	ir_expression_temp_int(int id) { temp_id = id; }
+	virtual ~ir_expression_temp_int() {}
+	virtual void print() { printf("t%d", temp_id); }
+	virtual ir_base *copy() { return new ir_expression_temp_int(temp_id); }
+};
+class ir_expression_temp_ptr : public ir_expression_ptr
+{
+public:
+	int temp_id;
+	
+	ir_expression_temp_ptr(int id) { temp_id = id; }
+	virtual ~ir_expression_temp_ptr() {}
+	virtual void print() { printf("t%d", temp_id); }
+	virtual ir_base *copy() { return new ir_expression_temp_ptr(temp_id); }
+};
+class ir_expression_temp_bool : public ir_expression_bool
+{
+public:
+	int temp_id;
+	
+	ir_expression_temp_bool(int id) { temp_id = id; }
+	virtual ~ir_expression_temp_bool() {}
+	virtual void print() { printf("t%d", temp_id); }
+	virtual ir_base *copy() { return new ir_expression_temp_bool(temp_id); }
+};
+class ir_expression_temp_unknown : public ir_expression_unknown
+{
+public:
+	int temp_id;
+	
+	ir_expression_temp_unknown(int id) { temp_id = id; }
+	virtual ~ir_expression_temp_unknown() {}
+	virtual void print() { printf("t%d", temp_id); }
+	virtual ir_base *copy() { return new ir_expression_temp_unknown(temp_id); }
+};
+@
+
+\subsection{Constants}
+
+Constant values are also allowed as expressions, but can only be of integer or boolean type.
+
+<<IR constant expression>>=
+class ir_expression_intconst : public ir_expression_int
+{
+public:
+	int value;
+	
+	ir_expression_intconst(int v) { value = v; }
+	virtual ~ir_expression_intconst() {}
+	virtual void print()
+	{
+		printf("%d", value);
+	}
+	virtual ir_base *copy() { return new ir_expression_intconst(value); }
+};
+class ir_expression_boolconst : public ir_expression_bool
+{
+public:
+	bool value;
+	
+	ir_expression_boolconst(bool v) { value = v; }
+	virtual ~ir_expression_boolconst() {}
+	virtual void print()
+	{
+		if (value)
+			printf("TRUE");
+		else
+			printf("FALSE");
+	}
+	virtual ir_base *copy() { return new ir_expression_boolconst(value); }
+};
+@
+
+\subsection{Label values}
+
+
+
+\section{Statements}
+
+Typical computer processor architectures have three different kinds of actions. They either store a value somewhere, do a function call or make a non-function call jump (perhaps conditional). The IR presented here has the same kinds of statements.
+
+For ease of dealing with them, all statements derive from a common base class.
+<<IR statement base>>=
+class ir_statement : public ir_base
+{
+public:
+	virtual ~ir_statement() {}
+};
+@
+
+\subsection{Assignments}
+
+We have two destinations we can assign values to, either a temporary or a memory location. To a temporary, we just have an expression of the same type as the temporary. A memory store has two expressions as it's arguments, the first being a ptr to a location, the second the value stored there. Since there is no straightforward way to let the c++ compiler do the work of typechecking here, the value can be of any type in both of these cases.
+
+<<IR assign to temporary>>=
+class ir_statement_assign_temp : public ir_statement
+{
+public:
+	int target_temp_id;
+	ir_expression *value;
+	
+	ir_statement_assign_temp(int t, ir_expression *v)
+	{
+		target_temp_id = t;
+		value = v;
+	}
+	virtual ~ir_statement_assign_temp() { delete value; }
+	virtual void print()
+	{
+		printf("t%d = ", target_temp_id);
+		value->print();
+		printf("\n");
+	}
+	virtual ir_base *copy()
+	{
+		return new ir_statement_assign_temp(target_temp_id, (ir_expression*)value->copy());
+	}
+};
+@
+
+<<IR assign to memory>>=
+class ir_statement_assign_memory : public ir_statement
+{
+public:
+	ir_expression_ptr *target;
+	ir_expression *value;
+	
+	ir_statement_assign_memory(ir_expression_ptr *t, ir_expression *v)
+	{
+		target = t;
+		value = v;
+	}
+	virtual ~ir_statement_assign_memory() { delete target; delete value; }
+	virtual void print()
+	{
+		printf("MEM(");
+		target->print();
+		printf(") = ");
+		value->print();
+		printf("\n");
+	}
+	virtual ir_base *copy()
+	{
+		return new ir_statement_assign_memory((ir_expression_ptr*)target->copy(),
+			(ir_expression*)value->copy());
+	}
+};
+@
+
+\subsection{Function calls}
+
+Function calls in this intermediate representation are a bit special, in the sense that we allow an arbitrary (but fixed) number of return values from a function. A function call is given expressions for each of the arguments to the function, and identifiers of temporaries for each of the return values. Since it is expected to be quite common that we don't need some of the return values of a function, passing $-1$ as the id of the temporary to store a return value in indicates that that return value should be ignored.
+
+<<IR function call>>=
+class ir_statement_functioncall : public ir_statement
+{
+public:
+	std::vector<ir_expression*> arguments;
+	std::vector<int> return_temporaries;
+	std::string function;
+	
+	ir_statement_functioncall(std::string f, std::vector<ir_expression*> a,std::vector<int> r)
+	{
+		function = f;
+		arguments = a;
+		return_temporaries = r;
+	}
+	virtual ~ir_statement_functioncall()
+	{
+		for (auto ptr : arguments) delete ptr;
+	}
+	virtual void print()
+	{
+		bool first = true;
+		for (auto temp : return_temporaries)
+		{
+			if (first)
+				first = false;
+			else
+				printf(", ");
+			if (temp >= 0)
+				printf("t%d", temp);
+			else
+				printf("_");
+		}
+		
+		printf(" = %s(", function.c_str());
+		first = true;
+		for (auto arg : arguments)
+		{
+			if (first)
+				first = false;
+			else
+				printf(", ");
+			arg->print();
+		}
+		printf(")");
+	}
+	virtual ir_base *copy()
+	{
+		std::vector<ir_expression*> arg_copy;
+		for (auto arg : arguments)
+			arg_copy.push_back((ir_expression*)arg->copy());
+		return new ir_statement_functioncall(function, arg_copy, return_temporaries);
+	}
+};
+@
+
+\subsection{Flow control}
+
+We have three forms for flow control. Conditional jumps go to the beginning of one of two indicated blocks, unconditional jumps go to the beginning of one other block, and returns deliminate the end of functions. Each block of statement should end with one of these three statements, and they should only occur as the last statement in a block.
+
+<<IR jump>>=
+class ir_statement_jump : public ir_statement
+{
+public:
+	int target_block;
+	
+	ir_statement_jump(int t) { target_block = t; }
+	virtual ~ir_statement_jump() {}
+	virtual void print()
+	{
+		printf("JUMP L%d\n", target_block);
+	}
+	virtual ir_base *copy()
+	{
+		return new ir_statement_jump(target_block);
+	}
+};
+@
+
+<<IR if>>=
+class ir_statement_if : public ir_statement
+{
+public:
+	ir_expression_bool *condition;
+	int target_true, target_false;
+	
+	ir_statement_if(ir_expression_bool *c, int t, int f)
+	{
+		condition = c;
+		target_true = t;
+		target_false = f;
+	}
+	virtual ~ir_statement_if() { delete condition; }
+	virtual void print()
+	{
+		printf("IF (");
+		condition->print();
+		printf(") JUMP L%d ELSE JUMP L%d\n", target_true, target_false);
+	}
+	virtual ir_base *copy()
+	{
+		return new ir_statement_if((ir_expression_bool*)condition->copy(),
+			target_true, target_false);
+	}
+};
+@
+
+<<IR return>>=
+class ir_statement_return : public ir_statement
+{
+public:
+	ir_statement_return() {}
+	virtual ~ir_statement_return() {}
+	virtual void print()
+	{
+		printf("RETURN\n");
+	}
+	virtual ir_base *copy() { return new ir_statement_return(); }
+};
+@
+
+\section{Source files}
+
+<<ir.h>>=
+#ifndef IR_H
+#define IR_H
+#include <cstdio>
+#include <vector>
+#include <map>
+#include <string>
+
+<<IR base>>
+
+<<IR types>>
+
+<<IR expression base>>
+<<IR integer arithmetic>>
+<<IR pointer arithmetic>>
+<<IR comparison operators>>
+<<IR type conversions>>
+<<IR read memory>>
+<<IR read temporary>>
+<<IR constant expression>>
+
+<<IR statement base>>
+<<IR assign to temporary>>
+<<IR assign to memory>>
+<<IR function call>>
+<<IR jump>>
+<<IR if>>
+<<IR return>>
+
+<<IR function>>
+<<IR module>>
+#endif
+@

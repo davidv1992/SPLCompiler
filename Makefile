@@ -51,6 +51,9 @@ ast.h: ast.nw
 ast.cpp: ast.nw
 	notangle -L -Rast.cpp ast.nw | cpif ast.cpp
 
+ir.h: ir.nw
+	notangle -L -Rir.h ir.nw | cpif ir.h
+
 parser.o: parser.cpp parser.h ast.h token.h error.h position.h settings.h
 parser.h: parser.nw
 	notangle -L -Rparser.h parser.nw | cpif parser.h
@@ -75,8 +78,8 @@ test.pdf: test.tex
 	latexmk -pdf test.tex
 	latexmk -c
 
-code.tex: header.nw trailer.nw token.nw position.nw error.nw parser.nw settings.nw spllang.nw ast.nw typecheck.nw
-	noweave -t4 -delay header.nw spllang.nw ast.nw token.nw parser.nw typecheck.nw settings.nw position.nw error.nw trailer.nw | cpif code.tex
+code.tex: header.nw trailer.nw token.nw position.nw error.nw parser.nw settings.nw spllang.nw ast.nw typecheck.nw ir.nw
+	noweave -t4 -delay header.nw spllang.nw ast.nw token.nw parser.nw typecheck.nw ir.nw settings.nw position.nw error.nw trailer.nw | cpif code.tex
 code.pdf: code.tex compiler.bib
 	latexmk -pdf code.tex
 	latexmk -c
@@ -179,6 +182,6 @@ clean:
 	rm -f testprogs/commentgen testprogs/commentgen.cpp
 	rm -f testprogs/bracketgen testprogs/bracketgen.cpp
 	rm -f testprogs/runtolim.sh
-	rm -f position.h version.h settings.h
+	rm -f position.h version.h settings.h ir.h
 	rm -f code.tex code.pdf code.bbl
 	rm -f test.tex test.pdf
