@@ -861,7 +861,7 @@ public:
 	virtual ~ir_statement_jump() {}
 	virtual void print()
 	{
-		printf("JUMP L%d\n", target_block);
+		printf("GOTO L%d\n", target_block);
 	}
 	virtual ir_base *copy()
 	{
@@ -888,7 +888,7 @@ public:
 	{
 		printf("IF (");
 		condition->print();
-		printf(") JUMP L%d ELSE JUMP L%d\n", target_true, target_false);
+		printf(") GOTO L%d ELSE GOTO L%d\n", target_true, target_false);
 	}
 	virtual ir_base *copy()
 	{
