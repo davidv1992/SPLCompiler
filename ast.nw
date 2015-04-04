@@ -309,6 +309,8 @@ class ast_expression_variable_base : public ast_expression_variable
 {
 public:
 	std::string id;
+	ast_statement_vardecl *declaration=NULL; //Reference only, no ownership
+	ast_funarg *funargdecl = NULL; //Reference only, no ownership
 	
 	ast_expression_variable_base(source_position pos, std::string _id) 
 		{ position = pos; id = _id;}
@@ -653,6 +655,10 @@ public:
 	std::string id;
 	ast_expression *value;
 	
+	//Information used during IR generation
+	int value_temp=-1, type_temp=-1;
+	bool generate_typetemp=false;
+	
 	ast_statement_vardecl(ast_type *t, std::string i, ast_expression *val)
 		{ position = t->position; type = t; id = i; value = val; }
 	virtual ~ast_statement_vardecl() { delete type; delete value; }
@@ -850,6 +856,9 @@ public:
 	ast_type *type;
 	std::string name;
 	
+	//info for IR generation
+	int value_temp = -1, type_temp = -1;
+	
 	ast_funarg(ast_type *t, std::string n)
 		{ position = t->position; type = t; name = n; }
 	virtual ~ast_funarg() { delete type; }
@@ -955,6 +964,8 @@ public:
 #include <typeinfo>
 
 <<ast base>>
+class ast_statement_vardecl;
+class ast_funarg;
 <<type expression ast>>
 <<expression ast>>
 <<lvalue ast>>

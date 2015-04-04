@@ -93,19 +93,32 @@ $\text{returntype} = \tau$\\
 \hline
 \end{tabular}
 
+\section{Preparations for IR generation}
+
+The typechecker makes some initial preparations for the process of code generation. In particular, it adds to every variable reference in expressions a pointer to the corresponding variable declaration. These pointers are non-owning pointers, and no delete is called on them on deconstruction in any part of the compiler.
+
 \section{Symbol tables}
 
 One of the main things we need to do is keep symbol tables. Since we allow variable declarations as statements, we need some way to keep multiple scopes in check at once. This means we actually have a stack of symbol tables, providing type info on all variables and functions.
 
 For this to work, first we need a way to store definitions:
-<<symbol definition>>=
+<<variable definition>>=
 class variable_definition
 {
 public:
 	ast_type *type;
-	variable_definition(ast_type *t) { type = t; }
+	ast_statement_vardecl* declaration; // reference only, no ownership
+	ast_funarg* funargdecl; // reference only, no ownership
+	variable_definition(ast_type *t, ast_statement_vardecl *d, ast_funarg *f)
+	{
+		type = t;
+		declaration = d;
+		funargdecl = f;
+	}
 	virtual ~variable_definition() { delete type; }
 };
+@
+<<function definition>>=
 class function_definition
 {
 public:
@@ -177,6 +190,9 @@ Functions only occur on top level, so we need just a map for them.
 map<string, function_definition*> functionTable;
 @
 
+<<function lookup header>>=
+function_definition *lookup_function(std::string name);
+@
 <<manage functions>>=
 void add_function(source_position position, string name, function_definition *def)
 {
@@ -729,6 +745,8 @@ if (vardef == NULL)
 else
 {
 	expression->type = (ast_type*)vardef->type->copy();
+	var->declaration = vardef->declaration;
+	var->funargdecl = vardef->funargdecl;
 	return (ast_type*)vardef->type->copy();
 }
 @
@@ -1023,7 +1041,7 @@ if (!unify(vardecl->type, value_type))
 delete value_type;
 
 add_variable(vardecl->position, vardecl->id, 
-	new variable_definition((ast_type*)vardecl->type->copy()));
+	new variable_definition((ast_type*)vardecl->type->copy(), vardecl, NULL));
 @
 
 \subsection{Assignment}
@@ -1212,7 +1230,7 @@ void typecheck_program(ast_program *program)
 		for (auto funarg : fundecl->args)
 		{
 			add_variable(funarg->position, funarg->name,
-				new variable_definition((ast_type*)funarg->type->copy()));
+				new variable_definition((ast_type*)funarg->type->copy(), NULL, funarg));
 		}
 		typecheck_statement(fundecl->body);
 		
@@ -1226,8 +1244,18 @@ void typecheck_program(ast_program *program)
 		clear_return_type();
 		leave_scope();
 	}
-	
-	cleanup_tables();		
+}
+@
+
+For abstraction of the interface to the rest of the compiler, we have one function responsible for cleaning up after the typechecker
+
+<<typecheck cleanup header>>=
+void typecheck_cleanup();
+@
+<<typecheck cleanup>>=
+void typecheck_cleanup()
+{
+	cleanup_tables();
 }
 @
 
@@ -1273,7 +1301,11 @@ void typecheck_fatal(source_position pos, const char *message, ...)
 #include <map>
 #include <string>
 
+<<function definition>>
+
 <<typecheck program header>>
+<<function lookup header>>
+<<typecheck cleanup header>>
 #endif
 @
 
@@ -1285,7 +1317,7 @@ void typecheck_fatal(source_position pos, const char *message, ...)
 
 using namespace std;
 
-<<symbol definition>>
+<<variable definition>>
 
 <<typechecker error handling>>
 
@@ -1314,4 +1346,5 @@ using namespace std;
 <<typecheck statement>>
 <<check presence of returns>>
 <<typecheck program>>
+<<typecheck cleanup>>
 @
