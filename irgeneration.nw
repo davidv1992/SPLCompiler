@@ -1,0 +1,1220 @@
+\chapter{IR generation}
+
+\section{Implementing polymorphic functions}
+
+SPL has polymorphic functions, and it would be preferable to keep the translated variants of those functions also polymorphic. I have decided to solve this issue by passing around the types of polymorphic variables as function arguments. However, this is done with a slight twist: To keep the values indicating a type independent of the program being compiled for each argument where this is neccessary only the top-level (eg Int, Bool, Char, List, Tuple) type is passed along. For the more complex List and Tuple types, the record pointed to by the variable contains a hidden third field, containing the type descriptions of the two parts. This gives enough information for everything.
+
+<<runtime type constants>>=
+const int IRGEN_RUNTIME_INT=1;
+const int IRGEN_RUNTIME_CHAR=2;
+const int IRGEN_RUNTIME_BOOL=3;
+const int IRGEN_RUNTIME_LIST=4;
+const int IRGEN_RUNTIME_PAIR=5;
+@
+
+For a tuple or list, the type field contains $8*\text{typesecond}+\text{typefirst}$
+
+\section{Runtime library}
+
+The IR itself is relatively small and corresponds well with the capabilities of modern processors. However, the SPL language contains a few features that do not translate well into one or a few of these small operations. In particular comparison on types such as lists and tuples, and on arbitrary types, cannot be translated into a few IR instructions. For these operations IR generation depends on a runtime library with currently three functions:
+
+Int \_\_cmp(Unknown a, Int a\_type, Unknown b, Int b\_type)
+
+This function implements comparison between a and b. It only has defined behaviour when the type of a and b are equal, otherwise it's result is undefined.
+
+Ptr \_\_makePair(Unknown a, Int a\_type, Unknown b, Int b\_type)
+
+This function allocates and initializes a pair from a and b.
+
+Ptr \_\_makeList(Unknown a, Int a\_type, Ptr b)
+
+This function allocates and initializes a list from a and b.
+
+\section{Type variable requirements}
+
+When compiling a function, we first need to figure out for which polymorphic variables we need to generate typeing information. This is done by marking those vardecls where the extra typeinfo is needed. This might actually mean that we determine the same type twice, but the code for doing this the naive way is a lot simpler than being smart.
+
+<<mark vardecl>>=
+void mark_vardecl(ast_statement_vardecl *declaration)
+{
+	if (declaration->generate_typetemp)
+		return;
+	
+	declaration->generate_typetemp = true;
+	
+	if (typeid(*declaration->value) == typeid(ast_expression_variable_base))
+	{
+		ast_expression_variable_base *var = 
+			(ast_expression_variable_base*)declaration->value;
+		if (var->declaration != NULL)
+			mark_vardecl(var->declaration);
+	}
+}
+@
+
+<<preprocess function>>=
+void irgen_preprocess_needtype(ast_expression *expression)
+{
+	if (typeid(*expression->type) == typeid(ast_simple_type)
+		&& typeid(*expression) == typeid(ast_expression_variable_base))
+	{
+		ast_expression_variable_base *var =
+			(ast_expression_variable_base*)expression;
+		
+		if (var->declaration != NULL)
+			mark_vardecl(var->declaration);
+	}
+}
+void irgen_preprocess_expression(ast_expression *expression)
+{
+	if (typeid(*expression) == typeid(ast_expression_binary))
+	{
+		ast_expression_binary *binary = (ast_expression_binary*)expression;
+		irgen_preprocess_expression(binary->left);
+		irgen_preprocess_expression(binary->right);
+		
+		if (binary->op == OP_COLON || binary->op == OP_EQ
+			|| binary->op == OP_NE || binary->op == OP_LT
+			|| binary->op == OP_GT || binary->op == OP_LE
+			|| binary->op == OP_GE)
+			irgen_preprocess_needtype(binary->left);
+	}
+	else if (typeid(*expression) == typeid(ast_expression_unary))
+	{
+		ast_expression_unary *unary = (ast_expression_unary*)expression;
+		irgen_preprocess_expression(unary->inner);
+	}
+	else if (typeid(*expression) == typeid(ast_expression_funcall))
+	{
+		ast_expression_funcall *funcall = (ast_expression_funcall*)expression;
+		function_definition *funtype = lookup_function(funcall->id);
+		
+		for (unsigned int i=0; i<funcall->arguments.size(); i++)
+		{
+			irgen_preprocess_expression(funcall->arguments[i]);
+			
+			if (typeid(*funtype->argument_types[i]) == typeid(ast_simple_type))
+				irgen_preprocess_needtype(funcall->arguments[i]);
+		}
+	}
+	else if (typeid(*expression) == typeid(ast_expression_pair))
+	{
+		ast_expression_pair *pair = (ast_expression_pair*)expression;
+		irgen_preprocess_expression(pair->first);
+		irgen_preprocess_needtype(pair->first);
+		irgen_preprocess_expression(pair->second);
+		irgen_preprocess_needtype(pair->second);
+	}
+}
+void irgen_preprocess(ast_statement* stat, bool return_needs_type)
+{
+	if (typeid(*stat) == typeid(ast_statement_block))
+	{
+		ast_statement_block *block = (ast_statement_block*)stat;
+		for (auto statement : block->body)
+			irgen_preprocess(statement, return_needs_type);
+	}
+	else if (typeid(*stat) == typeid(ast_statement_vardecl))
+	{
+		ast_statement_vardecl *vardecl = (ast_statement_vardecl*)stat;
+		irgen_preprocess_expression(vardecl->value);
+	}
+	else if (typeid(*stat) == typeid(ast_statement_assign))
+	{
+		ast_statement_assign *assign = (ast_statement_assign*)stat;
+		irgen_preprocess_expression(assign->value);
+	}
+	else if (typeid(*stat) == typeid(ast_statement_expression))
+	{
+		ast_statement_expression *expression = (ast_statement_expression*)stat;
+		irgen_preprocess_expression(expression->inner);
+	}
+	else if (typeid(*stat) == typeid(ast_statement_if))
+	{
+		ast_statement_if *ifstat = (ast_statement_if*)stat;
+		irgen_preprocess_expression(ifstat->condition);
+		irgen_preprocess(ifstat->true_statement, return_needs_type);
+		if (ifstat->false_statement != NULL)
+			irgen_preprocess(ifstat->false_statement, return_needs_type);
+	}
+	else if (typeid(*stat) == typeid(ast_statement_while))
+	{
+		ast_statement_while *whilestat = (ast_statement_while*)stat;
+		irgen_preprocess_expression(whilestat->condition);
+		irgen_preprocess(whilestat->body, return_needs_type);
+	}
+	else if (typeid(*stat) == typeid(ast_statement_return))
+	{
+		ast_statement_return *retstat = (ast_statement_return*)stat;
+		if (retstat->value != NULL)
+		{
+			irgen_preprocess_expression(retstat->value);
+			if (return_needs_type)
+				irgen_preprocess_needtype(retstat->value);
+		}
+	}
+}
+@
+
+\section{Generating IR for expressions}
+
+Generating IR for ast expressions is done mostly as expressions. However, there are a few cases where this type of generation is not possible, or highly convoluted. For these, statements are emitted directly to the function object. Hence the generation gets as arguments the trace and function to do this in. Furthermore, besided an IR expression giving the result, an IR expression giving the type of it can also be generated by this function if neccessary.
+
+\subsection{Translating ast binary operators}
+
+Easiest translated are the math operators. Since SPL character and integer types both map to IR int, these are even type independent.
+<<ast mathops to IR intar binops>>=
+ir_intar_op translate_ast_mathbinop(ast_binary_operator op)
+{
+	switch(op)
+	{
+	case OP_ADD:
+		return IR_INT_ADD;
+	case OP_SUB:
+		return IR_INT_SUB;
+	case OP_MUL:
+		return IR_INT_MUL;
+	case OP_DIV:
+		return IR_INT_DIV;
+	case OP_MOD:
+		return IR_INT_MOD;
+	default:
+		assert(0);
+		return IR_INT_ADD;
+	}
+}
+@
+<<translate ast mathops>>=
+case OP_ADD:
+case OP_SUB:
+case OP_MUL:
+case OP_DIV:
+case OP_MOD:
+{
+	ir_expression_int *lhs = dynamic_cast<ir_expression_int*>(
+		irgen_translate_expression(function, trace, binop->left, false).first);
+	ir_expression_int *rhs = dynamic_cast<ir_expression_int*>(
+		irgen_translate_expression(function, trace, binop->right, false).first);
+	assert(lhs != NULL && rhs != NULL);
+	result.first = new ir_expression_intar_binop(lhs, rhs, 
+		translate_ast_mathbinop(binop->op));
+	if (generate_type)
+	{
+		if (typeid(*expression->type) == typeid(ast_int_type))
+			result.second = new ir_expression_intconst(IRGEN_RUNTIME_INT);
+		else if (typeid(*expression->type) == typeid(ast_char_type))
+			result.second = new ir_expression_intconst(IRGEN_RUNTIME_CHAR);
+		else
+			assert(0);
+	}
+	
+	break;
+}
+@
+
+The boolean and an or operator fall in the same category
+<<ast boolops to IR boolar binops>>=
+ir_boolar_op translate_ast_boolbinop(ast_binary_operator op)
+{
+	switch(op)
+	{
+	case OP_OR:
+		return IR_BOOL_OR;
+	case OP_AND:
+		return IR_BOOL_AND;
+	default:
+		assert(0);
+		return IR_BOOL_AND;
+	}
+}
+@
+<<translate ast boolops>>=
+case OP_AND:
+case OP_OR:
+{
+	ir_expression_bool *lhs = dynamic_cast<ir_expression_bool*>(
+		irgen_translate_expression(function, trace, binop->left, false).first);
+	ir_expression_bool *rhs = dynamic_cast<ir_expression_bool*>(
+		irgen_translate_expression(function, trace, binop->right, false).first);
+	assert(lhs != NULL && rhs != NULL);
+	result.first = new ir_expression_boolar_binop(lhs, rhs,
+		translate_ast_boolbinop(binop->op));
+	if (generate_type)
+	{
+		result.second = new ir_expression_intconst(IRGEN_RUNTIME_BOOL);
+	}
+	break;
+}
+@
+
+The comparison operators are a bit more tricky. Ideally, when the type is known to be simple (Int, Bool or Char) we would translate them without a functioncall. However, for simplicity, I have decided to keep them all going through the cmp function for now.
+
+<<translate ast compareop to IR intcmp op>>=
+ir_intcmp_op translate_ast_compareop(ast_binary_operator op)
+{
+	switch(op)
+	{
+	case OP_EQ:
+		return IR_INT_EQ;
+	case OP_NE:
+		return IR_INT_NE;
+	case OP_LT:
+		return IR_INT_LT;
+	case OP_LE:
+		return IR_INT_LE;
+	case OP_GT:
+		return IR_INT_GT;
+	case OP_GE:
+		return IR_INT_GE;
+	default:
+		assert(0);
+		return IR_INT_EQ;
+	}
+}
+@
+<<translate ast comparison>>=
+case OP_EQ:
+case OP_NE:
+case OP_LT:
+case OP_LE:
+case OP_GT:
+case OP_GE:
+{
+	auto lhs = irgen_translate_expression(function, trace, binop->left, true);
+	auto rhs = irgen_translate_expression(function, trace, binop->right, true);
+	
+	int comparisonResultTemporary = function->add_temp(IR_TYPE_INT);
+	
+	vector<ir_expression*> cmpargs;
+	cmpargs.push_back(lhs.first);
+	cmpargs.push_back(lhs.second);
+	cmpargs.push_back(rhs.first);
+	cmpargs.push_back(rhs.second);
+	
+	vector<int> cmpreturns;
+	cmpreturns.push_back(comparisonResultTemporary);
+	
+	function->blocks[trace].push_back(
+		new ir_statement_functioncall("__cmp", 
+			cmpargs,
+			cmpreturns));
+	
+	result.first = new ir_expression_intcmp(
+		new ir_expression_temp_int(comparisonResultTemporary),
+		new ir_expression_intconst(0),
+		translate_ast_compareop(binop->op));
+	
+	if (generate_type)
+	{
+		result.second = new ir_expression_intconst(IRGEN_RUNTIME_BOOL);
+	}
+	break;
+}
+@
+
+The colon operator leads to the allocation of a new object, using \_\_makeList:
+<<translate list creation>>=
+case OP_COLON:
+{
+	auto lhs = irgen_translate_expression(function, trace, binop->left, true);
+	ir_expression_ptr *rhs = dynamic_cast<ir_expression_ptr*>(
+		irgen_translate_expression(function, trace, binop->right, false).first);
+	
+	assert(rhs != NULL);
+	
+	int resultPointer = function->add_temp(IR_TYPE_PTR);
+	
+	vector<ir_expression*> arguments;
+	arguments.push_back(lhs.first);
+	arguments.push_back(lhs.second);
+	arguments.push_back(rhs);
+	
+	vector<int> returns;
+	returns.push_back(resultPointer);
+	
+	function->blocks[trace].push_back(
+		new ir_statement_functioncall("__makeList",
+			arguments,
+			returns));
+	
+	result.first = new ir_expression_temp_ptr(resultPointer);
+	if (generate_type)
+	{
+		result.second = new ir_expression_intconst(IRGEN_RUNTIME_LIST);
+	}
+	break;
+}
+@
+
+<<translate ast binop>>=
+ast_expression_binary *binop = (ast_expression_binary*)expression;
+switch(binop->op)
+{
+<<translate ast mathops>>
+<<translate ast boolops>>
+<<translate ast comparison>>
+<<translate list creation>>
+}
+@
+
+\subsection{Translating ast unary operators}
+
+The two unary operators are both really straightforward, no polymorphism anywhere in sight and both map one-to-one with an IR operator
+<<translate negation>>=
+case OP_NEG:
+{
+	ir_expression_int *inner = dynamic_cast<ir_expression_int*>(
+		irgen_translate_expression(function, trace, unop->inner, false).first);
+	
+	assert(inner != NULL);
+	
+	result.first = new ir_expression_intar_unop(inner, IR_INT_NEG);
+	if (generate_type)
+	{
+		result.second = new ir_expression_intconst(IRGEN_RUNTIME_INT);
+	}
+	break;
+}
+@
+<<translate not>>=
+case OP_NOT:
+{
+	ir_expression_bool *inner = dynamic_cast<ir_expression_bool*>(
+		irgen_translate_expression(function, trace, unop->inner, false).first);
+	
+	assert(inner != NULL);
+	
+	result.first = new ir_expression_boolar_unop(inner, IR_BOOL_NOT);
+	if (generate_type)
+	{
+		result.second = new ir_expression_intconst(IRGEN_RUNTIME_BOOL);
+	}
+	break;
+}
+@
+<<translate ast unop>>=
+ast_expression_unary *unop = (ast_expression_unary*)expression;
+switch(unop->op)
+{
+<<translate negation>>
+<<translate not>>
+}
+@
+
+\subsection{Translating variable and field access}
+
+Variable and field access is a bit more tricky, as we might need to access the hidden third field of structures to get typeing information.
+
+<<translate variable base>>=
+ast_expression_variable_base *var = (ast_expression_variable_base*)expression;
+
+if (var->declaration != NULL && var->declaration->value_temp != -1)
+{
+	if (typeid(*var->type) == typeid(ast_int_type)
+		|| typeid(*var->type) == typeid(ast_char_type))
+	{
+		result.first = new ir_expression_temp_int(var->declaration->value_temp);
+	}
+	else if (typeid(*var->type) == typeid(ast_bool_type))
+	{
+		result.first = new ir_expression_temp_bool(var->declaration->value_temp);
+	}
+	else if (typeid(*var->type) == typeid(ast_list_type)
+		|| typeid(*var->type) == typeid(ast_tuple_type))
+	{
+		result.first = new ir_expression_temp_ptr(var->declaration->value_temp);
+	}
+	else
+	{
+		result.first = new ir_expression_temp_unknown(var->declaration->value_temp);
+	}
+	
+	if (generate_type)
+	{
+		result.second = new ir_expression_temp_int(var->declaration->type_temp);
+	}
+}
+else if (var->declaration != NULL)
+{
+	result.first = new ir_expression_memory(
+		new ir_expression_label(var->declaration->id));
+	
+	if (typeid(*var->type) == typeid(ast_int_type)
+		|| typeid(*var->type) == typeid(ast_char_type))
+	{
+		result.first = new ir_expression_unknown_to_int((ir_expression_unknown*)result.first);
+	}
+	else if (typeid(*var->type) == typeid(ast_bool_type))
+	{
+		result.first = new ir_expression_unknown_to_bool((ir_expression_unknown*)result.first);
+	}
+	else if (typeid(*var->type) == typeid(ast_list_type)
+		|| typeid(*var->type) == typeid(ast_tuple_type))
+	{
+		result.first = new ir_expression_unknown_to_ptr((ir_expression_unknown*)result.first);
+	}
+	
+	if (generate_type)
+	{
+		assert(0);
+	}
+}
+else
+{
+	if (typeid(*var->type) == typeid(ast_int_type)
+		|| typeid(*var->type) == typeid(ast_char_type))
+	{
+		result.first = new ir_expression_temp_int(var->funargdecl->value_temp);
+	}
+	else if (typeid(*var->type) == typeid(ast_bool_type))
+	{
+		result.first = new ir_expression_temp_bool(var->funargdecl->value_temp);
+	}
+	else if (typeid(*var->type) == typeid(ast_list_type)
+		|| typeid(*var->type) == typeid(ast_tuple_type))
+	{
+		result.first = new ir_expression_temp_ptr(var->funargdecl->value_temp);
+	}
+	else
+	{
+		result.first = new ir_expression_temp_unknown(var->funargdecl->value_temp);
+	}
+	
+	if (generate_type)
+	{
+		result.second = new ir_expression_temp_int(var->funargdecl->type_temp);
+	}
+}
+@
+
+<<translate field access>>=
+ast_expression_variable_field *field = (ast_expression_variable_field*)expression;
+
+int address_temp = function->add_temp(IR_TYPE_PTR);
+
+function->blocks[trace].push_back(
+	new ir_statement_assign_temp(address_temp,
+		irgen_translate_expression(function, trace, field->base, false).first));
+	
+if (field->field == "snd" || field->field == "tl")
+{
+	result.first =
+		new ir_expression_memory(
+			new ir_expression_ptrar_binop(
+				new ir_expression_temp_ptr(address_temp),
+				new ir_expression_intconst(1), //offset of snd/tl field in record
+				IR_PTR_ADD
+			));
+}
+else
+{
+	result.first = 
+		new ir_expression_memory(
+			new ir_expression_temp_ptr(address_temp));
+}
+
+// wrap in type conversion if neccessary
+if (typeid(*field->type) == typeid(ast_int_type)
+	|| typeid(*field->type) == typeid(ast_char_type))
+{
+	result.first = new ir_expression_unknown_to_int((ir_expression_unknown*)result.first);
+}
+else if (typeid(*field->type) == typeid(ast_bool_type))
+{
+	result.first = new ir_expression_unknown_to_bool((ir_expression_unknown*)result.first);
+}
+else if (typeid(*field->type) == typeid(ast_list_type)
+	|| typeid(*field->type) == typeid(ast_tuple_type))
+{
+	result.first = new ir_expression_unknown_to_ptr((ir_expression_unknown*)result.first);
+}
+
+// Lookup subtype info if needed
+if (generate_type)
+{
+	result.second = new ir_expression_unknown_to_int(
+		new ir_expression_memory(
+			new ir_expression_ptrar_binop(
+				new ir_expression_temp_ptr(address_temp),
+				new ir_expression_intconst(2), //offset type field
+				IR_PTR_ADD
+			)));
+}
+@
+
+\subsection{Function calls}
+
+Function calls are translated to statements, with the result expression being a simple temp read.
+
+<<translate function call>>=
+ast_expression_funcall *funcall = (ast_expression_funcall*)expression;
+
+function_definition *fundef = lookup_function(funcall->id);
+
+vector<ir_expression*> arguments;
+for (unsigned int i=0; i<funcall->arguments.size(); i++)
+{
+	bool argument_needs_type = typeid(*fundef->argument_types[i]) == typeid(ast_simple_type);
+	auto argir = irgen_translate_expression(function, trace, 
+		funcall->arguments[i], argument_needs_type);
+	
+	if (argument_needs_type)
+		arguments.push_back(argir.second);
+	arguments.push_back(argir.first);
+}
+
+reverse(arguments.begin(), arguments.end());
+
+int result_temp = -1;
+if (typeid(*funcall->type) == typeid(ast_void_type))
+{
+	// do nothing
+}
+else if (typeid(*funcall->type) == typeid(ast_int_type)
+	|| typeid(*funcall->type) == typeid(ast_char_type))
+{
+	result_temp = function->add_temp(IR_TYPE_INT);
+}
+else if (typeid(*funcall->type) == typeid(ast_bool_type))
+{
+	result_temp = function->add_temp(IR_TYPE_BOOL);
+}
+else if (typeid(*funcall->type) == typeid(ast_list_type)
+	|| typeid(*funcall->type) == typeid(ast_tuple_type))
+{
+	result_temp = function->add_temp(IR_TYPE_PTR);
+}
+else
+{
+	result_temp = function->add_temp(IR_TYPE_UNKNOWN);
+}
+
+int type_temp = -1;
+if (generate_type)
+	type_temp = function->add_temp(IR_TYPE_INT);
+
+vector<int> returntemps;
+if (typeid(*fundef->return_type) != typeid(ast_void_type))
+	returntemps.push_back(result_temp);
+if (typeid(*fundef->return_type) == typeid(ast_simple_type))
+	returntemps.push_back(type_temp);
+
+function->blocks[trace].push_back(
+	new ir_statement_functioncall(
+		funcall->id,
+		arguments,
+		returntemps));
+
+if (typeid(*funcall->type) == typeid(ast_void_type))
+{
+	//do nothing
+}
+else if (typeid(*funcall->type) == typeid(ast_int_type)
+	|| typeid(*funcall->type) == typeid(ast_char_type))
+{
+	result.first = new ir_expression_temp_int(result_temp);
+}
+else if (typeid(*funcall->type) == typeid(ast_bool_type))
+{
+	result.first = new ir_expression_temp_bool(result_temp);
+}
+else if (typeid(*funcall->type) == typeid(ast_list_type)
+	|| typeid(*funcall->type) == typeid(ast_tuple_type))
+{
+	result.first = new ir_expression_temp_ptr(result_temp);
+}
+else
+{
+	result.first = new ir_expression_temp_unknown(result_temp);
+}
+
+if (generate_type)
+	result.second = new ir_expression_temp_int(type_temp);
+@
+
+\subsection{Constant expressions}
+
+Constant expression are really straightforward. Emptylist is just a nullpointer in IR.
+
+<<translate int const>>=
+ast_expression_intconst *ic = (ast_expression_intconst*)expression;
+result.first = new ir_expression_intconst(ic->value);
+@
+
+
+<<translate char const>>=
+ast_expression_charconst *cc = (ast_expression_charconst*)expression;
+result.first = new ir_expression_intconst(cc->value);
+@
+
+<<translate empty list>>=
+result.first = new ir_expression_label("NULL");
+@
+
+<<translate bool const>>=
+ast_expression_boolconst *bc = (ast_expression_boolconst*)expression;
+result.first = new ir_expression_boolconst(bc->value);
+@
+
+\subsection{Pair expressions}
+
+A pair is allocated and initialized with a call to \_\_makePair. The resulting expression is just a ptrexpression.
+
+<<translate pair expression>>=
+ast_expression_pair *pair = (ast_expression_pair*)expression;
+
+auto lhs = irgen_translate_expression(function, trace, pair->first, true);
+auto rhs = irgen_translate_expression(function, trace, pair->second, true);
+
+vector<ir_expression*> arguments;
+arguments.push_back(lhs.first);
+arguments.push_back(lhs.second);
+arguments.push_back(rhs.first);
+arguments.push_back(rhs.second);
+
+int result_temp = function->add_temp(IR_TYPE_PTR);
+
+vector<int> return_temps;
+return_temps.push_back(result_temp);
+
+function->blocks[trace].push_back(
+	new ir_statement_functioncall(
+		"__makePair",
+		arguments,
+		return_temps));
+
+result.first = new ir_expression_temp_ptr(result_temp);
+@
+
+\subsection{Combining it all}
+
+Here we actually differentiate between all the different types of expressions. We also handle the simple constant expressions here.
+
+<<translate ast expression>>=
+pair<ir_expression*, ir_expression_int*>irgen_translate_expression(
+	ir_function *function, int trace,
+	ast_expression *expression, bool generate_type)
+{
+	pair<ir_expression*, ir_expression_int*> result;
+	result.first = result.second = NULL;
+	
+	// for efficiency, force using constants when possible on type info
+	if (generate_type && typeid(*expression->type) != typeid(ast_simple_type))
+	{
+		generate_type = false;
+		if (typeid(*expression->type) == typeid(ast_int_type))
+		{
+			result.second = new ir_expression_intconst(IRGEN_RUNTIME_INT);
+		}
+		else if (typeid(*expression->type) == typeid(ast_char_type))
+		{
+			result.second = new ir_expression_intconst(IRGEN_RUNTIME_CHAR);
+		}
+		else if (typeid(*expression->type) == typeid(ast_bool_type))
+		{
+			result.second = new ir_expression_intconst(IRGEN_RUNTIME_BOOL);
+		}
+		else if (typeid(*expression->type) == typeid(ast_list_type))
+		{
+			result.second = new ir_expression_intconst(IRGEN_RUNTIME_LIST);
+		}
+		else if (typeid(*expression->type) == typeid(ast_tuple_type))
+		{
+			result.second = new ir_expression_intconst(IRGEN_RUNTIME_PAIR);
+		}
+		else
+		{
+			assert(0);
+		}
+	}
+	
+	if (typeid(*expression) == typeid(ast_expression_binary))
+	{
+		<<translate ast binop>>
+	}
+	else if (typeid(*expression) == typeid(ast_expression_unary))
+	{
+		<<translate ast unop>>
+	}
+	else if (typeid(*expression) == typeid(ast_expression_variable_base))
+	{
+		<<translate variable base>>
+	}
+	else if (typeid(*expression) == typeid(ast_expression_variable_field))
+	{
+		<<translate field access>>
+	}
+	else if (typeid(*expression) == typeid(ast_expression_funcall))
+	{
+		<<translate function call>>
+	}
+	else if (typeid(*expression) == typeid(ast_expression_intconst))
+	{
+		<<translate int const>>
+	}
+	else if (typeid(*expression) == typeid(ast_expression_charconst))
+	{
+		<<translate char const>>
+	}
+	else if (typeid(*expression) == typeid(ast_expression_emptylist))
+	{
+		<<translate empty list>>
+	}
+	else if (typeid(*expression) == typeid(ast_expression_boolconst))
+	{
+		<<translate bool const>>
+	}
+	else if (typeid(*expression) == typeid(ast_expression_pair))
+	{
+		<<translate pair expression>>
+	}
+	else
+	{
+		assert(0);
+	}
+	return result;
+}
+@
+
+\section{Translating statements}
+
+Translating statements, there are a few extra issues to deal with. First of all, every trace should end on a flow control instruction. This means that we need to be able to deal with returns halfway through a statement block, and stop emission of instructions after those (These statements are dead anyway). For this, the translate function returns a bool indicating wheteher or not a return has already been emitted for the current trace.
+
+\section{Return statements}
+
+For a return stament, we have to deal with returning type information if this is a polymorphic function. This is done in the second return temp.
+
+<<translate return>>=
+ast_statement_return *retstat = (ast_statement_return*)stat;
+		
+if (retstat->value != NULL)
+{
+	auto value = irgen_translate_expression(function, trace, retstat->value, function->num_returns==2);
+
+	function->blocks[trace].push_back(
+		new ir_statement_assign_temp(function->num_args, value.first));
+
+	if (function->num_returns == 2)
+		function->blocks[trace].push_back(
+			new ir_statement_assign_temp(function->num_args+1, value.second));
+}
+
+function->blocks[trace].push_back(
+	new ir_statement_return());
+
+return true;
+@
+
+\section{Variable declaration}
+
+For variable declarations, we also need to handle the declaration of the relevant temporaries.
+
+<<translate variable declaration>>=
+ast_statement_vardecl *vardecl = (ast_statement_vardecl*)stat;
+
+auto rhs = irgen_translate_expression(function, trace, vardecl->value, vardecl->generate_typetemp);
+
+if (typeid(*vardecl->type) == typeid(ast_int_type)
+	|| typeid(*vardecl->type) == typeid(ast_char_type))
+{
+	vardecl->value_temp = function->add_temp(IR_TYPE_INT);
+}
+else if (typeid(*vardecl->type) == typeid(ast_bool_type))
+{
+	vardecl->value_temp = function->add_temp(IR_TYPE_BOOL);
+}
+else if (typeid(*vardecl->type) == typeid(ast_list_type)
+	|| typeid(*vardecl->type) == typeid(ast_tuple_type))
+{
+	vardecl->value_temp = function->add_temp(IR_TYPE_PTR);
+}
+else
+{
+	vardecl->value_temp = function->add_temp(IR_TYPE_UNKNOWN);
+}
+
+if (vardecl->generate_typetemp)
+	vardecl->type_temp = function->add_temp(IR_TYPE_INT);
+
+function->blocks[trace].push_back(
+	new ir_statement_assign_temp(
+		vardecl->value_temp,
+		rhs.first));
+
+if (vardecl->generate_typetemp)
+	function->blocks[trace].push_back(
+		new ir_statement_assign_temp(
+			vardecl->type_temp,
+			rhs.second));
+@
+
+\subsection{Translating assignments}
+
+For translate we have two different situations, either it is a simple local variabel, in which case we need to store something in a temporary, or it is a memory store.
+
+<<translate assign>>=
+ast_statement_assign *assign = (ast_statement_assign*)stat;
+
+if (typeid(*assign->location) == typeid(ast_lvalue_variable)
+	&& VALUE_TEMP((ast_lvalue_variable*)(assign->location)) != -1)
+{
+	ast_lvalue_variable *var = (ast_lvalue_variable*)assign->location;
+	function->blocks[trace].push_back(
+		new ir_statement_assign_temp(
+			VALUE_TEMP(var),
+			irgen_translate_expression(function, trace, assign->value, false).first));
+}
+else
+{
+	ir_expression_ptr *dest = irgen_translate_lvalue(assign->location);
+	
+	function->blocks[trace].push_back(
+		new ir_statement_assign_memory(
+			dest,
+			irgen_translate_expression(function, trace, assign->value, false).first));
+}
+@
+
+Translating lvalues is a little tricky, because of the special case of a local variable, which requires a temp read which cannot be written as dereferencing a pointer.
+
+<<translate lvalue>>=
+#define VALUE_TEMP(x) ((x)->declaration?(x)->declaration->value_temp:(x)->funargdecl->value_temp)
+#define TYPE_TEMP(x) ((x)->declaration?(x)->declaration->type_temp:(x)->funargdecl->type_temp)
+ir_expression_ptr *irgen_translate_lvalue(ast_lvalue *lval)
+{
+	if (typeid(*lval) == typeid(ast_lvalue_variable))
+	{
+		ast_lvalue_variable *var = (ast_lvalue_variable*)lval;
+		return new ir_expression_label(var->variable);
+	}
+	else if (typeid(*lval) == typeid(ast_lvalue_field))
+	{
+		ast_lvalue_field *field = (ast_lvalue_field*)lval;
+		int fieldOffset = 0;
+		
+		if (field->field == "snd" || field->field == "tl")
+			fieldOffset = 1;
+		
+		if (typeid(*field->base) == typeid(ast_lvalue_variable)
+			&& VALUE_TEMP((ast_lvalue_variable*)(field->base)) != -1)
+		{
+			ast_lvalue_variable *var = (ast_lvalue_variable*)field->base;
+			if (fieldOffset == 0)
+				return new ir_expression_temp_ptr(VALUE_TEMP(var));
+			else
+				return new ir_expression_ptrar_binop(
+					new ir_expression_temp_ptr(VALUE_TEMP(var)),
+					new ir_expression_intconst(fieldOffset),
+					IR_PTR_ADD);
+		}
+		else
+		{
+			ir_expression_ptr *inner = 
+				irgen_translate_lvalue(field->base);
+			
+			if (fieldOffset == 0)
+				return new ir_expression_unknown_to_ptr(
+					new ir_expression_memory(inner));
+			else
+				return new ir_expression_ptrar_binop(
+					new ir_expression_unknown_to_ptr(
+						new ir_expression_memory(inner)),
+					new ir_expression_intconst(fieldOffset),
+					IR_PTR_ADD);
+		}
+	}
+	else
+	{
+		assert(0);
+		return new ir_expression_label("NULL");
+	}
+}
+@
+
+\subsection{Translating expression statements}
+
+An expression statement contains only a functioncall, and we dont need the value, so force it's type to void for efficiency.
+<<translate expression statement>>=
+ast_statement_expression *statexpr = (ast_statement_expression*)stat;
+
+delete statexpr->inner->type;
+statexpr->inner->type = new ast_void_type();
+
+ir_expression *lhs = irgen_translate_expression(function, trace, statexpr->inner, false).first;
+assert(lhs == NULL);
+@
+
+\subsection{Translating if statements}
+
+An if can have either one or two extra blocks besides the outro block. Again, we translate as much as possible before allocating new blocks to keep block order somewhat logical, which means that assembly generation produces decent results even if it does not do anything to the ordering of blocks.
+
+<<translate if statement>>=
+ast_statement_if *ifstat = (ast_statement_if*)stat;
+
+int true_block = function->blocks.size();
+function->blocks.push_back(vector<ir_statement*>(0));
+
+bool true_needs_jump = !irgen_translate_statement(
+	function, true_block, ifstat->true_statement);
+
+int false_block = function->blocks.size();
+function->blocks.push_back(vector<ir_statement*>(0));
+
+int outro_block = -1;
+if (ifstat->false_statement == NULL)
+{
+	outro_block = false_block;
+}
+else
+{
+	bool false_needs_jump = !irgen_translate_statement(
+		function, false_block, ifstat->false_statement);
+	
+	if (!false_needs_jump && !true_needs_jump)
+	{
+		//special case, no outro needed
+		outro_block = trace;
+	}
+	else
+	{
+		outro_block = function->blocks.size();
+		function->blocks.push_back(vector<ir_statement*>(0));
+		if (false_needs_jump)
+			function->blocks[false_block].push_back(
+				new ir_statement_jump(outro_block));
+	}
+}
+
+if (true_needs_jump)
+	function->blocks[true_block].push_back(
+		new ir_statement_jump(outro_block));
+
+ir_expression_bool *condition = dynamic_cast<ir_expression_bool*>(
+	irgen_translate_expression(function, trace,
+		ifstat->condition, false).first);
+
+assert(condition != NULL);
+
+function->blocks[trace].push_back(
+	new ir_statement_if(
+		condition,
+		true_block,
+		false_block));
+
+if (trace == outro_block)
+	return true;
+trace = outro_block;
+@
+
+\subsection{Translating while statements}
+
+While statements are relatively easy. The fact that a check is also needed for the first iteration is handled by having the check in it's own block, and jumping to that block everytime we need the check. In order to keep the ordering of the traces reasonable, we translate the body before allocating the while-out block.
+
+<<translate while statement>>=
+ast_statement_while *whilestat = (ast_statement_while*)stat;
+
+int condition_block = function->blocks.size();
+function->blocks.push_back(vector<ir_statement*>(0));
+int body_block = function->blocks.size();
+function->blocks.push_back(vector<ir_statement*>(0));
+
+if (!irgen_translate_statement(function, body_block, whilestat->body))
+	function->blocks[body_block].push_back(
+		new ir_statement_jump(condition_block));
+
+int outro_block = function->blocks.size();
+function->blocks.push_back(vector<ir_statement*>(0));
+
+ir_expression_bool *condition = dynamic_cast<ir_expression_bool*>(
+	irgen_translate_expression(function, condition_block,
+			whilestat->condition, false).first);
+
+assert(condition != NULL);
+
+function->blocks[condition_block].push_back(
+	new ir_statement_if(
+		condition,
+		body_block,
+		outro_block));
+
+function->blocks[trace].push_back(
+	new ir_statement_jump(condition_block));
+
+trace = outro_block;
+@
+
+\subsection{Combining it all}
+
+Those statements that produce flow control into trace will return true, all others depend on this to return false. This allows us to ignore that portion of the translation task when it is not relevant to a statement.
+
+<<translate statement>>=
+bool irgen_translate_statement(ir_function *function, int &trace, ast_statement *stat)
+{
+	if (typeid(*stat) == typeid(ast_statement_block))
+	{
+		ast_statement_block *block = (ast_statement_block*)stat;
+		
+		for (auto instat : block->body)
+		{
+			if (irgen_translate_statement(function, trace, instat))
+				return true;
+		}
+	}
+	else if (typeid(*stat) == typeid(ast_statement_vardecl))
+	{
+		<<translate variable declaration>>
+	}
+	else if (typeid(*stat) == typeid(ast_statement_assign))
+	{
+		<<translate assign>>
+	}
+	else if (typeid(*stat) == typeid(ast_statement_expression))
+	{
+		<<translate expression statement>>
+	}
+	else if (typeid(*stat) == typeid(ast_statement_if))
+	{
+		<<translate if statement>>
+	}
+	else if (typeid(*stat) == typeid(ast_statement_while))
+	{
+		<<translate while statement>>
+	}
+	else if (typeid(*stat) == typeid(ast_statement_return))
+	{
+		<<translate return>>
+	}
+	else
+	{
+		assert(0);
+	}
+	
+	return false;
+}
+@
+
+\section{Translating functions}
+
+The IR requires
+
+<<translate function>>=
+void irgen_translate_function(ir_module *module, ast_fundecl *fun)
+{
+	vector<ir_type> args;
+	for (auto arg : fun->args)
+	{
+		arg->value_temp = args.size();
+		if (typeid(*arg->type) == typeid(ast_int_type)
+			|| typeid(*arg->type) == typeid(ast_char_type))
+		{
+			args.push_back(IR_TYPE_INT);
+		}
+		else if (typeid(*arg->type) == typeid(ast_bool_type))
+		{
+			args.push_back(IR_TYPE_BOOL);
+		}
+		else if (typeid(*arg->type) == typeid(ast_list_type)
+			|| typeid(*arg->type) == typeid(ast_tuple_type))
+		{
+			args.push_back(IR_TYPE_PTR);
+		}
+		else
+		{
+			args.push_back(IR_TYPE_UNKNOWN);
+			arg->type_temp = args.size();
+			args.push_back(IR_TYPE_INT);
+		}
+	}
+	
+	
+	vector<ir_type> rets;
+	if (typeid(*fun->type) == typeid(ast_int_type)
+		|| typeid(*fun->type) == typeid(ast_char_type))
+	{
+		rets.push_back(IR_TYPE_INT);
+	}
+	else if (typeid(*fun->type) == typeid(ast_bool_type))
+	{
+		rets.push_back(IR_TYPE_BOOL);
+	}
+	else if (typeid(*fun->type) == typeid(ast_list_type)
+		|| typeid(*fun->type) == typeid(ast_tuple_type))
+	{
+		rets.push_back(IR_TYPE_PTR);
+	}
+	else
+	{
+		rets.push_back(IR_TYPE_UNKNOWN);
+		rets.push_back(IR_TYPE_INT);
+	}
+	
+	ir_function *function = new ir_function(args, rets);
+	function->blocks.push_back(vector<ir_statement*>(0));
+	int initialTrace = 0;
+	
+	bool needsReturn = !irgen_translate_statement(function, initialTrace, fun->body);
+	if (needsReturn)
+		function->blocks[initialTrace].push_back(new ir_statement_return());
+	
+	module->functions[fun->name] = function;
+}
+@
+
+\section{Translating programs}
+
+<<translate program header>>=
+ir_module* irgen_translate_program(ast_program *program);
+@
+
+<<translate program>>=
+ir_module* irgen_translate_program(ast_program *program)
+{
+	ir_module *module = new ir_module();
+	
+	for (auto fundecl : program->functions)
+	{
+		irgen_translate_function(module, fundecl);
+	}
+	
+	return module;
+}
+@
+
+\section{Source and header}
+
+<<irgeneration.h>>=
+#ifndef IRGENERATION_H
+#define IRGENERATION_H
+
+<<runtime type constants>>
+
+<<translate program header>>
+
+#endif
+@
+
+<<irgeneration.cpp>>=
+#include "ast.h"
+#include "ir.h"
+#include "irgeneration.h"
+#include "typecheck.h"
+#include <cassert>
+#include <vector>
+#include <string>
+#include <algorithm>
+
+using namespace std;
+
+<<ast mathops to IR intar binops>>
+<<ast boolops to IR boolar binops>>
+<<translate ast compareop to IR intcmp op>>
+
+<<mark vardecl>>
+<<preprocess function>>
+
+<<translate ast expression>>
+<<translate lvalue>>
+<<translate statement>>
+<<translate function>>
+<<translate program>>
+@

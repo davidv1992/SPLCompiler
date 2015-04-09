@@ -1,0 +1,39 @@
+\chapter{Compiler proper}
+
+This file does all the chaining of the various parts of the compiler. It is responsible for calling the different parts of the compiler in the right order.
+
+<<main.cpp>>=
+#include "token.h"
+#include "parser.h"
+#include "typecheck.h"
+#include "ir.h"
+#include "irgeneration.h"
+#include <cstdio>
+#include <map>
+
+using namespace std;
+
+void initialize_tables();
+void cleanup_tables();
+
+int main(int argc, char **argv)
+{
+	if (argc < 2)
+		return 1;
+	
+	tok_setinput(string(argv[1]));
+	
+	ast_program *program = parse_program();
+	typecheck_program(program);
+	
+	ir_module *module = irgen_translate_program(program);
+	
+	module->print();
+	
+	typecheck_cleanup();
+	delete program;
+	delete module;
+	
+	return 0;
+}
+@

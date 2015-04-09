@@ -4,7 +4,7 @@
 BASH := /bin/bash
 CXXFLAGS := -I. -g -Wall -Wextra -Wno-unused-parameter -Wno-unused-variable -Werror -std=c++11
 
-test: test/tokentest test/parsetest test/typechecktest
+test: test/tokentest test/parsetest test/typechecktest test/irgentest
 	@$(BASH) -c "echo -e '\E[32mAll tests passed\E[0m'"
 
 test/tokentest: testprogs/tokentest testprogs/tokencorrect.sh testprogs/tokenfail.sh
@@ -20,6 +20,9 @@ test/typechecktest: testprogs/typechecktest testprogs/typecheckcorrect.sh testpr
 	$(BASH) ./testprogs/typecheckcorrect.sh
 	$(BASH) ./testprogs/typecheckfail.sh
 	$(BASH) ./testprogs/typecheckwarn.sh
+
+test/irgentest: testprogs/irgentest testprogs/irgencorrect.sh
+	$(BASH) ./testprogs/irgencorrect.sh
 
 limittest: limittest/comment limittest/bracket
 	@$(BASH) -c "echo -e '\E[32mAll tests passed\E[0m'"
@@ -66,6 +69,19 @@ typecheck.h: typecheck.nw
 typecheck.cpp: typecheck.nw
 	notangle -L -Rtypecheck.cpp typecheck.nw | cpif typecheck.cpp
 
+irgeneration.o: irgeneration.cpp irgeneration.h ast.h ir.h typecheck.h position.h
+irgeneration.h: irgeneration.nw
+	notangle -L -Rirgeneration.h irgeneration.nw | cpif irgeneration.h
+irgeneration.cpp: irgeneration.nw
+	notangle -L -Rirgeneration.cpp irgeneration.nw | cpif irgeneration.cpp
+
+main.o: main.cpp token.h parser.h ast.h position.h typecheck.h ir.h irgeneration.h
+main.cpp: main.nw
+	notangle -L -Rmain.cpp main.nw | cpif main.cpp
+
+compiler: main.o token.o parser.o ast.o error.o typecheck.o irgeneration.o
+	g++ $(CXXFLASGS) -o compiler main.o token.o parser.o ast.o error.o typecheck.o irgeneration.o
+
 version.h:
 	echo \#define VERSION \"`git describe --abbrev=4 --dirty --always --tags`\" | cpif version.h
 
@@ -78,8 +94,8 @@ test.pdf: test.tex
 	latexmk -pdf test.tex
 	latexmk -c
 
-code.tex: header.nw trailer.nw token.nw position.nw error.nw parser.nw settings.nw spllang.nw ast.nw typecheck.nw ir.nw
-	noweave -t4 -delay header.nw spllang.nw ast.nw token.nw parser.nw typecheck.nw ir.nw settings.nw position.nw error.nw trailer.nw | cpif code.tex
+code.tex: header.nw trailer.nw token.nw position.nw error.nw parser.nw settings.nw spllang.nw ast.nw typecheck.nw ir.nw irgeneration.nw main.nw
+	noweave -t4 -delay header.nw spllang.nw ast.nw token.nw parser.nw typecheck.nw ir.nw irgeneration.nw main.nw settings.nw position.nw error.nw trailer.nw | cpif code.tex
 code.pdf: code.tex compiler.bib
 	latexmk -pdf code.tex
 	latexmk -c
@@ -120,6 +136,12 @@ testprogs/typechecktest.o: testprogs/typechecktest.cpp token.h parser.h ast.h po
 testprogs/typechecktest.cpp: testprogs/typechecktest.nw
 	notangle -L -Rtypechecktest.cpp testprogs/typechecktest.nw | cpif testprogs/typechecktest.cpp
 
+testprogs/irgentest: testprogs/irgentest.o token.o parser.o ast.o error.o typecheck.o irgeneration.o
+	g++ $(CXXFLAGS) -o testprogs/irgentest testprogs/irgentest.o token.o parser.o ast.o error.o typecheck.o irgeneration.o
+testprogs/irgentest.o: testprogs/irgentest.cpp token.h parser.h ast.h position.h typecheck.h ir.h irgeneration.h
+testprogs/irgentest.cpp: testprogs/irgentest.nw
+	notangle -L -Rirgentest.cpp testprogs/irgentest.nw | cpif testprogs/irgentest.cpp
+
 testprogs/parsecorrect.sh: testprogs/parsetest.nw
 	notangle -L -Rparsecorrect.sh testprogs/parsetest.nw > testprogs/parsecorrect.sh
 	chmod +x testprogs/parsecorrect.sh
@@ -152,6 +174,10 @@ testprogs/typecheckwarn.sh: testprogs/typechecktest.nw
 	notangle -L -Rtypecheckwarn.sh testprogs/typechecktest.nw > testprogs/typecheckwarn.sh
 	chmod +x testprogs/typecheckwarn.sh
 
+testprogs/irgencorrect.sh: testprogs/irgentest.nw
+	notangle -L -Rirgencorrect.sh testprogs/irgentest.nw > testprogs/irgencorrect.sh
+	chmod +x testprogs/irgencorrect.sh
+
 testprogs/commentgen: testprogs/commentgen.cpp
 testprogs/commentgen.cpp: testprogs/stresstest.nw
 	notangle -L -Rcommentgen.cpp testprogs/stresstest.nw | cpif testprogs/commentgen.cpp
@@ -170,14 +196,18 @@ clean:
 	rm -f ast.h ast.cpp ast.o
 	rm -f parser.h parser.cpp parser.o
 	rm -f typecheck.h typecheck.cpp typecheck.o
+	rm -f main.cpp main.o compiler
+	rm -f irgeneration.h irgeneration.cpp irgeneration.o
 	rm -f testprogs/tokentest.cpp testprogs/tokentest.o testprogs/tokentest
 	rm -f testprogs/parsetest.cpp testprogs/parsetest.o testprogs/parsetest
 	rm -f testprogs/typeparsetest.cpp testprogs/typeparsetest.o testprogs/typeparsetest
 	rm -f testprogs/exprparsetest.cpp testprogs/exprparsetest.o testprogs/exprparsetest
 	rm -f testprogs/statementparsetest.cpp testprogs/statementparsetest.o testprogs/statementparsetest
 	rm -f testprogs/typechecktest.cpp testprogs/typechecktest.o testprogs/typechecktest
+	rm -f testprogs/irgentest.cpp testprogs/irgentest.o testprogs/irgentest
 	rm -f testprogs/parsecorrect.sh testprogs/parsefail.sh testprogs/parsewarn.sh
 	rm -f testprogs/typecheckcorrect.sh testprogs/typecheckfail.sh testprogs/typecheckwarn.sh
+	rm -f testprogs/irgencorrect.sh
 	rm -f testprogs/tokencorrect.sh testprogs/tokenfail.sh
 	rm -f testprogs/commentgen testprogs/commentgen.cpp
 	rm -f testprogs/bracketgen testprogs/bracketgen.cpp

@@ -1,0 +1,79 @@
+\section{Test IR generation}
+
+The following is a simple program to generate IR.
+
+<<irgentest.cpp>>=
+#include "token.h"
+#include "parser.h"
+#include "typecheck.h"
+#include "ir.h"
+#include "irgeneration.h"
+#include <cstdio>
+#include <map>
+
+using namespace std;
+
+void initialize_tables();
+void cleanup_tables();
+
+int main(int argc, char **argv)
+{
+	if (argc < 2)
+		return 1;
+	
+	tok_setinput(string(argv[1]));
+	
+	ast_program *program = parse_program();
+	typecheck_program(program);
+	
+	ir_module *module = irgen_translate_program(program);
+	
+	module->print();
+	
+	typecheck_cleanup();
+	delete program;
+	delete module;
+	
+	return 0;
+}
+@
+
+\subsection{Test correct}
+
+This test script handles the testing of the behaviour of the ir generation on correct input, and checks whether it produces the expected output.
+<<irgencorrect.sh>>=
+#!/bin/bash
+
+PASSES=0
+FAILS=0
+
+for SPL_FILE in $(ls tests/typechecking/correct/*.spl)
+do
+	valgrind --leak-check=full --error-exitcode=1 --quiet ./testprogs/irgentest $SPL_FILE > testTmp.txt
+	if [ $? -ne 0 ]
+	then
+		echo Failure in testcase $SPL_FILE
+		FAILS=$((FAILS+1))
+	else
+		PASSES=$((PASSES+1))
+	fi
+	
+	rm -f testTmp.txt
+done
+
+echo Results for irgeneration/correct suite:
+if [ $FAILS -eq 0 ]
+then
+	echo -ne '\E[32m'
+else
+	echo -ne '\E[31m'
+fi
+echo PASSED: $PASSES
+echo FAILED: $FAILS
+echo -ne '\E[0m'
+
+if [ $FAILS -ne 0 ]
+then
+	exit 1
+fi
+@
