@@ -80,6 +80,7 @@ public:
 				stat->print();
 			}
 		}
+		printf("\n");
 	}
 	
 	virtual ir_base *copy()
@@ -129,6 +130,10 @@ public:
 			keyvalue.second->print();
 		}
 	}
+	virtual ir_base *copy()
+	{
+		return new ir_module(*this);
+	}
 };
 @
 
@@ -152,6 +157,8 @@ enum ir_type
 	IR_TYPE_UNKNOWN,
 };
 @
+
+The translation to machine code guarantees a special null ptr object to be availble, represented by the NULL label.
 
 \section{Expressions}
 
@@ -313,6 +320,138 @@ public:
 	{
 		return new ir_expression_ptrar_binop((ir_expression_ptr*)left->copy(),
 			(ir_expression_int*)right->copy(), op);
+	}
+};
+@
+
+\subsection{Boolean operations}
+
+The IR also has two operations for boolean or and and:
+
+<<IR boolean arithmetic>>=
+enum ir_boolar_op
+{
+	IR_BOOL_AND,
+	IR_BOOL_OR,
+};
+class ir_expression_boolar_binop : public ir_expression_bool
+{
+public:
+	ir_expression_bool *left, *right;
+	ir_boolar_op op;
+	
+	ir_expression_boolar_binop(ir_expression_bool *l, ir_expression_bool *r, ir_boolar_op o)
+	{
+		left = l;
+		right = r;
+		op = o;
+	}
+	virtual ~ir_expression_boolar_binop()
+	{
+		delete left;
+		delete right;
+	}
+	virtual void print()
+	{
+		printf("(");
+		left->print();
+		switch(op)
+		{
+		case IR_BOOL_AND:
+			printf("&&");
+			break;
+		case IR_BOOL_OR:
+			printf("||");
+			break;
+		}
+		right->print();
+		printf(")");
+	}
+	virtual ir_base *copy()
+	{
+		return new ir_expression_boolar_binop(left, right, op);
+	}
+};
+@
+
+\subsection{Unary operations}
+
+Both booleans and integers have a form of negation as unary operators, this provides those:
+
+<<IR integer unary>>=
+enum ir_intar_unop
+{
+	IR_INT_NEG,
+};
+class ir_expression_intar_unop : public ir_expression_int
+{
+public:
+	ir_expression_int *inner;
+	ir_intar_unop op;
+	
+	ir_expression_intar_unop(ir_expression_int *i, ir_intar_unop o)
+	{
+		inner = i;
+		op = o;
+	}
+	virtual ~ir_expression_intar_unop()
+	{
+		delete inner;
+	}
+	virtual void print()
+	{
+		printf("(");
+		switch(op)
+		{
+		case IR_INT_NEG:
+			printf("-");
+			break;
+		}
+		inner->print();
+		printf(")");
+	}
+	virtual ir_base *copy()
+	{
+		return new ir_expression_intar_unop(inner, op);
+	}
+};
+@
+
+<<IR boolean unary>>=
+enum ir_boolar_unop
+{
+	IR_BOOL_NOT,
+};
+class ir_expression_boolar_unop : public ir_expression_bool
+{
+public:
+	ir_expression_bool *inner;
+	ir_boolar_unop op;
+	
+	ir_expression_boolar_unop(ir_expression_bool *i, ir_boolar_unop o)
+	{
+		inner = i;
+		op = o;
+	}
+	virtual ~ir_expression_boolar_unop()
+	{
+		delete inner;
+	}
+	virtual void print()
+	{
+		printf("(");
+		switch(op)
+		{
+		case IR_BOOL_NOT:
+			printf("!");
+			break;
+		}
+		inner->print();
+		printf(")");
+	}
+	virtual ir_base *copy()
+	{
+		return new ir_expression_boolar_unop(inner, op);
 	}
 };
 @
@@ -714,7 +853,23 @@ public:
 
 \subsection{Label values}
 
+For referencing to labels in the globals section, we have label expressions. These always produce ptr values.
 
+<<IR label expression>>=
+class ir_expression_label : public ir_expression_ptr
+{
+public:
+	std::string label;
+	
+	ir_expression_label(std::string l) { label = l; }
+	virtual ~ir_expression_label() {}
+	virtual void print() { printf("%s", label.c_str()); }
+	virtual ir_base *copy()
+	{
+		return new ir_expression_label(label);
+	}
+};
+@
 
 \section{Statements}
 
@@ -835,7 +990,7 @@ public:
 				printf(", ");
 			arg->print();
 		}
-		printf(")");
+		printf(")\n");
 	}
 	virtual ir_base *copy()
 	{
@@ -929,11 +1084,15 @@ public:
 <<IR expression base>>
 <<IR integer arithmetic>>
 <<IR pointer arithmetic>>
+<<IR boolean arithmetic>>
+<<IR integer unary>>
+<<IR boolean unary>>
 <<IR comparison operators>>
 <<IR type conversions>>
 <<IR read memory>>
 <<IR read temporary>>
 <<IR constant expression>>
+<<IR label expression>>
 
 <<IR statement base>>
 <<IR assign to temporary>>
