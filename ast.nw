@@ -566,6 +566,8 @@ class ast_lvalue_variable : public ast_lvalue
 {
 public:
 	std::string variable;
+	ast_statement_vardecl *declaration=NULL; //Reference only, no ownership
+	ast_funarg *funargdecl = NULL; //Reference only, no ownership
 	
 	ast_lvalue_variable(source_position pos, std::string var) 
 		{ position = pos, variable = var; }

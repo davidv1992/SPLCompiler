@@ -893,6 +893,8 @@ if (vartype == NULL)
 }
 
 lval->type = (ast_type*)vartype->type->copy();
+var->declaration = vartype->declaration;
+var->funargdecl = vartype->funargdecl;
 return (ast_type*)vartype->type->copy();
 @
 
