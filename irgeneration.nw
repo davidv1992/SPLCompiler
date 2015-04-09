@@ -1,5 +1,13 @@
 \chapter{IR generation}
 
+\section{Namespacing and label name collisions}
+
+IR generation, and possibly also it's translation to assembly, gives rise to a multitude of new labels, each of which requires a unique name. In order to make sure no user chosen name can ever collide with a generated name, we prefix user names with two extra underscores. All generated names that don't correspond one-to-one with user-chosen names are guaranteed to start with at most one underscore. The translation phase uses this to give the following guarantees:
+\begin{itemize}
+\item No user name will ever collide with a generated name.
+\item When \_x is a name in the generated IR, the labels starting with x\_L and x\_T are guaranteed to not exist in the generated IRs
+\end{itemize}
+
 \section{Implementing polymorphic functions}
 
 SPL has polymorphic functions, and it would be preferable to keep the translated variants of those functions also polymorphic. I have decided to solve this issue by passing around the types of polymorphic variables as function arguments. However, this is done with a slight twist: To keep the values indicating a type independent of the program being compiled for each argument where this is neccessary only the top-level (eg Int, Bool, Char, List, Tuple) type is passed along. For the more complex List and Tuple types, the record pointed to by the variable contains a hidden third field, containing the type descriptions of the two parts. This gives enough information for everything.
@@ -18,15 +26,15 @@ For a tuple or list, the type field contains $8*\text{typesecond}+\text{typefirs
 
 The IR itself is relatively small and corresponds well with the capabilities of modern processors. However, the SPL language contains a few features that do not translate well into one or a few of these small operations. In particular comparison on types such as lists and tuples, and on arbitrary types, cannot be translated into a few IR instructions. For these operations IR generation depends on a runtime library with currently three functions:
 
-Int \_\_cmp(Unknown a, Int a\_type, Unknown b, Int b\_type)
+Int \_cmp(Unknown a, Int a\_type, Unknown b, Int b\_type)
 
 This function implements comparison between a and b. It only has defined behaviour when the type of a and b are equal, otherwise it's result is undefined.
 
-Ptr \_\_makePair(Unknown a, Int a\_type, Unknown b, Int b\_type)
+Ptr \_makePair(Unknown a, Int a\_type, Unknown b, Int b\_type)
 
 This function allocates and initializes a pair from a and b.
 
-Ptr \_\_makeList(Unknown a, Int a\_type, Ptr b)
+Ptr \_makeList(Unknown a, Int a\_type, Ptr b)
 
 This function allocates and initializes a list from a and b.
 
@@ -295,7 +303,7 @@ case OP_GE:
 	cmpreturns.push_back(comparisonResultTemporary);
 	
 	function->blocks[trace].push_back(
-		new ir_statement_functioncall("__cmp", 
+		new ir_statement_functioncall("_cmp", 
 			cmpargs,
 			cmpreturns));
 	
@@ -312,7 +320,7 @@ case OP_GE:
 }
 @
 
-The colon operator leads to the allocation of a new object, using \_\_makeList:
+The colon operator leads to the allocation of a new object, using \_makeList:
 <<translate list creation>>=
 case OP_COLON:
 {
@@ -333,7 +341,7 @@ case OP_COLON:
 	returns.push_back(resultPointer);
 	
 	function->blocks[trace].push_back(
-		new ir_statement_functioncall("__makeList",
+		new ir_statement_functioncall("_makeList",
 			arguments,
 			returns));
 	
@@ -437,7 +445,7 @@ if (var->declaration != NULL && var->declaration->value_temp != -1)
 else if (var->declaration != NULL)
 {
 	result.first = new ir_expression_memory(
-		new ir_expression_label(var->declaration->id));
+		new ir_expression_label("__"+var->declaration->id));
 	
 	if (typeid(*var->type) == typeid(ast_int_type)
 		|| typeid(*var->type) == typeid(ast_char_type))
@@ -601,7 +609,7 @@ if (typeid(*fundef->return_type) == typeid(ast_simple_type))
 
 function->blocks[trace].push_back(
 	new ir_statement_functioncall(
-		funcall->id,
+		"__"+funcall->id,
 		arguments,
 		returntemps));
 
@@ -658,7 +666,7 @@ result.first = new ir_expression_boolconst(bc->value);
 
 \subsection{Pair expressions}
 
-A pair is allocated and initialized with a call to \_\_makePair. The resulting expression is just a ptrexpression.
+A pair is allocated and initialized with a call to \_makePair. The resulting expression is just a ptrexpression.
 
 <<translate pair expression>>=
 ast_expression_pair *pair = (ast_expression_pair*)expression;
@@ -679,7 +687,7 @@ return_temps.push_back(result_temp);
 
 function->blocks[trace].push_back(
 	new ir_statement_functioncall(
-		"__makePair",
+		"_makePair",
 		arguments,
 		return_temps));
 
@@ -780,7 +788,7 @@ pair<ir_expression*, ir_expression_int*>irgen_translate_expression(
 
 Translating statements, there are a few extra issues to deal with. First of all, every trace should end on a flow control instruction. This means that we need to be able to deal with returns halfway through a statement block, and stop emission of instructions after those (These statements are dead anyway). For this, the translate function returns a bool indicating wheteher or not a return has already been emitted for the current trace.
 
-\section{Return statements}
+\subsection{Return statements}
 
 For a return stament, we have to deal with returning type information if this is a polymorphic function. This is done in the second return temp.
 
@@ -805,7 +813,7 @@ function->blocks[trace].push_back(
 return true;
 @
 
-\section{Variable declaration}
+\subsection{Variable declaration}
 
 For variable declarations, we also need to handle the declaration of the relevant temporaries.
 
@@ -885,7 +893,7 @@ ir_expression_ptr *irgen_translate_lvalue(ast_lvalue *lval)
 	if (typeid(*lval) == typeid(ast_lvalue_variable))
 	{
 		ast_lvalue_variable *var = (ast_lvalue_variable*)lval;
-		return new ir_expression_label(var->variable);
+		return new ir_expression_label("__"+var->variable);
 	}
 	else if (typeid(*lval) == typeid(ast_lvalue_field))
 	{
@@ -1095,7 +1103,7 @@ bool irgen_translate_statement(ir_function *function, int &trace, ast_statement 
 
 \section{Translating functions}
 
-The IR requires
+The IR requires a flow control statement on every trace, but the final outro one might not have such a statement (for example if the function is void type and does not end on a return). In those cases we must generate a ret here.
 
 <<translate function>>=
 void irgen_translate_function(ir_module *module, ast_fundecl *fun)
@@ -1156,11 +1164,13 @@ void irgen_translate_function(ir_module *module, ast_fundecl *fun)
 	if (needsReturn)
 		function->blocks[initialTrace].push_back(new ir_statement_return());
 	
-	module->functions[fun->name] = function;
+	module->functions["__"+fun->name] = function;
 }
 @
 
 \section{Translating programs}
+
+Translating global variables, we need to somehow implement the initialization of globals. This is done by placing the statements for that in a special \_init function.
 
 <<translate program header>>=
 ir_module* irgen_translate_program(ast_program *program);
@@ -1170,6 +1180,28 @@ ir_module* irgen_translate_program(ast_program *program);
 ir_module* irgen_translate_program(ast_program *program)
 {
 	ir_module *module = new ir_module();
+
+	ir_function *init = new ir_function(vector<ir_type>(0), vector<ir_type>(0));
+	int initTrace = 0;
+	init->blocks.push_back(vector<ir_statement*>(0));
+
+	for (auto global: program->globalvars)
+	{
+		module->globals["__"+global->id] = 1;
+		
+		ir_expression *rhs = 
+			irgen_translate_expression(init, initTrace, global->value, false).first;
+		
+		init->blocks[initTrace].push_back(
+			new ir_statement_assign_memory(
+				new ir_expression_label("__"+global->id),
+				rhs));
+	}
+	
+	init->blocks[initTrace].push_back(
+		new ir_statement_return());
+	
+	module->functions["_init"] = init;
 	
 	for (auto fundecl : program->functions)
 	{
