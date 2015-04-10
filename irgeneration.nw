@@ -1210,6 +1210,8 @@ ir_module* irgen_translate_program(ast_program *program)
 #ifndef IRGENERATION_H
 #define IRGENERATION_H
 
+#include "ast.h"
+
 <<runtime type constants>>
 
 <<translate program header>>
