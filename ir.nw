@@ -615,6 +615,7 @@ enum ir_boolcmp_op
 };
 class ir_expression_boolcmp : public ir_expression_bool
 {
+public:
 	ir_expression_bool *left, *right;
 	ir_boolcmp_op op;
 	
@@ -660,6 +661,7 @@ enum ir_unknowncmp_op
 };
 class ir_expression_unknowncmp : public ir_expression_bool
 {
+public:
 	ir_expression_unknown *left, *right;
 	ir_unknowncmp_op op;
 	
