@@ -93,6 +93,12 @@ public:
 		temp_types.push_back(type);
 		return temp_types.size()-1;
 	}
+	
+	int add_block()
+	{
+		blocks.push_back(std::vector<ir_statement*>(0));
+		return blocks.size()-1;
+	}
 };
 @
 

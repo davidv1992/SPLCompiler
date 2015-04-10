@@ -28,7 +28,7 @@ The IR itself is relatively small and corresponds well with the capabilities of 
 
 Int \_cmp(Unknown a, Int a\_type, Unknown b, Int b\_type)
 
-This function implements comparison between a and b. It only has defined behaviour when the type of a and b are equal, otherwise it's result is undefined.
+This function implements comparison between a and b. It only has defined behaviour when the type of a and b are equal, otherwise it's result is undefined. It will return a value $<0$ if $a<b$, $0$ if $a=b$, and $>0$ if $a > b$.
 
 Ptr \_makePair(Unknown a, Int a\_type, Unknown b, Int b\_type)
 
@@ -959,14 +959,12 @@ An if can have either one or two extra blocks besides the outro block. Again, we
 <<translate if statement>>=
 ast_statement_if *ifstat = (ast_statement_if*)stat;
 
-int true_block = function->blocks.size();
-function->blocks.push_back(vector<ir_statement*>(0));
+int true_block = function->add_block();
 
 bool true_needs_jump = !irgen_translate_statement(
 	function, true_block, ifstat->true_statement);
 
-int false_block = function->blocks.size();
-function->blocks.push_back(vector<ir_statement*>(0));
+int false_block = function->add_block();
 
 int outro_block = -1;
 if (ifstat->false_statement == NULL)
@@ -985,8 +983,7 @@ else
 	}
 	else
 	{
-		outro_block = function->blocks.size();
-		function->blocks.push_back(vector<ir_statement*>(0));
+		outro_block = function->add_block();
 		if (false_needs_jump)
 			function->blocks[false_block].push_back(
 				new ir_statement_jump(outro_block));
@@ -1021,17 +1018,14 @@ While statements are relatively easy. The fact that a check is also needed for t
 <<translate while statement>>=
 ast_statement_while *whilestat = (ast_statement_while*)stat;
 
-int condition_block = function->blocks.size();
-function->blocks.push_back(vector<ir_statement*>(0));
-int body_block = function->blocks.size();
-function->blocks.push_back(vector<ir_statement*>(0));
+int condition_block = function->add_block();
+int body_block = function->add_block();
 
 if (!irgen_translate_statement(function, body_block, whilestat->body))
 	function->blocks[body_block].push_back(
 		new ir_statement_jump(condition_block));
 
-int outro_block = function->blocks.size();
-function->blocks.push_back(vector<ir_statement*>(0));
+int outro_block = function->add_block();
 
 ir_expression_bool *condition = dynamic_cast<ir_expression_bool*>(
 	irgen_translate_expression(function, condition_block,
@@ -1157,8 +1151,7 @@ void irgen_translate_function(ir_module *module, ast_fundecl *fun)
 	}
 	
 	ir_function *function = new ir_function(args, rets);
-	function->blocks.push_back(vector<ir_statement*>(0));
-	int initialTrace = 0;
+	int initialTrace = function->add_block();
 	
 	bool needsReturn = !irgen_translate_statement(function, initialTrace, fun->body);
 	if (needsReturn)
@@ -1182,8 +1175,7 @@ ir_module* irgen_translate_program(ast_program *program)
 	ir_module *module = new ir_module();
 
 	ir_function *init = new ir_function(vector<ir_type>(0), vector<ir_type>(0));
-	int initTrace = 0;
-	init->blocks.push_back(vector<ir_statement*>(0));
+	int initTrace = init->add_block();
 
 	for (auto global: program->globalvars)
 	{
