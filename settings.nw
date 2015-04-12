@@ -4,25 +4,220 @@
 
 Compiler settings are registered in the various parts of the compiler using the COMPILER\_SETTING macro. Calls to it have the following format:
 \begin{mathpar}
-\text{COMPILER\_SETTING} (\text{\emph{type}}, \text{\emph{variable}}, \text{\emph{default\_value}}, \text{\emph{flags}})
+\text{COMPILER\_SETTING} (\text{\emph{type}}, \text{\emph{variable}}, \text{\emph{default\_value}}, \text{\emph{flag}})
 \end{mathpar}
 
 Type and variable specify the type and variable name that provide the settings data to the rest of the compiler. The default value provides it's value when the settings are not yet read or when it is not given on the commandline. For the interpretation of the macro in this file, it is very important that a semicolon is NOT used to terminate the macro call.
 
+The flags argument is a bit special, it should be a const struct containing two values: a prefix and the flag itself. For booleans, two variants of the flag are interpreted, -\textless prefix\textgreater\textless flag\textgreater sets the variable to true, and -\textless prefix\textgreater no-\textless flag\textgreater sets it to false. When flag already includes the no- prefix, the value set is inverted, and the no is removed instead of added for the negative option.
+
+For non-boolean flags, a value should be provided directly after the flag with using =value postfixed to the flag, or by having the next commandline argument be the value.
+
 Calls to this macro (and only calls to this macro) are added to the special \textless\textless compiler settings\textgreater\textgreater\ environment. This environment is then included everywhere the list is needed and the macro calls preprocessed to the form needed there.
 
-\section{Temporary variable declarations}
+\section{Flag structure}
 
+The flag argument will be interpreted as an initializer for a struct of the following type:
+
+<<config flag structure>>=
+struct config_flag
+{
+	string prefix;
+	string flag;
+	string description;
+};
+@
+
+\section{variable declarations}
+
+Variables are needed in two places. First of all, we need them in the header so the other parts of the compiler can read them.
 <<config variable declarations>>=
-#define COMPILER_SETTING(type, variable, default_value, flags) extern type variable;
+#define COMPILER_SETTING(type, variable, default_value, flag) extern type variable;
 <<compiler settings>>
 #undef COMPILER_SETTING
 @
 
+Furthermore we need them in the source, where we use every bit of information.
 <<config variable definitions>>=
-#define COMPILER_SETTING(type, variable, default_value, flags) type variable = default_value;
+#define COMPILER_SETTING(type, variable, default_value, flag) type variable = default_value;
 <<compiler settings>>
 #undef COMPILER_SETTING
+@
+
+\section{Flag storage}
+
+The code here creates the datastructure describing the flags and the data in them.
+
+<<config flag full>>=
+struct config_flag_full
+{
+	void *variable;
+	string type;
+	config_flag flag;
+};
+@
+
+<<generate config flag table>>=
+#define COMPILER_SETTING(type, variable, default_value, flag) {&variable, #type, flag},
+config_flag_full flag_table[] = {
+<<compiler settings>>
+};
+int flag_table_length = sizeof(flag_table)/sizeof(config_flag_full);
+@
+
+\section{Processing command line arguments}
+
+This function is responsible for parsing the commandline arguments. It will take the non-flag arguments to create a list of input files, returned by the function, and processes the flags, putting the values conveyed by those in the corresponding flags. If the -help flag is read, a help message with a description of all flags is given, and we exit here. On an unknown flag, this function aborts the entire program and displays an error message.
+
+<<process commandline header>>=
+std::vector<std::string> parse_commandline(int argc, char **argv);
+@
+<<process commandline>>=
+vector<string> parse_commandline(int argc, char **argv)
+{
+	vector<string> inputfiles;
+	int index = 1;
+	while (index < argc)
+	{
+		string arg = argv[index];
+		index++;
+		
+		if (arg.length() == 0)
+		{
+			fprintf(stderr, "Empty argument.\n");
+			exit(1);
+		}
+		
+		if (arg == "-help")
+		{
+			print_helptext(argc, argv);
+			exit(0);
+		}
+		
+		if (arg[0] != '-')
+		{
+			inputfiles.push_back(arg);
+			continue;
+		}
+		
+		bool recognized = false;
+		
+		for (int i=0; i<flag_table_length; i++)
+		{
+			string option = "-" + flag_table[i].flag.prefix + flag_table[i].flag.flag;
+			
+			if (option == arg)
+			{
+				recognized = true;
+				
+				if (flag_table[i].type == "bool")
+					*(bool*)flag_table[i].variable = true;
+				else if (flag_table[i].type == "int")
+					*(int*)flag_table[i].variable = parse_int_extra(argc, argv, index, arg);
+				else
+					assert(0);
+					
+				break;
+			}
+			
+			if (flag_table[i].type == "bool")
+			{
+				if (flag_table[i].flag.flag.substr(0,3) == "no-")
+					option = "-" + flag_table[i].flag.prefix 
+						+ flag_table[i].flag.flag.substr(3);
+				else
+					option = "-" + flag_table[i].flag.prefix + "no-"
+						+ flag_table[i].flag.flag;
+				
+				if (option == arg)
+				{
+					*(bool*)flag_table[i].variable = false;
+					recognized = true;
+					
+					break;
+				}
+			}
+		}
+		
+		if (!recognized)
+		{
+			fprintf(stderr, "Unrecognized argument %s.\n", arg.c_str());
+			exit(1);
+		}
+	}
+	
+	return inputfiles;
+}
+@
+
+There are several usefull utilities for this
+<<process commandline utilities>>=
+void print_helptext(int argc, char **argv)
+{
+	fprintf(stderr, "SPL Compiler version " VERSION "\n");
+	fprintf(stderr, "usage: %s inputfiles+ [options]\n", argv[0]);
+	
+	fprintf(stderr, "\nOptions:\n");
+	
+	for (int i=0; i<flag_table_length; i++)
+	{
+		fprintf(stderr, "\t-%s%s: %s\n", flag_table[i].flag.prefix.c_str(),
+			flag_table[i].flag.flag.c_str(), flag_table[i].flag.description.c_str());
+	}
+}
+int parse_int_extra(int argc, char **argv, int &index, string flag)
+{
+	if (argc <= index)
+	{
+		fprintf(stderr, "Missing argument for %s.", flag.c_str());
+		exit(1);
+	}
+	
+	string argval = argv[index];
+	index++;
+	
+	if (argval.length() < 1)
+	{
+		fprintf(stderr, "Missing argument for %s.", flag.c_str());
+		exit(1);
+	}
+	
+	unsigned int i=0;
+	bool negate = false;
+	if (argval[0] == '-')
+	{
+		negate = true;
+		i++;
+		if (argval.length() < 2)
+		{
+			fprintf(stderr, "%s expects integer as argument.", flag.c_str());
+			exit(1);
+		}
+	}
+	
+	int val = 0;
+	
+	for (; i<argval.length(); i++)
+	{
+		if (argval[i] < '0' || argval[i] > '9')
+		{
+			fprintf(stderr, "%s expects integer as argument.",  flag.c_str());
+			exit(1);
+		}
+		
+		if ((val*10 + (argval[i]-'0')) < val)
+		{
+			fprintf(stderr, "Argument for %s too big.", flag.c_str());
+			exit(1);
+		}
+		
+		val = val*10 + (argval[i]-'0');
+	}
+	
+	if (negate)
+		return -val;
+	return val;
+}
 @
 
 \section{Header and source file}
@@ -31,10 +226,31 @@ Generating the actual code:
 <<settings.h>>=
 #ifndef SETTINGS_H
 #define SETTINGS_H
+#include <vector>
+#include <string>
 <<config variable declarations>>
+<<process commandline header>>
 #endif
 @
 
 <<settings.cpp>>=
+#include "settings.h"
+#include "version.h"
+#include <cstdio>
+#include <cstdlib>
+#include <cassert>
+#include <string>
+#include <vector>
+
+using namespace std;
+
+<<config flag structure>>
+<<config flag full>>
+
 <<config variable definitions>>
+
+<<generate config flag table>>
+
+<<process commandline utilities>>
+<<process commandline>>
 @

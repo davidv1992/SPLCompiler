@@ -91,7 +91,7 @@ compiler: main.o token.o parser.o ast.o error.o typecheck.o irgeneration.o
 version.h:
 	echo \#define VERSION \"`git describe --abbrev=4 --dirty --always --tags`\" | cpif version.h
 
-settings.o: settings.cpp
+settings.o: settings.cpp settings.h version.h
 settings.cpp: settings.nw token.nw parser.nw typecheck.nw error.nw
 	notangle -L -Rsettings.cpp token.nw parser.nw typecheck.nw error.nw settings.nw | cpif settings.cpp
 settings.h: settings.nw token.nw parser.nw typecheck.nw error.nw

@@ -628,7 +628,9 @@ case TOKEN_SQUAREBRACKET_LEFT:
 @
 We have two modes regarding variable declarations, strict and non-strict. In strict mode we only allow them at the start of functions, but in non-strict mode they are allowed at all points in a function. This is controlled by the following setting:
 <<compiler settings>>=
-COMPILER_SETTING(bool, strict_vardecl, false, {})
+#define VARDECL_SETTING_FLAG {"","strict-vardecl",""}
+COMPILER_SETTING(bool, strict_vardecl, false, VARDECL_SETTING_FLAG)
+#undef VARDECL_SETTING_FLAG
 @
 <<parse vardecl>>=
 {
