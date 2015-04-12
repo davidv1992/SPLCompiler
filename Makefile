@@ -81,12 +81,12 @@ splruntime.h: splruntime.nw
 splruntime.cpp: splruntime.nw
 	notangle -L -Rsplruntime.cpp splruntime.nw | cpif splruntime.cpp
 
-main.o: main.cpp token.h parser.h ast.h position.h typecheck.h ir.h irgeneration.h
+main.o: main.cpp token.h parser.h ast.h position.h typecheck.h ir.h irgeneration.h settings.h
 main.cpp: main.nw
 	notangle -L -Rmain.cpp main.nw | cpif main.cpp
 
-compiler: main.o token.o parser.o ast.o error.o typecheck.o irgeneration.o
-	g++ $(CXXFLASGS) -o compiler main.o token.o parser.o ast.o error.o typecheck.o irgeneration.o
+compiler: main.o token.o parser.o ast.o error.o typecheck.o irgeneration.o settings.o
+	g++ $(CXXFLASGS) -o compiler main.o token.o parser.o ast.o error.o typecheck.o irgeneration.o settings.o
 
 version.h:
 	echo \#define VERSION \"`git describe --abbrev=4 --dirty --always --tags`\" | cpif version.h
@@ -145,8 +145,8 @@ testprogs/typechecktest.o: testprogs/typechecktest.cpp token.h parser.h ast.h po
 testprogs/typechecktest.cpp: testprogs/typechecktest.nw
 	notangle -L -Rtypechecktest.cpp testprogs/typechecktest.nw | cpif testprogs/typechecktest.cpp
 
-testprogs/irgentest: testprogs/irgentest.o token.o parser.o ast.o error.o typecheck.o irgeneration.o splruntime.o
-	g++ $(CXXFLAGS) -o testprogs/irgentest testprogs/irgentest.o token.o parser.o ast.o error.o typecheck.o irgeneration.o splruntime.o
+testprogs/irgentest: testprogs/irgentest.o token.o parser.o ast.o error.o typecheck.o irgeneration.o settings.o splruntime.o
+	g++ $(CXXFLAGS) -o testprogs/irgentest testprogs/irgentest.o token.o parser.o ast.o error.o typecheck.o irgeneration.o settings.o splruntime.o
 testprogs/irgentest.o: testprogs/irgentest.cpp token.h parser.h ast.h position.h typecheck.h ir.h irgeneration.h splruntime.h
 testprogs/irgentest.cpp: testprogs/irgentest.nw
 	notangle -L -Rirgentest.cpp testprogs/irgentest.nw | cpif testprogs/irgentest.cpp

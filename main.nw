@@ -8,6 +8,7 @@ This file does all the chaining of the various parts of the compiler. It is resp
 #include "typecheck.h"
 #include "ir.h"
 #include "irgeneration.h"
+#include "settings.h"
 #include <cstdio>
 #include <map>
 
@@ -18,10 +19,12 @@ void cleanup_tables();
 
 int main(int argc, char **argv)
 {
-	if (argc < 2)
-		return 1;
+	vector<string> inputfiles = parse_commandline(argc, argv);
 	
-	tok_setinput(string(argv[1]));
+	if (inputfiles.size() != 1)
+		exit(1);
+	
+	tok_setinput(inputfiles[0]);
 	
 	ast_program *program = parse_program();
 	typecheck_program(program);
