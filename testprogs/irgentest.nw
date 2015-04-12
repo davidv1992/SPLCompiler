@@ -8,6 +8,7 @@ The following is a simple program to generate IR.
 #include "typecheck.h"
 #include "ir.h"
 #include "irgeneration.h"
+#include "splruntime.h"
 #include <cstdio>
 #include <map>
 
@@ -27,6 +28,8 @@ int main(int argc, char **argv)
 	typecheck_program(program);
 	
 	ir_module *module = irgen_translate_program(program);
+	
+	generate_runtime(module);
 	
 	module->print();
 	

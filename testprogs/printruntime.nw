@@ -1,0 +1,21 @@
+\section{Runtime library printing}
+
+This test program prints the runtime library
+
+<<printruntime.cpp>>=
+#include "ir.h"
+#include "splruntime.h"
+
+int main()
+{
+	ir_module *module = new ir_module();
+	
+	generate_runtime(module);
+	
+	module->print();
+	
+	delete module;
+	
+	return 0;
+}
+@

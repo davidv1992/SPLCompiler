@@ -75,6 +75,12 @@ irgeneration.h: irgeneration.nw
 irgeneration.cpp: irgeneration.nw
 	notangle -L -Rirgeneration.cpp irgeneration.nw | cpif irgeneration.cpp
 
+splruntime.o: splruntime.cpp ir.h irgeneration.h ast.h position.h
+splruntime.h: splruntime.nw
+	notangle -L -Rsplruntime.h splruntime.nw | cpif splruntime.h
+splruntime.cpp: splruntime.nw
+	notangle -L -Rsplruntime.cpp splruntime.nw | cpif splruntime.cpp
+
 main.o: main.cpp token.h parser.h ast.h position.h typecheck.h ir.h irgeneration.h
 main.cpp: main.nw
 	notangle -L -Rmain.cpp main.nw | cpif main.cpp
@@ -136,11 +142,17 @@ testprogs/typechecktest.o: testprogs/typechecktest.cpp token.h parser.h ast.h po
 testprogs/typechecktest.cpp: testprogs/typechecktest.nw
 	notangle -L -Rtypechecktest.cpp testprogs/typechecktest.nw | cpif testprogs/typechecktest.cpp
 
-testprogs/irgentest: testprogs/irgentest.o token.o parser.o ast.o error.o typecheck.o irgeneration.o
-	g++ $(CXXFLAGS) -o testprogs/irgentest testprogs/irgentest.o token.o parser.o ast.o error.o typecheck.o irgeneration.o
-testprogs/irgentest.o: testprogs/irgentest.cpp token.h parser.h ast.h position.h typecheck.h ir.h irgeneration.h
+testprogs/irgentest: testprogs/irgentest.o token.o parser.o ast.o error.o typecheck.o irgeneration.o splruntime.o
+	g++ $(CXXFLAGS) -o testprogs/irgentest testprogs/irgentest.o token.o parser.o ast.o error.o typecheck.o irgeneration.o splruntime.o
+testprogs/irgentest.o: testprogs/irgentest.cpp token.h parser.h ast.h position.h typecheck.h ir.h irgeneration.h splruntime.h
 testprogs/irgentest.cpp: testprogs/irgentest.nw
 	notangle -L -Rirgentest.cpp testprogs/irgentest.nw | cpif testprogs/irgentest.cpp
+
+testprogs/printruntime: testprogs/printruntime.o splruntime.o
+	g++ $(CXXFLAGS) -o testprogs/printruntime testprogs/printruntime.o splruntime.o
+testprogs/printruntime.o: testprogs/printruntime.cpp ir.h splruntime.h
+testprogs/printruntime.cpp: testprogs/printruntime.nw
+	notangle -L -Rprintruntime.cpp testprogs/printruntime.nw | cpif testprogs/printruntime.cpp
 
 testprogs/parsecorrect.sh: testprogs/parsetest.nw
 	notangle -L -Rparsecorrect.sh testprogs/parsetest.nw > testprogs/parsecorrect.sh
@@ -198,12 +210,14 @@ clean:
 	rm -f typecheck.h typecheck.cpp typecheck.o
 	rm -f main.cpp main.o compiler
 	rm -f irgeneration.h irgeneration.cpp irgeneration.o
+	rm -f splruntime.h splruntime.cpp splruntime.o
 	rm -f testprogs/tokentest.cpp testprogs/tokentest.o testprogs/tokentest
 	rm -f testprogs/parsetest.cpp testprogs/parsetest.o testprogs/parsetest
 	rm -f testprogs/typeparsetest.cpp testprogs/typeparsetest.o testprogs/typeparsetest
 	rm -f testprogs/exprparsetest.cpp testprogs/exprparsetest.o testprogs/exprparsetest
 	rm -f testprogs/statementparsetest.cpp testprogs/statementparsetest.o testprogs/statementparsetest
 	rm -f testprogs/typechecktest.cpp testprogs/typechecktest.o testprogs/typechecktest
+	rm -f testprogs/printruntime.cpp testprogs/printruntime.o testprogs/printruntime
 	rm -f testprogs/irgentest.cpp testprogs/irgentest.o testprogs/irgentest
 	rm -f testprogs/parsecorrect.sh testprogs/parsefail.sh testprogs/parsewarn.sh
 	rm -f testprogs/typecheckcorrect.sh testprogs/typecheckfail.sh testprogs/typecheckwarn.sh

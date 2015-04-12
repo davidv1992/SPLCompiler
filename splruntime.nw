@@ -1,0 +1,1057 @@
+\chapter{SPL runtime library}
+
+A large part of the runtime support required by the IR generation module is does not really depend on the specific platform we are compiling for. The same holds for large portions of the function library visible to user programs. This means that it is also quite feasible to implement these portions in the intermediate language. This approach has as an advantage that we don't need to write most of the library again when porting the compiler to a new platform.
+
+\section{Platform interface library}
+
+There are of course still some things that cannot be done in the intermediate language. We actually need external routines for two fundamental tasks: Input/Output and Memory allocation. These tasks are handled in the platform interface library. It provides the following three functions:
+
+Ptr \_allocRecord()
+
+This function allocates a 3-word record on the heap.
+
+Int \_getCharacter()
+
+This function reads one unicode/ascii character from standard input
+
+Void \_putCharacter(Int)
+
+This function writes one unicode character to standard output.
+
+\section{Comparison}
+
+The \_cmp function required by IR generation can be entirely implemented in the IR language. We are allowed to make the assumption that the type of the two inputs is the same, which we do (we decide what to do only on the first type).
+
+<<generate cmp>>=
+void generate_cmp(ir_module *module)
+{
+	vector<ir_type> arguments;
+	vector<ir_type> returns;
+	
+	arguments.push_back(IR_TYPE_UNKNOWN);
+	arguments.push_back(IR_TYPE_INT);
+	arguments.push_back(IR_TYPE_UNKNOWN);
+	arguments.push_back(IR_TYPE_INT);
+	
+	returns.push_back(IR_TYPE_INT);
+	
+	ir_function *cmp = new ir_function(arguments, returns);
+	
+	//Check equality first, saves effort later
+	cmp->add_block();
+	cmp->blocks[0].push_back(
+		new ir_statement_if(
+			new ir_expression_unknowncmp(
+				new ir_expression_temp_unknown(0),
+				new ir_expression_temp_unknown(2),
+				IR_UNKNOWN_EQ),
+			1,
+			2));
+	
+	cmp->add_block();
+	cmp->blocks[1].push_back(
+		new ir_statement_assign_temp(
+			4,
+			new ir_expression_intconst(0)));
+	cmp->blocks[1].push_back(
+		new ir_statement_return());
+	
+	// Differentiate between the different types.
+	
+	cmp->add_block();
+	cmp->blocks[2].push_back(
+		new ir_statement_if(
+			new ir_expression_boolar_binop(
+				new ir_expression_intcmp(
+					new ir_expression_temp_int(1),
+					new ir_expression_intconst(IRGEN_RUNTIME_INT),
+					IR_INT_EQ),
+				new ir_expression_intcmp(
+					new ir_expression_temp_int(1),
+					new ir_expression_intconst(IRGEN_RUNTIME_CHAR),
+					IR_INT_EQ),
+				IR_BOOL_OR),
+			6,
+			3));
+	
+	cmp->add_block();
+	cmp->blocks[3].push_back(
+		new ir_statement_if(
+			new ir_expression_intcmp(
+				new ir_expression_temp_int(1),
+				new ir_expression_intconst(IRGEN_RUNTIME_BOOL),
+				IR_INT_EQ),
+			7,
+			4));
+	
+	cmp->add_block();
+	cmp->blocks[4].push_back(
+		new ir_statement_if(
+			new ir_expression_intcmp(
+				new ir_expression_temp_int(1),
+				new ir_expression_intconst(IRGEN_RUNTIME_BOOL),
+				IR_INT_EQ),
+			10,
+			5));
+	
+	// List comparison is tricky, handled in seperate function.
+	
+	cmp->add_block();
+	
+	vector<ir_expression*> lcargs;
+	lcargs.push_back(
+		new ir_expression_unknown_to_ptr(
+			new ir_expression_temp_unknown(0)));
+	lcargs.push_back(
+		new ir_expression_unknown_to_ptr(
+			new ir_expression_temp_unknown(2)));
+	vector<int> lcret;
+	lcret.push_back(4);
+	
+	cmp->blocks[5].push_back(
+		new ir_statement_functioncall(
+			"_listcmp",
+			lcargs,
+			lcret));
+	cmp->blocks[5].push_back(
+		new ir_statement_return());
+		
+	// Integers and chars can be compared by substracting the second from the first
+	
+	cmp->add_block();
+	cmp->blocks[6].push_back(
+		new ir_statement_assign_temp(
+			4,
+			new ir_expression_intar_binop(
+				new ir_expression_unknown_to_int(
+					new ir_expression_temp_unknown(0)),
+				new ir_expression_unknown_to_int(
+					new ir_expression_temp_unknown(2)),
+				IR_INT_SUB)));
+	cmp->blocks[6].push_back(
+		new ir_statement_return());
+	
+	// Booleans, we already know they are not equal, so if t0 is true return 1,
+	//  else return -1
+	
+	cmp->add_block();
+	cmp->blocks[7].push_back(
+		new ir_statement_if(
+			new ir_expression_unknown_to_bool(
+				new ir_expression_temp_unknown(0)),
+			8,
+			9));
+	
+	cmp->add_block();
+	cmp->blocks[8].push_back(
+		new ir_statement_assign_temp(
+			4,
+			new ir_expression_intconst(1)));
+	cmp->blocks[8].push_back(
+		new ir_statement_return());
+	
+	cmp->add_block();
+	cmp->blocks[9].push_back(
+		new ir_statement_assign_temp(
+			4,
+			new ir_expression_intconst(-1)));
+	cmp->blocks[9].push_back(
+		new ir_statement_return());
+	
+	// For pairs we first compare the first field. If they are equal we return
+	//  the result from the second field
+	
+	vector<ir_expression*> pcargs;
+	vector<int> pcrets;
+	
+	pcargs.push_back(
+		new ir_expression_memory(
+			new ir_expression_unknown_to_ptr(
+				new ir_expression_temp_unknown(0))));
+	pcargs.push_back(
+		new ir_expression_intar_binop(
+			new ir_expression_unknown_to_int(
+				new ir_expression_memory(
+					new ir_expression_ptrar_binop(
+						new ir_expression_unknown_to_ptr(
+							new ir_expression_temp_unknown(0)),
+						new ir_expression_intconst(2),
+						IR_PTR_ADD))),
+			new ir_expression_intconst(8),
+			IR_INT_MOD));
+	pcargs.push_back(
+		new ir_expression_memory(
+			new ir_expression_unknown_to_ptr(
+				new ir_expression_temp_unknown(2))));
+	pcargs.push_back(
+		new ir_expression_intar_binop(
+			new ir_expression_unknown_to_int(
+				new ir_expression_memory(
+					new ir_expression_ptrar_binop(
+						new ir_expression_unknown_to_ptr(
+							new ir_expression_temp_unknown(2)),
+						new ir_expression_intconst(2),
+						IR_PTR_ADD))),
+			new ir_expression_intconst(8),
+			IR_INT_MOD));
+	
+	pcrets.push_back(4);
+	
+	cmp->add_block();
+	cmp->blocks[10].push_back(
+		new ir_statement_functioncall(
+			"_cmp",
+			pcargs,
+			pcrets));
+	cmp->blocks[10].push_back(
+		new ir_statement_if(
+			new ir_expression_intcmp(
+				new ir_expression_temp_int(4),
+				new ir_expression_intconst(0),
+				IR_INT_NE),
+			11,
+			12));
+	
+	cmp->add_block();
+	cmp->blocks[11].push_back(
+		new ir_statement_return());
+	
+	pcargs.clear();
+	
+	pcargs.push_back(
+		new ir_expression_memory(
+			new ir_expression_ptrar_binop(
+				new ir_expression_unknown_to_ptr(
+					new ir_expression_temp_unknown(0)),
+				new ir_expression_intconst(1),
+				IR_PTR_ADD)));
+	pcargs.push_back(
+		new ir_expression_intar_binop(
+			new ir_expression_unknown_to_int(
+				new ir_expression_memory(
+					new ir_expression_ptrar_binop(
+						new ir_expression_unknown_to_ptr(
+							new ir_expression_temp_unknown(0)),
+						new ir_expression_intconst(2),
+						IR_PTR_ADD))),
+			new ir_expression_intconst(8),
+			IR_INT_DIV));
+	pcargs.push_back(
+		new ir_expression_memory(
+			new ir_expression_ptrar_binop(
+				new ir_expression_unknown_to_ptr(
+					new ir_expression_temp_unknown(2)),
+				new ir_expression_intconst(1),
+				IR_PTR_ADD)));
+	pcargs.push_back(
+		new ir_expression_intar_binop(
+			new ir_expression_unknown_to_int(
+				new ir_expression_memory(
+					new ir_expression_ptrar_binop(
+						new ir_expression_unknown_to_ptr(
+							new ir_expression_temp_unknown(2)),
+						new ir_expression_intconst(2),
+						IR_PTR_ADD))),
+			new ir_expression_intconst(8),
+			IR_INT_DIV));
+	
+	cmp->add_block();
+	cmp->blocks[12].push_back(
+		new ir_statement_functioncall(
+			"_cmp",
+			pcargs,
+			pcrets));
+	cmp->blocks[12].push_back(
+		new ir_statement_return());
+	
+	
+	// add function to module
+	module->functions["_cmp"] = cmp;
+}
+@
+
+List comparison is more tricky, as we need to handle infinite lists. This is done through a variation on pollard rho. The actual comparison of a list known to be infinite and one with unknown status on that front is done in \_infilistcmp.
+
+<<generate listcmp>>=
+void generate_listcmp(ir_module *module)
+{
+	int TODO = 0;
+	
+	vector<ir_type> arguments;
+	vector<ir_type> returns;
+	
+	arguments.push_back(IR_TYPE_PTR);
+	arguments.push_back(IR_TYPE_PTR);
+	
+	returns.push_back(IR_TYPE_INT);
+	
+	ir_function *listcmp = new ir_function(arguments, returns);
+	
+	// make temps for tortoises
+	listcmp->add_temp(IR_TYPE_PTR);
+	listcmp->add_temp(IR_TYPE_PTR);
+	
+	// initialize the tortoises
+	listcmp->add_block();
+	listcmp->blocks[0].push_back(
+		new ir_statement_assign_temp(
+			3,
+			new ir_expression_temp_ptr(0)));
+	listcmp->blocks[0].push_back(
+		new ir_statement_assign_temp(
+			4,
+			new ir_expression_temp_ptr(1)));
+	listcmp->blocks[0].push_back(
+		new ir_statement_jump(1));
+	
+	// State 0, only compare and advance hares
+	
+	// again special case the equality of pointers
+	listcmp->add_block();
+	listcmp->blocks[1].push_back(
+		new ir_statement_if(
+			new ir_expression_ptrcmp(
+				new ir_expression_temp_ptr(0),
+				new ir_expression_temp_ptr(1),
+				IR_PTR_EQ),
+			2,
+			3));
+	listcmp->add_block();
+	listcmp->blocks[2].push_back(
+		new ir_statement_assign_temp(
+			2,
+			new ir_expression_intconst(0)));
+	listcmp->blocks[2].push_back(
+		new ir_statement_return());
+	
+	//can we advance both pointers safely?
+	listcmp->add_block();
+	listcmp->blocks[3].push_back(
+		new ir_statement_if(
+			new ir_expression_ptrcmp(
+				new ir_expression_temp_ptr(0),
+				new ir_expression_label("NULL"),
+				IR_PTR_EQ),
+			4,
+			5));
+	
+	listcmp->add_block();
+	listcmp->blocks[4].push_back(
+		new ir_statement_assign_temp(
+			2,
+			new ir_expression_intconst(-1)));
+	listcmp->blocks[4].push_back(
+		new ir_statement_return());
+	
+	listcmp->add_block();
+	listcmp->blocks[5].push_back(
+		new ir_statement_if(
+			new ir_expression_ptrcmp(
+				new ir_expression_temp_ptr(1),
+				new ir_expression_label("NULL"),
+				IR_PTR_EQ),
+			6,
+			7));
+	
+	listcmp->add_block();
+	listcmp->blocks[6].push_back(
+		new ir_statement_assign_temp(
+			2,
+			new ir_expression_intconst(1)));
+	listcmp->blocks[6].push_back(
+		new ir_statement_return());
+		
+	// compare elements
+	vector<ir_expression*> cmpargs;
+	vector<int> cmprets;
+	
+	cmpargs.push_back(
+		new ir_expression_memory(
+			new ir_expression_temp_ptr(0)));
+	cmpargs.push_back(
+		new ir_expression_intar_binop(
+			new ir_expression_unknown_to_int(
+				new ir_expression_memory(
+					new ir_expression_ptrar_binop(
+						new ir_expression_temp_ptr(0),
+						new ir_expression_intconst(2),
+						IR_PTR_ADD))),
+			new ir_expression_intconst(8),
+			IR_INT_MOD));
+	cmpargs.push_back(
+		new ir_expression_memory(
+			new ir_expression_temp_ptr(1)));
+	cmpargs.push_back(
+		new ir_expression_intar_binop(
+			new ir_expression_unknown_to_int(
+				new ir_expression_memory(
+					new ir_expression_ptrar_binop(
+						new ir_expression_temp_ptr(1),
+						new ir_expression_intconst(2),
+						IR_PTR_ADD))),
+			new ir_expression_intconst(8),
+			IR_INT_MOD));
+	
+	cmprets.push_back(2);
+	
+	listcmp->add_block();
+	listcmp->blocks[7].push_back(
+		new ir_statement_functioncall(
+			"_cmp",
+			cmpargs,
+			cmprets));
+	listcmp->blocks[7].push_back(
+		new ir_statement_if(
+			new ir_expression_intcmp(
+				new ir_expression_temp_int(2),
+				new ir_expression_intconst(0),
+				IR_INT_EQ),
+			8,
+			9));
+	
+	listcmp->add_block();
+	listcmp->blocks[8].push_back(
+		new ir_statement_return());
+	
+	// advance hares
+	listcmp->add_block();
+	listcmp->blocks[9].push_back(
+		new ir_statement_assign_temp(
+			0,
+			new ir_expression_unknown_to_ptr(
+				new ir_expression_memory(
+					new ir_expression_ptrar_binop(
+						new ir_expression_temp_ptr(0),
+						new ir_expression_intconst(1),
+						IR_PTR_ADD)))));
+	listcmp->blocks[9].push_back(
+		new ir_statement_assign_temp(
+			1,
+			new ir_expression_unknown_to_ptr(
+				new ir_expression_memory(
+					new ir_expression_ptrar_binop(
+						new ir_expression_temp_ptr(1),
+						new ir_expression_intconst(1),
+						IR_PTR_ADD)))));
+	
+	// State 2: advance all (tortoise are guaranteed safe)
+	
+	// again simple equal check
+	listcmp->blocks[9].push_back(
+		new ir_statement_if(
+			new ir_expression_ptrcmp(
+				new ir_expression_temp_ptr(0),
+				new ir_expression_temp_ptr(1),
+				IR_PTR_EQ),
+			10,
+			11));
+	
+	listcmp->add_block();
+	listcmp->blocks[10].push_back(
+		new ir_statement_assign_temp(
+			2,
+			new ir_expression_intconst(0)));
+	listcmp->blocks[10].push_back(
+		new ir_statement_return());
+	
+	// check both lists can be advanced
+	listcmp->add_block();
+	listcmp->blocks[11].push_back(
+		new ir_statement_if(
+			new ir_expression_ptrcmp(
+				new ir_expression_temp_ptr(0),
+				new ir_expression_label("NULL"),
+				IR_PTR_EQ),
+			12,
+			13));
+	
+	listcmp->add_block();
+	listcmp->blocks[12].push_back(
+		new ir_statement_assign_temp(
+			2,
+			new ir_expression_intconst(-1)));
+	listcmp->blocks[12].push_back(
+		new ir_statement_return());
+	
+	listcmp->add_block();
+	listcmp->blocks[13].push_back(
+		new ir_statement_if(
+			new ir_expression_ptrcmp(
+				new ir_expression_temp_ptr(1),
+				new ir_expression_label("NULL"),
+				IR_PTR_EQ),
+			14,
+			15));
+	
+	listcmp->add_block();
+	listcmp->blocks[14].push_back(
+		new ir_statement_assign_temp(
+			2,
+			new ir_expression_intconst(1)));
+	listcmp->blocks[14].push_back(
+		new ir_statement_return());
+	
+	// compare values
+	
+	cmpargs.clear();
+	cmprets.clear();
+	
+	cmpargs.push_back(
+		new ir_expression_memory(
+			new ir_expression_temp_ptr(0)));
+	cmpargs.push_back(
+		new ir_expression_intar_binop(
+			new ir_expression_unknown_to_int(
+				new ir_expression_memory(
+					new ir_expression_ptrar_binop(
+						new ir_expression_temp_ptr(0),
+						new ir_expression_intconst(2),
+						IR_PTR_ADD))),
+			new ir_expression_intconst(8),
+			IR_INT_MOD));
+	cmpargs.push_back(
+		new ir_expression_memory(
+			new ir_expression_temp_ptr(1)));
+	cmpargs.push_back(
+		new ir_expression_intar_binop(
+			new ir_expression_unknown_to_int(
+				new ir_expression_memory(
+					new ir_expression_ptrar_binop(
+						new ir_expression_temp_ptr(1),
+						new ir_expression_intconst(2),
+						IR_PTR_ADD))),
+			new ir_expression_intconst(8),
+			IR_INT_MOD));
+	
+	cmprets.push_back(2);
+	
+	listcmp->add_block();
+	listcmp->blocks[15].push_back(
+		new ir_statement_functioncall(
+			"_cmp",
+			cmpargs,
+			cmprets));
+	listcmp->blocks[15].push_back(
+		new ir_statement_if(
+			new ir_expression_intcmp(
+				new ir_expression_temp_int(2),
+				new ir_expression_intconst(0),
+				IR_INT_EQ),
+			8,
+			16));
+	
+	// advance hares and tortoises
+	listcmp->add_block();
+	listcmp->blocks[16].push_back(
+		new ir_statement_assign_temp(
+			0,
+			new ir_expression_unknown_to_ptr(
+				new ir_expression_memory(
+					new ir_expression_ptrar_binop(
+						new ir_expression_temp_ptr(0),
+						new ir_expression_intconst(1),
+						IR_PTR_ADD)))));
+	listcmp->blocks[16].push_back(
+		new ir_statement_assign_temp(
+			1,
+			new ir_expression_unknown_to_ptr(
+				new ir_expression_memory(
+					new ir_expression_ptrar_binop(
+						new ir_expression_temp_ptr(1),
+						new ir_expression_intconst(1),
+						IR_PTR_ADD)))));
+	listcmp->blocks[16].push_back(
+		new ir_statement_assign_temp(
+			3,
+			new ir_expression_unknown_to_ptr(
+				new ir_expression_memory(
+					new ir_expression_ptrar_binop(
+						new ir_expression_temp_ptr(3),
+						new ir_expression_intconst(1),
+						IR_PTR_ADD)))));
+	listcmp->blocks[16].push_back(
+		new ir_statement_assign_temp(
+			4,
+			new ir_expression_unknown_to_ptr(
+				new ir_expression_memory(
+					new ir_expression_ptrar_binop(
+						new ir_expression_temp_ptr(4),
+						new ir_expression_intconst(1),
+						IR_PTR_ADD)))));
+	
+	// check for looping
+	listcmp->blocks[16].push_back(
+		new ir_statement_if(
+			new ir_expression_boolar_binop(
+				new ir_expression_ptrcmp(
+					new ir_expression_temp_ptr(0),
+					new ir_expression_temp_ptr(3),
+					IR_PTR_EQ),
+				new ir_expression_ptrcmp(
+					new ir_expression_temp_ptr(1),
+					new ir_expression_temp_ptr(4),
+					IR_PTR_EQ),
+				IR_BOOL_AND),
+			2,
+			17));
+	
+	listcmp->add_block();
+	listcmp->blocks[17].push_back(
+		new ir_statement_if(
+			new ir_expression_ptrcmp(
+				new ir_expression_temp_ptr(0),
+				new ir_expression_temp_ptr(3),
+				IR_PTR_EQ),
+			18,
+			19));
+	
+	vector<ir_expression*> infcmpargs;
+	vector<int> infcmprets;
+	
+	infcmpargs.push_back(
+		new ir_expression_temp_ptr(0));
+	infcmpargs.push_back(
+		new ir_expression_temp_ptr(1));
+	infcmpargs.push_back(
+		new ir_expression_temp_ptr(4));
+	
+	infcmprets.push_back(2);
+	
+	listcmp->add_block();
+	listcmp->blocks[18].push_back(
+		new ir_statement_functioncall(
+			"_infilistcmp",
+			infcmpargs,
+			infcmprets));
+	listcmp->blocks[18].push_back(
+		new ir_statement_return());
+	
+	listcmp->add_block();
+	listcmp->blocks[19].push_back(
+		new ir_statement_if(
+			new ir_expression_ptrcmp(
+				new ir_expression_temp_ptr(1),
+				new ir_expression_temp_ptr(4),
+				IR_PTR_EQ),
+			20,
+			1));
+	
+	infcmpargs.clear();
+	infcmpargs.push_back(
+		new ir_expression_temp_ptr(1));
+	infcmpargs.push_back(
+		new ir_expression_temp_ptr(0));
+	infcmpargs.push_back(
+		new ir_expression_temp_ptr(3));
+	
+	listcmp->add_block();
+	listcmp->blocks[20].push_back(
+		new ir_statement_functioncall(
+			"_infilistcmp",
+			infcmpargs,
+			infcmprets));
+	listcmp->blocks[20].push_back(
+		new ir_statement_assign_temp(
+			2,
+			new ir_expression_intar_unop(
+				new ir_expression_temp_int(2),
+				IR_INT_NEG)));
+	listcmp->blocks[20].push_back(
+		new ir_statement_return());
+	
+	// add function to module
+	module->functions["_listcmp"] = listcmp;
+}
+@
+
+\_infilistcmp does only pollard rho on the second argument.
+<<generate infilistcmp>>=
+void generate_infilistcmp(ir_module *module)
+{
+	vector<ir_type> arguments;
+	vector<ir_type> returns;
+	
+	arguments.push_back(IR_TYPE_PTR);
+	arguments.push_back(IR_TYPE_PTR);
+	arguments.push_back(IR_TYPE_PTR);
+	
+	returns.push_back(IR_TYPE_INT);
+	
+	ir_function *infilistcmp = new ir_function(arguments, returns);
+	
+	// state 1, only hare
+	// check direct equality
+	infilistcmp->add_block();
+	infilistcmp->blocks[0].push_back(
+		new ir_statement_if(
+			new ir_expression_ptrcmp(
+				new ir_expression_temp_ptr(0),
+				new ir_expression_temp_ptr(1),
+				IR_PTR_EQ),
+			1,
+			2));
+	
+	infilistcmp->add_block();
+	infilistcmp->blocks[1].push_back(
+		new ir_statement_assign_temp(
+			3,
+			new ir_expression_intconst(0)));
+	infilistcmp->blocks[1].push_back(
+		new ir_statement_return());
+	
+	// check whether the non-inf list continues
+	infilistcmp->add_block();
+	infilistcmp->blocks[2].push_back(
+		new ir_statement_if(
+			new ir_expression_ptrcmp(
+				new ir_expression_temp_ptr(1),
+				new ir_expression_label("NULL"),
+				IR_PTR_EQ),
+			3,
+			4));
+	
+	infilistcmp->add_block();
+	infilistcmp->blocks[3].push_back(
+		new ir_statement_assign_temp(
+			3,
+			new ir_expression_intconst(1)));
+	infilistcmp->blocks[3].push_back(
+		new ir_statement_return());
+	
+	// compare field values
+	vector<ir_expression*> cmpargs;
+	vector<int> cmprets;
+	
+	cmpargs.push_back(
+		new ir_expression_memory(
+			new ir_expression_temp_ptr(0)));
+	cmpargs.push_back(
+		new ir_expression_unknown_to_int(
+			new ir_expression_memory(
+				new ir_expression_ptrar_binop(
+					new ir_expression_temp_ptr(0),
+					new ir_expression_intconst(2),
+					IR_PTR_ADD))));
+	cmpargs.push_back(
+		new ir_expression_memory(
+			new ir_expression_temp_ptr(1)));
+	cmpargs.push_back(
+		new ir_expression_unknown_to_int(
+			new ir_expression_memory(
+				new ir_expression_ptrar_binop(
+					new ir_expression_temp_ptr(1),
+					new ir_expression_intconst(2),
+					IR_PTR_ADD))));
+	
+	cmprets.push_back(3);
+	
+	infilistcmp->add_block();
+	infilistcmp->blocks[4].push_back(
+		new ir_statement_functioncall(
+			"_cmp",
+			cmpargs,
+			cmprets));
+	infilistcmp->blocks[4].push_back(
+		new ir_statement_if(
+			new ir_expression_intcmp(
+				new ir_expression_temp_int(3),
+				new ir_expression_intconst(0),
+				IR_INT_NE),
+			5,
+			6));
+	
+	infilistcmp->add_block();
+	infilistcmp->blocks[5].push_back(
+		new ir_statement_return());
+	
+	// advance pointers
+	infilistcmp->add_block();
+	infilistcmp->blocks[6].push_back(
+		new ir_statement_assign_temp(
+			0,
+			new ir_expression_unknown_to_ptr(
+				new ir_expression_memory(
+					new ir_expression_ptrar_binop(
+						new ir_expression_temp_ptr(0),
+						new ir_expression_intconst(1),
+						IR_PTR_ADD)))));
+	infilistcmp->blocks[6].push_back(
+		new ir_statement_assign_temp(
+			1,
+			new ir_expression_unknown_to_ptr(
+				new ir_expression_memory(
+					new ir_expression_ptrar_binop(
+						new ir_expression_temp_ptr(0),
+						new ir_expression_intconst(1),
+						IR_PTR_ADD)))));
+	
+	//state 2, both
+	// check direct equality
+	infilistcmp->blocks[6].push_back(
+		new ir_statement_if(
+			new ir_expression_ptrcmp(
+				new ir_expression_temp_ptr(0),
+				new ir_expression_temp_ptr(1),
+				IR_PTR_EQ),
+			1,
+			7));
+	
+	// check whether we can advance
+	infilistcmp->add_block();
+	infilistcmp->blocks[7].push_back(
+		new ir_statement_if(
+			new ir_expression_ptrcmp(
+				new ir_expression_temp_ptr(1),
+				new ir_expression_label("NULL"),
+				IR_PTR_EQ),
+			3,
+			8));
+	
+	// compare values;
+	
+	cmpargs.clear();
+	cmprets.clear();
+	
+	cmpargs.push_back(
+		new ir_expression_memory(
+			new ir_expression_temp_ptr(0)));
+	cmpargs.push_back(
+		new ir_expression_unknown_to_int(
+			new ir_expression_memory(
+				new ir_expression_ptrar_binop(
+					new ir_expression_temp_ptr(0),
+					new ir_expression_intconst(2),
+					IR_PTR_ADD))));
+	cmpargs.push_back(
+		new ir_expression_memory(
+			new ir_expression_temp_ptr(1)));
+	cmpargs.push_back(
+		new ir_expression_unknown_to_int(
+			new ir_expression_memory(
+				new ir_expression_ptrar_binop(
+					new ir_expression_temp_ptr(1),
+					new ir_expression_intconst(2),
+					IR_PTR_ADD))));
+	
+	cmprets.push_back(3);
+	
+	infilistcmp->add_block();
+	infilistcmp->blocks[8].push_back(
+		new ir_statement_functioncall(
+			"_cmp",
+			cmpargs,
+			cmprets));
+	infilistcmp->blocks[8].push_back(
+		new ir_statement_if(
+			new ir_expression_intcmp(
+				new ir_expression_temp_int(3),
+				new ir_expression_intconst(0),
+				IR_INT_NE),
+			5,
+			9));
+	
+	//advance pointers
+	infilistcmp->add_block();
+	infilistcmp->blocks[9].push_back(
+		new ir_statement_assign_temp(
+			0,
+			new ir_expression_unknown_to_ptr(
+				new ir_expression_memory(
+					new ir_expression_ptrar_binop(
+						new ir_expression_temp_ptr(0),
+						new ir_expression_intconst(1),
+						IR_PTR_ADD)))));
+	infilistcmp->blocks[9].push_back(
+		new ir_statement_assign_temp(
+			1,
+			new ir_expression_unknown_to_ptr(
+				new ir_expression_memory(
+					new ir_expression_ptrar_binop(
+						new ir_expression_temp_ptr(1),
+						new ir_expression_intconst(1),
+						IR_PTR_ADD)))));
+	infilistcmp->blocks[9].push_back(
+		new ir_statement_assign_temp(
+			2,
+			new ir_expression_unknown_to_ptr(
+				new ir_expression_memory(
+					new ir_expression_ptrar_binop(
+						new ir_expression_temp_ptr(2),
+						new ir_expression_intconst(1),
+						IR_PTR_ADD)))));
+	
+	//check whether the second one is looping and loop back
+	infilistcmp->blocks[9].push_back(
+		new ir_statement_if(
+			new ir_expression_ptrcmp(
+				new ir_expression_temp_ptr(1),
+				new ir_expression_temp_ptr(2),
+				IR_PTR_EQ),
+			3,
+			0));
+	
+	// add function to module
+	module->functions["_infilistcmp"] = infilistcmp;
+}
+@
+
+\section{Construction primitives}
+
+The construction of lists and pairs is relatively simple:
+
+<<generate makepair>>=
+void generate_makepair(ir_module *module)
+{
+	vector<ir_type> arguments;
+	vector<ir_type> returns;
+	
+	arguments.push_back(IR_TYPE_UNKNOWN);
+	arguments.push_back(IR_TYPE_INT);
+	arguments.push_back(IR_TYPE_UNKNOWN);
+	arguments.push_back(IR_TYPE_INT);
+	
+	returns.push_back(IR_TYPE_PTR);
+	
+	ir_function *makepair = new ir_function(arguments, returns);
+	
+	vector<ir_expression*> allocArgs;
+	vector<int> allocRets;
+	
+	allocRets.push_back(4);
+	
+	makepair->add_block();
+	makepair->blocks[0].push_back(
+		new ir_statement_functioncall(
+			"_allocRecord",
+			allocArgs,
+			allocRets));
+	makepair->blocks[0].push_back(
+		new ir_statement_assign_memory(
+			new ir_expression_temp_ptr(4),
+			new ir_expression_temp_unknown(0)));
+	makepair->blocks[0].push_back(
+		new ir_statement_assign_memory(
+			new ir_expression_ptrar_binop(
+				new ir_expression_temp_ptr(4),
+				new ir_expression_intconst(1),
+				IR_PTR_ADD),
+			new ir_expression_temp_unknown(2)));
+	makepair->blocks[0].push_back(
+		new ir_statement_assign_memory(
+			new ir_expression_ptrar_binop(
+				new ir_expression_temp_ptr(4),
+				new ir_expression_intconst(2),
+				IR_PTR_ADD),
+			new ir_expression_intar_binop(
+				new ir_expression_temp_int(1),
+				new ir_expression_intar_binop(
+					new ir_expression_temp_int(3),
+					new ir_expression_intconst(8),
+					IR_INT_MUL),
+				IR_INT_ADD)));
+	makepair->blocks[0].push_back(
+		new ir_statement_return());
+	
+	// add function to module
+	module->functions["_makePair"] = makepair;
+}
+@
+
+<<generate makelist>>=
+void generate_makelist(ir_module *module)
+{
+	vector<ir_type> arguments;
+	vector<ir_type> returns;
+	
+	arguments.push_back(IR_TYPE_UNKNOWN);
+	arguments.push_back(IR_TYPE_INT);
+	arguments.push_back(IR_TYPE_PTR);
+	
+	returns.push_back(IR_TYPE_PTR);
+	
+	ir_function *makelist = new ir_function(arguments, returns);
+	
+	vector<ir_expression*> allocArgs;
+	vector<int> allocRets;
+	
+	allocRets.push_back(4);
+	
+	makelist->add_block();
+	makelist->blocks[0].push_back(
+		new ir_statement_functioncall(
+			"_allocRecord",
+			allocArgs,
+			allocRets));
+	makelist->blocks[0].push_back(
+		new ir_statement_assign_memory(
+			new ir_expression_temp_ptr(3),
+			new ir_expression_temp_unknown(0)));
+	makelist->blocks[0].push_back(
+		new ir_statement_assign_memory(
+			new ir_expression_ptrar_binop(
+				new ir_expression_temp_ptr(3),
+				new ir_expression_intconst(1),
+				IR_PTR_ADD),
+			new ir_expression_temp_ptr(2)));
+	makelist->blocks[0].push_back(
+		new ir_statement_assign_memory(
+			new ir_expression_ptrar_binop(
+				new ir_expression_temp_ptr(3),
+				new ir_expression_intconst(2),
+				IR_PTR_ADD),
+			new ir_expression_intar_binop(
+				new ir_expression_temp_int(1),
+				new ir_expression_intconst(8*IRGEN_RUNTIME_LIST),
+				IR_INT_ADD)));
+	makelist->blocks[0].push_back(
+		new ir_statement_return());
+	
+	// add function to module
+	module->functions["_makeList"] = makelist;
+}
+@
+
+\section{Generating everything in a module}
+
+The following function forms the interface to the rest of the compiler. It adds all the runtime libraries functions to a given module.
+
+<<generate runtime header>>=
+void generate_runtime(ir_module *module);
+@
+<<generate runtime>>=
+void generate_runtime(ir_module *module)
+{
+	generate_cmp(module);
+	generate_listcmp(module);
+	generate_infilistcmp(module);
+	
+	generate_makepair(module);
+	generate_makelist(module);
+}
+@
+
+\section{Source and headers}
+
+<<splruntime.h>>=
+#ifndef SPLRUNTIME_H
+#define SPLRUNTIME_H
+#include "ir.h"
+
+<<generate runtime header>>
+#endif
+@
+
+<<splruntime.cpp>>=
+#include "ir.h"
+#include "irgeneration.h"
+
+using namespace std;
+
+<<generate cmp>>
+<<generate listcmp>>
+<<generate infilistcmp>>
+<<generate makepair>>
+<<generate makelist>>
+
+<<generate runtime>>
+@
