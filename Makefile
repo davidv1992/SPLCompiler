@@ -81,12 +81,12 @@ splruntime.h: splruntime.nw
 splruntime.cpp: splruntime.nw
 	notangle -L -Rsplruntime.cpp splruntime.nw | cpif splruntime.cpp
 
-main.o: main.cpp token.h parser.h ast.h position.h typecheck.h ir.h irgeneration.h settings.h
+main.o: main.cpp token.h parser.h ast.h position.h typecheck.h ir.h irgeneration.h settings.h splruntime.h
 main.cpp: main.nw
 	notangle -L -Rmain.cpp main.nw | cpif main.cpp
 
-compiler: main.o token.o parser.o ast.o error.o typecheck.o irgeneration.o settings.o
-	g++ $(CXXFLASGS) -o compiler main.o token.o parser.o ast.o error.o typecheck.o irgeneration.o settings.o
+compiler: main.o token.o parser.o ast.o error.o typecheck.o irgeneration.o settings.o splruntime.o
+	g++ $(CXXFLASGS) -o compiler main.o token.o parser.o ast.o error.o typecheck.o irgeneration.o settings.o splruntime.o
 
 version.h:
 	echo \#define VERSION \"`git describe --abbrev=4 --dirty --always --tags`\" | cpif version.h
@@ -103,8 +103,8 @@ test.pdf: test.tex
 	latexmk -pdf test.tex
 	latexmk -c
 
-code.tex: header.nw trailer.nw token.nw position.nw error.nw parser.nw settings.nw spllang.nw ast.nw typecheck.nw ir.nw irgeneration.nw main.nw
-	noweave -t4 -delay header.nw spllang.nw ast.nw token.nw parser.nw typecheck.nw ir.nw irgeneration.nw main.nw settings.nw position.nw error.nw trailer.nw | cpif code.tex
+code.tex: header.nw trailer.nw token.nw position.nw error.nw parser.nw settings.nw spllang.nw ast.nw typecheck.nw ir.nw irgeneration.nw main.nw splruntime.nw
+	noweave -t4 -delay header.nw spllang.nw ast.nw token.nw parser.nw typecheck.nw ir.nw irgeneration.nw splruntime.nw main.nw settings.nw position.nw error.nw trailer.nw | cpif code.tex
 code.pdf: code.tex compiler.bib
 	latexmk -pdf code.tex
 	latexmk -c

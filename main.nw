@@ -8,6 +8,7 @@ This file does all the chaining of the various parts of the compiler. It is resp
 #include "typecheck.h"
 #include "ir.h"
 #include "irgeneration.h"
+#include "splruntime.h"
 #include "settings.h"
 #include <cstdio>
 #include <map>
@@ -30,6 +31,8 @@ int main(int argc, char **argv)
 	typecheck_program(program);
 	
 	ir_module *module = irgen_translate_program(program);
+	
+	generate_runtime(module);
 	
 	module->print();
 	
