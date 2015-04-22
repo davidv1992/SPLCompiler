@@ -1,0 +1,64 @@
+\chapter{Assembly utilities}
+
+There are a few pieces of functionality that are shared by all backends 
+
+\section{Assembly code datastructure}
+
+Though the instructions available on various processors varies, the overal syntax is the same for most assembly languages. This means that, with some effort, we can share one datastructure for storing these instructions, and all the dataflow information associated with it.
+
+<<assembly code datastructure>>=
+class asm_statement
+{
+public:
+	std::string instruction;
+	std::vector<int> fillin;
+	std::vector<int> defs, uses;
+	
+	asm_statement(std::string ins, std::vector<int> f, std::vector<int> d, std::vector<int> u)
+	{
+		instruction = ins;
+		fillin = f;
+		defs = d;
+		uses = u;
+	}
+	
+	void print(FILE *stream)
+	{
+		assert(fillin.size() == 0);
+		
+		fprintf(stream, "\t%s\n", instruction.c_str());
+	}
+};
+class asm_function
+{
+public:
+	std::vector<std::vector<asm_statement>> blocks;
+	std::vector<std::string> blockLabels;
+	std::vector<std::vector<std::string>> blockFollows;
+
+	void print (FILE *stream)
+	{
+		assert(blocks.size() == blockLabels.size());
+		
+		for (unsigned int i=0; i<blocks.size(); i++)
+		{
+			fprintf(stream, "%s:\n", blockLabels[i].c_str());
+			for (unsigned int j=0; j<blocks[i].size(); j++)
+				blocks[i][j].print(stream);
+		}
+	}
+};
+@
+
+\section{Source and headers}
+
+<<assembly.h>>=
+#ifndef ASSEMBLY_H
+#define ASSEMBLY_H
+#include <string>
+#include <vector>
+#include <cassert>
+
+<<assembly code datastructure>>
+#endif
+@

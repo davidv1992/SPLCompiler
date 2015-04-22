@@ -1,4 +1,6 @@
-.PHONY: clean test version.h
+.PHONY: clean test limittest version.h
+.PHONY: test/tokentest test/parsetest test/typechecktest test/irgentest
+.PHONY: limittest/comment limittest/bracket
 #force version.h on every build
 
 BASH := /bin/bash
@@ -57,6 +59,15 @@ ast.cpp: ast.nw
 ir.h: ir.nw
 	notangle -L -Rir.h ir.nw | cpif ir.h
 
+assembly.h: assembly.nw
+	notangle -L -Rassembly.h assembly.nw | cpif assembly.h
+
+ssm.o: ssm.cpp assembly.h ir.h ssm.h
+ssm.h: ssm.nw
+	notangle -L -Rssm.h ssm.nw | cpif ssm.h
+ssm.cpp: ssm.nw
+	notangle -L -Rssm.cpp ssm.nw | cpif ssm.cpp
+
 parser.o: parser.cpp parser.h ast.h token.h error.h position.h settings.h
 parser.h: parser.nw
 	notangle -L -Rparser.h parser.nw | cpif parser.h
@@ -81,12 +92,12 @@ splruntime.h: splruntime.nw
 splruntime.cpp: splruntime.nw
 	notangle -L -Rsplruntime.cpp splruntime.nw | cpif splruntime.cpp
 
-main.o: main.cpp token.h parser.h ast.h position.h typecheck.h ir.h irgeneration.h settings.h splruntime.h
+main.o: main.cpp token.h parser.h ast.h position.h typecheck.h ir.h irgeneration.h settings.h splruntime.h ssm.h
 main.cpp: main.nw
 	notangle -L -Rmain.cpp main.nw | cpif main.cpp
 
-compiler: main.o token.o parser.o ast.o error.o typecheck.o irgeneration.o settings.o splruntime.o
-	g++ $(CXXFLASGS) -o compiler main.o token.o parser.o ast.o error.o typecheck.o irgeneration.o settings.o splruntime.o
+compiler: main.o token.o parser.o ast.o error.o typecheck.o irgeneration.o settings.o splruntime.o ssm.o
+	g++ $(CXXFLASGS) -o compiler main.o token.o parser.o ast.o error.o typecheck.o irgeneration.o settings.o splruntime.o ssm.o
 
 version.h:
 	echo \#define VERSION \"`git describe --abbrev=4 --dirty --always --tags`\" | cpif version.h
@@ -103,8 +114,8 @@ test.pdf: test.tex
 	latexmk -pdf test.tex
 	latexmk -c
 
-code.tex: header.nw trailer.nw token.nw position.nw error.nw parser.nw settings.nw spllang.nw ast.nw typecheck.nw ir.nw irgeneration.nw main.nw splruntime.nw
-	noweave -t4 -delay header.nw spllang.nw ast.nw token.nw parser.nw typecheck.nw ir.nw irgeneration.nw splruntime.nw main.nw settings.nw position.nw error.nw trailer.nw | cpif code.tex
+code.tex: header.nw trailer.nw token.nw position.nw error.nw parser.nw settings.nw spllang.nw ast.nw typecheck.nw ir.nw irgeneration.nw main.nw splruntime.nw ssm.nw assembly.nw
+	noweave -t4 -delay header.nw spllang.nw ast.nw token.nw parser.nw typecheck.nw ir.nw irgeneration.nw splruntime.nw assembly.nw ssm.nw main.nw settings.nw position.nw error.nw trailer.nw | cpif code.tex
 code.pdf: code.tex compiler.bib
 	latexmk -pdf code.tex
 	latexmk -c
@@ -214,6 +225,8 @@ clean:
 	rm -f main.cpp main.o compiler
 	rm -f irgeneration.h irgeneration.cpp irgeneration.o
 	rm -f splruntime.h splruntime.cpp splruntime.o
+	rm -f assembly.h
+	rm -f ssm.h ssm.cpp ssm.o
 	rm -f testprogs/tokentest.cpp testprogs/tokentest.o testprogs/tokentest
 	rm -f testprogs/parsetest.cpp testprogs/parsetest.o testprogs/parsetest
 	rm -f testprogs/typeparsetest.cpp testprogs/typeparsetest.o testprogs/typeparsetest

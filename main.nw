@@ -10,6 +10,7 @@ This file does all the chaining of the various parts of the compiler. It is resp
 #include "irgeneration.h"
 #include "splruntime.h"
 #include "settings.h"
+#include "ssm.h"
 #include <cstdio>
 #include <map>
 
@@ -34,10 +35,13 @@ int main(int argc, char **argv)
 	
 	generate_runtime(module);
 	
-	module->print();
+	//module->print();
 	
 	typecheck_cleanup();
 	delete program;
+	
+	ssm_translate_module(module, stdout);
+	
 	delete module;
 	
 	return 0;

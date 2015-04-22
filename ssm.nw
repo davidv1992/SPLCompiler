@@ -1,0 +1,672 @@
+\chapter{Simple Stack Machine code generation}
+
+This is an initial (simple) version of code generation for the SSM stack machine emulator. The module in it's current form does not do any optimizations or clever stuff. It is really mostly just a one-to-one mapping of the IR onto SSM assembly instructions.
+
+\section{Calling convention}
+
+The calling convention I use for the SPL language on SSM is very simple. Arguments are pushed on the stack in reverse order, followed by a return address. The called function then returns it's results on the stack after the arguments.
+
+On function entry, the function moves the return address such that there is enough room on the stack for return arguments, and then creates a stack frame by saving the stack pointer to the base pointer. It then advances the stack pointer enough to have room for all the temporaries. Intermediate results of any calculations are placed on the stack after this.
+
+\section{Temporaries and place on heap}
+
+Temporaries have different locations on the heap depending on exactly what they represent, hence we keep a mapping here mapping temporary indices to their offsets from the link pointer.
+
+<<ssm temporary offsets>>=
+vector<int> link_offsets;
+
+void ssm_determine_offsets(ir_function *function)
+{
+	for (int i=0; i<function->num_args; i++)
+	{
+		link_offsets.push_back(-2-function->num_returns-i);
+	}
+	
+	for (int i=0; i<function->num_returns; i++)
+	{
+		link_offsets.push_back(-2-i);
+	}
+	
+	for (int i=0; i<((int)function->temp_types.size())-function->num_args-function->num_returns; i++)
+	{
+		link_offsets.push_back(1+i);
+	}
+}
+
+void ssm_clear_offsets()
+{
+	link_offsets.clear();
+}
+@
+
+\section{Translating expressions}
+
+When translating expressions, we leave the result at the top of the stack after executing the generated piece of code.
+
+\subsection{Translating constants}
+
+Constants are loaded with ldc.
+
+<<ssm translate intconst>>=
+ir_expression_intconst *ic = (ir_expression_intconst*)expression;
+ostringstream o;
+o << "ldc " << ic->value;
+assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
+@
+
+<<ssm translate boolconst>>=
+ir_expression_boolconst *bc = (ir_expression_boolconst*)expression;
+if (bc->value)
+	assembly->blocks[trace].push_back(asm_statement("ldc 1",{},{},{}));
+else
+	assembly->blocks[trace].push_back(asm_statement("ldc 0",{},{},{}));
+@
+
+<<ssm translate label>>=
+ir_expression_label *label = (ir_expression_label*)expression;
+if (label->label == "NULL")
+{
+	assembly->blocks[trace].push_back(asm_statement("ldc 0",{},{},{}));
+}
+else
+{
+	ostringstream o;
+	o << "ldc " << label->label;
+	assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
+}
+@
+
+\subsection{Temporaries}
+
+The SSM architecture has no internal types, so every temp is just an ldl.
+
+<<ssm translate temp int>>=
+ir_expression_temp_int *temp = (ir_expression_temp_int*)expression;
+ostringstream o;
+o << "ldl " << link_offsets[temp->temp_id];
+assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
+@
+
+<<ssm translate temp bool>>=
+ir_expression_temp_bool *temp = (ir_expression_temp_bool*)expression;
+ostringstream o;
+o << "ldl " << link_offsets[temp->temp_id];
+assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
+@
+
+<<ssm translate temp ptr>>=
+ir_expression_temp_ptr *temp = (ir_expression_temp_ptr*)expression;
+ostringstream o;
+o << "ldl " << link_offsets[temp->temp_id];
+assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
+@
+
+<<ssm translate temp unknown>>=
+ir_expression_temp_unknown *temp = (ir_expression_temp_unknown*)expression;
+ostringstream o;
+o << "ldl " << link_offsets[temp->temp_id];
+assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
+@
+
+\subsection{Memory read}
+
+Memory read is first nested expression. First translate inner expression, then output memory read.
+
+<<ssm translate memory read>>=
+ir_expression_memory *mem = (ir_expression_memory*)expression;
+ssm_translate_expression(assembly, trace, mem->address);
+assembly->blocks[trace].push_back(asm_statement("lda 0",{},{},{}));
+@
+
+\subsection{Type conversions}
+
+The type conversions currently in the IR require no actions whatsoever, so we just translate the inner expression here.
+
+<<ssm translate unknown to int>>=
+ir_expression_unknown_to_int *conv = (ir_expression_unknown_to_int*)expression;
+ssm_translate_expression(assembly, trace, conv->inner);
+@
+
+<<ssm translate unknown to bool>>=
+ir_expression_unknown_to_bool *conv = (ir_expression_unknown_to_bool*)expression;
+ssm_translate_expression(assembly, trace, conv->inner);
+@
+
+<<ssm translate unknown to ptr>>=
+ir_expression_unknown_to_ptr *conv = (ir_expression_unknown_to_ptr*)expression;
+ssm_translate_expression(assembly, trace, conv->inner);
+@
+
+\subsection{Translate comparison}
+
+We have the fortune that the equality operators in the IR directly match those available on the actual machine, so just translate the two subexpressions in the right order, and use those.
+
+<<ssm translate intcmp>>=
+ir_expression_intcmp *cmp = (ir_expression_intcmp*)expression;
+ssm_translate_expression(assembly, trace, cmp->left);
+ssm_translate_expression(assembly, trace, cmp->right);
+switch(cmp->op)
+{
+case IR_INT_EQ:
+	assembly->blocks[trace].push_back(asm_statement("eq",{},{},{}));
+	break;
+case IR_INT_NE:
+	assembly->blocks[trace].push_back(asm_statement("ne",{},{},{}));
+	break;
+case IR_INT_LT:
+	assembly->blocks[trace].push_back(asm_statement("lt",{},{},{}));
+	break;
+case IR_INT_LE:
+	assembly->blocks[trace].push_back(asm_statement("le",{},{},{}));
+	break;
+case IR_INT_GT:
+	assembly->blocks[trace].push_back(asm_statement("gt",{},{},{}));
+	break;
+case IR_INT_GE:
+	assembly->blocks[trace].push_back(asm_statement("ge",{},{},{}));
+	break;
+default:
+	assert(0);
+}
+@
+
+<<ssm translate ptrcmp>>=
+ir_expression_ptrcmp *cmp = (ir_expression_ptrcmp*)expression;
+ssm_translate_expression(assembly, trace, cmp->left);
+ssm_translate_expression(assembly, trace, cmp->right);
+switch(cmp->op)
+{
+case IR_PTR_EQ:
+	assembly->blocks[trace].push_back(asm_statement("eq",{},{},{}));
+	break;
+case IR_PTR_NE:
+	assembly->blocks[trace].push_back(asm_statement("ne",{},{},{}));
+	break;
+default:
+	assert(0);
+}
+@
+
+<<ssm translate boolcmp>>=
+ir_expression_boolcmp *cmp = (ir_expression_boolcmp*)expression;
+ssm_translate_expression(assembly, trace, cmp->left);
+ssm_translate_expression(assembly, trace, cmp->right);
+switch(cmp->op)
+{
+case IR_BOOL_EQ:
+	assembly->blocks[trace].push_back(asm_statement("eq",{},{},{}));
+	break;
+case IR_BOOL_NE:
+	assembly->blocks[trace].push_back(asm_statement("ne",{},{},{}));
+	break;
+default:
+	assert(0);
+}
+@
+
+<<ssm translate unknowncmp>>=
+ir_expression_unknowncmp *cmp = (ir_expression_unknowncmp*)expression;
+ssm_translate_expression(assembly, trace, cmp->left);
+ssm_translate_expression(assembly, trace, cmp->right);
+switch(cmp->op)
+{
+case IR_UNKNOWN_EQ:
+	assembly->blocks[trace].push_back(asm_statement("eq",{},{},{}));
+	break;
+case IR_UNKNOWN_NE:
+	assembly->blocks[trace].push_back(asm_statement("ne",{},{},{}));
+	break;
+default:
+	assert(0);
+}
+@
+
+\subsection{Translate unary operators}
+
+Again, these operators have instructions that directly correspond to them.
+
+<<ssm translate int unop>>=
+ir_expression_intar_unop *unop = (ir_expression_intar_unop*)expression;
+ssm_translate_expression(assembly, trace, unop->inner);
+switch(unop->op)
+{
+case IR_INT_NEG:
+	assembly->blocks[trace].push_back(asm_statement("neg",{},{},{}));
+	break;
+default:
+	assert(0);
+}
+@
+
+<<ssm translate bool unop>>=
+ir_expression_boolar_unop *unop = (ir_expression_boolar_unop*)expression;
+ssm_translate_expression(assembly, trace, unop->inner);
+switch(unop->op)
+{
+case IR_BOOL_NOT:
+	assembly->blocks[trace].push_back(asm_statement("not",{},{},{}));
+	break;
+default:
+	assert(0);
+}
+@
+
+\subsection{Translate binary operators}
+
+Again, perfectly matching what is available on the platform (if only AMD64 was so easy).
+
+<<ssm translate int binop>>=
+ir_expression_intar_binop *binop = (ir_expression_intar_binop*)expression;
+ssm_translate_expression(assembly, trace, binop->left);
+ssm_translate_expression(assembly, trace, binop->right);
+switch(binop->op)
+{
+case IR_INT_ADD:
+	assembly->blocks[trace].push_back(asm_statement("add",{},{},{}));
+	break;
+case IR_INT_SUB:
+	assembly->blocks[trace].push_back(asm_statement("sub",{},{},{}));
+	break;
+case IR_INT_MUL:
+	assembly->blocks[trace].push_back(asm_statement("mul",{},{},{}));
+	break;
+case IR_INT_DIV:
+	assembly->blocks[trace].push_back(asm_statement("div",{},{},{}));
+	break;
+case IR_INT_MOD:
+	assembly->blocks[trace].push_back(asm_statement("mod",{},{},{}));
+	break;
+default:
+	assert(0);
+}
+@
+
+<<ssm translate ptr binop>>=
+ir_expression_ptrar_binop *binop = (ir_expression_ptrar_binop*)expression;
+ssm_translate_expression(assembly, trace, binop->left);
+ssm_translate_expression(assembly, trace, binop->right);
+switch(binop->op)
+{
+case IR_PTR_ADD:
+	assembly->blocks[trace].push_back(asm_statement("add",{},{},{}));
+	break;
+case IR_PTR_SUB:
+	assembly->blocks[trace].push_back(asm_statement("sub",{},{},{}));
+	break;
+default:
+	assert(0);
+}
+@
+
+<<ssm translate bool binop>>=
+ir_expression_boolar_binop *binop = (ir_expression_boolar_binop*)expression;
+ssm_translate_expression(assembly, trace, binop->left);
+ssm_translate_expression(assembly, trace, binop->right);
+switch(binop->op)
+{
+case IR_BOOL_OR:
+	assembly->blocks[trace].push_back(asm_statement("or",{},{},{}));
+	break;
+case IR_BOOL_AND:
+	assembly->blocks[trace].push_back(asm_statement("and",{},{},{}));
+	break;
+default:
+	assert(0);
+}
+@
+
+\subsection{Putting it all together}
+
+This function checks the type of expression we have and dispatches accordingly
+
+<<ssm translate expression>>=
+void ssm_translate_expression(asm_function *assembly, int trace, ir_expression *expression)
+{
+	if (typeid(*expression) == typeid(ir_expression_intconst))
+	{
+		<<ssm translate intconst>>
+	}
+	else if (typeid(*expression) == typeid(ir_expression_boolconst))
+	{
+		<<ssm translate boolconst>>
+	}
+	else if (typeid(*expression) == typeid(ir_expression_label))
+	{
+		<<ssm translate label>>
+	}
+	else if (typeid(*expression) == typeid(ir_expression_temp_int))
+	{
+		<<ssm translate temp int>>
+	}
+	else if (typeid(*expression) == typeid(ir_expression_temp_bool))
+	{
+		<<ssm translate temp bool>>
+	}
+	else if (typeid(*expression) == typeid(ir_expression_temp_ptr))
+	{
+		<<ssm translate temp ptr>>
+	}
+	else if (typeid(*expression) == typeid(ir_expression_temp_unknown))
+	{
+		<<ssm translate temp unknown>>
+	}
+	else if (typeid(*expression) == typeid(ir_expression_memory))
+	{
+		<<ssm translate memory read>>
+	}
+	else if (typeid(*expression) == typeid(ir_expression_unknown_to_int))
+	{
+		<<ssm translate unknown to int>>
+	}
+	else if (typeid(*expression) == typeid(ir_expression_unknown_to_bool))
+	{
+		<<ssm translate unknown to bool>>
+	}
+	else if (typeid(*expression) == typeid(ir_expression_unknown_to_ptr))
+	{
+		<<ssm translate unknown to ptr>>
+	}
+	else if (typeid(*expression) == typeid(ir_expression_intcmp))
+	{
+		<<ssm translate intcmp>>
+	}
+	else if (typeid(*expression) == typeid(ir_expression_ptrcmp))
+	{
+		<<ssm translate ptrcmp>>
+	}
+	else if (typeid(*expression) == typeid(ir_expression_boolcmp))
+	{
+		<<ssm translate boolcmp>>
+	}
+	else if (typeid(*expression) == typeid(ir_expression_unknowncmp))
+	{
+		<<ssm translate unknowncmp>>
+	}
+	else if (typeid(*expression) == typeid(ir_expression_intar_unop))
+	{
+		<<ssm translate int unop>>
+	}
+	else if (typeid(*expression) == typeid(ir_expression_boolar_unop))
+	{
+		<<ssm translate bool unop>>
+	}
+	else if (typeid(*expression) == typeid(ir_expression_intar_binop))
+	{
+		<<ssm translate int binop>>
+	}
+	else if (typeid(*expression) == typeid(ir_expression_ptrar_binop))
+	{
+		<<ssm translate ptr binop>>
+	}
+	else if (typeid(*expression) == typeid(ir_expression_boolar_binop))
+	{
+		<<ssm translate bool binop>>
+	}
+	else
+	{
+		assert(0);
+	}
+}
+@
+
+\section{Translating statements and functions}
+
+Because there is no construct that forces me to introduce extra conditional jumps, I can keep the trace numbers of the assembly match those of the IR, this makes this stage really easy as well.
+
+\subsection{Translating assign}
+
+<<ssm translate assign temp>>=
+ir_statement_assign_temp *assign = (ir_statement_assign_temp*)statement;
+ssm_translate_expression(assembly, trace, assign->value);
+ostringstream o;
+o << "stl " << link_offsets[assign->target_temp_id];
+assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
+@
+
+<<ssm translate assign memory>>=
+ir_statement_assign_memory *assign = (ir_statement_assign_memory*)statement;
+ssm_translate_expression(assembly, trace, assign->value);
+ssm_translate_expression(assembly, trace, assign->target);
+assembly->blocks[trace].push_back(asm_statement("sta 0",{},{},{}));
+@
+
+\subsection{Translating functioncall}
+
+For a functioncall, we push the arguments in reverse order. Then the function is called. Afterwards, results that should be stored are stored in temps and the arguments are popped.
+
+<<ssm translate function call>>=
+ir_statement_functioncall *funcall = (ir_statement_functioncall*)statement;
+for (int i=funcall->arguments.size()-1; i >= 0; i--)
+{
+	ssm_translate_expression(assembly, trace, funcall->arguments[i]);
+}
+
+ostringstream o;
+o << "bsr " << funcall->function;
+assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
+
+for (unsigned int i=0; i<funcall->return_temporaries.size(); i++)
+{
+	if (funcall->return_temporaries[i] != -1)
+	{
+		ostringstream o;
+		o << "stl " << link_offsets[funcall->return_temporaries[i]];
+		assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
+	}
+	else
+	{
+		assembly->blocks[trace].push_back(asm_statement("str 7",{},{},{}));
+	}
+}
+
+for (unsigned int i=0; i<funcall->arguments.size(); i++)
+{
+	assembly->blocks[trace].push_back(asm_statement("str 7",{},{},{}));
+}
+@
+
+\subsection{Translating return}
+
+On return, we just clean up the frame and return
+
+<<ssm translate return>>=
+assembly->blocks[trace].push_back(asm_statement("unlink",{},{},{}));
+assembly->blocks[trace].push_back(asm_statement("ret",{},{},{}));
+@
+
+\subsection{Translate Jump}
+
+<<ssm translate jump>>=
+ir_statement_jump *jump = (ir_statement_jump*)statement;
+ostringstream o;
+o << "bra " << fnname.substr(1) << "_L" << jump->target_block;
+assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
+@
+
+\subsection{Translate if}
+
+<<ssm translate if>>=
+ir_statement_if *ifstat = (ir_statement_if*)statement;
+ssm_translate_expression(assembly, trace, ifstat->condition);
+{
+ostringstream o;
+o << "brt " << fnname.substr(1) << "_L" << ifstat->target_true;
+assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
+}
+{
+ostringstream o;
+o << "bra " << fnname.substr(1) << "_L" << ifstat->target_false;
+assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
+}
+@
+
+\subsection{Translating statement}
+
+This is just the tieing together of the above.
+
+<<ssm translate statement>>=
+if (typeid(*statement) == typeid(ir_statement_assign_temp))
+{
+	<<ssm translate assign temp>>
+}
+else if (typeid(*statement) == typeid(ir_statement_assign_memory))
+{
+	<<ssm translate assign memory>>
+}
+else if (typeid(*statement) == typeid(ir_statement_functioncall))
+{
+	<<ssm translate function call>>
+}
+else if (typeid(*statement) == typeid(ir_statement_jump))
+{
+	<<ssm translate jump>>
+}
+else if (typeid(*statement) == typeid(ir_statement_if))
+{
+	<<ssm translate if>>
+}
+else if (typeid(*statement) == typeid(ir_statement_return))
+{
+	<<ssm translate return>>
+}
+@
+
+\subsection{Translating functions}
+
+Translate an entire assembly function to ir.
+
+<<ssm translate function>>=
+asm_function *ssm_translate_function(ir_function *function, string fnname)
+{
+	asm_function *assembly = new asm_function();
+	
+	ssm_determine_offsets(function);
+	
+	assembly->blocks.resize(function->blocks.size()+1);
+	assembly->blockLabels.push_back(fnname);
+	
+	for (int i=0; i<function->num_returns; i++)
+		assembly->blocks[0].push_back(asm_statement("ldc 0",{},{},{}));
+	
+	{
+		ostringstream o;
+		o << "link " << ((int)function->temp_types.size())-function->num_args-function->num_returns;
+		assembly->blocks[0].push_back(asm_statement(o.str(),{},{},{}));
+	}
+	
+	if (function->num_returns != 0)
+	{
+		ostringstream o;
+		o << "ldl " << -1-function->num_returns;
+		assembly->blocks[0].push_back(asm_statement(o.str(),{},{},{}));
+		assembly->blocks[0].push_back(asm_statement("stl -1",{},{},{}));
+	}
+	
+	for (unsigned int i=0; i<function->blocks.size(); i++)
+	{
+		{
+			ostringstream o;
+			o << fnname.substr(1) << "_L" << i;
+			assembly->blockLabels.push_back(o.str());
+		}
+		for (unsigned int j=0; j<function->blocks[i].size(); j++)
+		{
+			ir_statement *statement = function->blocks[i][j];
+			int trace = i+1;
+			<<ssm translate statement>>
+		}
+	}
+	
+	ssm_clear_offsets();
+	
+	return assembly;
+}
+@
+
+\section{Translate ir module}
+
+This is the top level callable, translating an entire IR module to assembly and outputting it.
+
+<<ssm translate module header>>=
+void ssm_translate_module(ir_module *module, FILE *stream);
+@
+
+<<ssm translate module>>=
+void ssm_translate_module(ir_module *module, FILE *stream)
+{
+	// starter
+	fprintf(stream, "\tbsr _init\n");
+	fprintf(stream, "\tbsr __main\n");
+	fprintf(stream, "\thalt\n");
+	fprintf(stream, "\n");
+	
+	// platform library
+	fprintf(stream, "_allocRecord:\n");
+	fprintf(stream, "\tldc 0\n");
+	fprintf(stream, "\tlink 0\n");
+	fprintf(stream, "\tldl -2\n");
+	fprintf(stream, "\tstl -1\n");
+	fprintf(stream, "\tldr HP\n");
+	fprintf(stream, "\tstl -2\n");
+	fprintf(stream, "\tldc 0\n");
+	fprintf(stream, "\tldc 0\n");
+	fprintf(stream, "\tldc 0\n");
+	fprintf(stream, "\tstmh 3\n");
+	fprintf(stream, "\tunlink\n");
+	fprintf(stream, "\tret\n");
+	fprintf(stream, "\n");
+	
+	fprintf(stream, "_putCharacter:\n");
+	fprintf(stream, "\tlink 0\n");
+	fprintf(stream, "\tldl -2\n");
+	fprintf(stream, "\ttrap 1\n");
+	fprintf(stream, "\tunlink\n");
+	fprintf(stream, "\tret\n");
+	fprintf(stream, "\n");
+	
+	fprintf(stream, "_getCharacter:\n");
+	fprintf(stream, "\tldc 0\n");
+	fprintf(stream, "\tlink 0\n");
+	fprintf(stream, "\tldl -2\n");
+	fprintf(stream, "\tstl -1\n");
+	fprintf(stream, "\ttrap 11\n");
+	fprintf(stream, "\tstl -2\n");
+	fprintf(stream, "\tunlink\n");
+	fprintf(stream, "\tret\n");
+	fprintf(stream, "\n");
+	
+	for (auto function : module->functions)
+	{
+		asm_function *res = ssm_translate_function(function.second, function.first);
+		res->print(stream);
+		fprintf(stream, "\n");
+		delete res;
+	}
+}
+@
+
+\section{Headers and source}
+
+<<ssm.h>>=
+#ifndef SSM_H
+#define SSM_H
+#include "ir.h"
+<<ssm translate module header>>
+#endif
+@
+
+<<ssm.cpp>>=
+#include "assembly.h"
+#include "ir.h"
+#include "ssm.h"
+#include <sstream>
+#include <cstdio>
+#include <typeinfo>
+
+using namespace std;
+
+<<ssm temporary offsets>>
+<<ssm translate expression>>
+<<ssm translate function>>
+<<ssm translate module>>
+@
