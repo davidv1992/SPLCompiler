@@ -1011,6 +1011,732 @@ void generate_makelist(ir_module *module)
 }
 @
 
+\section{User callable functions}
+
+The following functions can be called directly by the user code.
+
+<<generate isempty>>=
+void generate_isempty(ir_module *module)
+{
+	vector<ir_type> arguments;
+	vector<ir_type> returns;
+	
+	arguments.push_back(IR_TYPE_PTR);
+	
+	returns.push_back(IR_TYPE_BOOL);
+	
+	ir_function *isEmpty = new ir_function(arguments, returns);
+	
+	isEmpty->add_block();
+	isEmpty->blocks[0].push_back(
+		new ir_statement_assign_temp(
+			1,
+			new ir_expression_ptrcmp(
+				new ir_expression_temp_ptr(0),
+				new ir_expression_label("NULL"),
+				IR_PTR_EQ)));
+	isEmpty->blocks[0].push_back(
+		new ir_statement_return());
+	
+	
+	// add to module
+	module->functions["__isEmpty"] = isEmpty;
+}
+@
+
+<<generate read>>=
+void generate_read(ir_module *module)
+{
+	vector<ir_type> arguments;
+	vector<ir_type> returns;
+	
+	returns.push_back(IR_TYPE_INT);
+	
+	ir_function *read = new ir_function(arguments, returns);
+	
+	vector<ir_expression*> primArgs;
+	vector<int> primRets;
+	primRets.push_back(0);
+	
+	read->add_block();
+	read->blocks[0].push_back(
+		new ir_statement_functioncall(
+			"_getCharacter",
+			primArgs,
+			primRets));
+	read->blocks[0].push_back(
+		new ir_statement_return());
+		
+	// add to module
+	module->functions["__read"] = read;	
+}
+@
+
+\subsection{Printing}
+
+Printing is split into a few functions. One for the main entry point and various simple printing routines, one for integers, and one for lists
+
+<<generate print>>=
+void generate_print(ir_module *module)
+{
+	vector<ir_type> arguments;
+	vector<ir_type> returns;
+	
+	arguments.push_back(IR_TYPE_UNKNOWN);
+	arguments.push_back(IR_TYPE_INT);
+	
+	ir_function *print = new ir_function(arguments, returns);
+	
+	// handle characters
+	print->add_block();
+	print->blocks[0].push_back(
+		new ir_statement_if(
+			new ir_expression_intcmp(
+				new ir_expression_temp_int(1),
+				new ir_expression_intconst(IRGEN_RUNTIME_CHAR),
+				IR_INT_EQ),
+			1,
+			2));
+	
+	vector<ir_expression*> pcArgs;
+	vector<int>pcRets;
+	
+	pcArgs.push_back(
+		new ir_expression_unknown_to_int(
+			new ir_expression_temp_unknown(0)));
+	
+	print->add_block();
+	print->blocks[1].push_back(
+		new ir_statement_functioncall(
+			"_putCharacter",
+			pcArgs,
+			pcRets));
+	print->blocks[1].push_back(
+		new ir_statement_return());
+	
+	
+	//handle pairs
+	print->add_block();
+	print->blocks[2].push_back(
+		new ir_statement_if(
+			new ir_expression_intcmp(
+				new ir_expression_temp_int(1),
+				new ir_expression_intconst(IRGEN_RUNTIME_PAIR),
+				IR_INT_EQ),
+			3,
+			4));
+	
+	pcArgs.clear();
+	pcRets.clear();
+	pcArgs.push_back(new ir_expression_intconst((int)'('));
+	
+	print->add_block();
+	print->blocks[3].push_back(
+		new ir_statement_functioncall(
+			"_putCharacter",
+			pcArgs,
+			pcRets));
+	
+	vector<ir_expression*> printArgs;
+	vector<int> printRets;
+	
+	printArgs.push_back(
+		new ir_expression_memory(
+			new ir_expression_unknown_to_ptr(
+				new ir_expression_temp_unknown(0))));
+	printArgs.push_back(
+		new ir_expression_intar_binop(
+			new ir_expression_unknown_to_int(
+				new ir_expression_memory(
+					new ir_expression_ptrar_binop(
+						new ir_expression_unknown_to_ptr(
+							new ir_expression_temp_unknown(0)),
+						new ir_expression_intconst(2),
+						IR_PTR_ADD))),
+			new ir_expression_intconst(8),
+			IR_INT_MOD));
+	
+	print->blocks[3].push_back(
+		new ir_statement_functioncall(
+			"__print",
+			printArgs,
+			printRets));
+	
+	pcArgs.clear();
+	pcRets.clear();
+	pcArgs.push_back(new ir_expression_intconst((int)','));
+	
+	print->blocks[3].push_back(
+		new ir_statement_functioncall(
+			"_putCharacter",
+			pcArgs,
+			pcRets));
+	
+	printArgs.clear();
+	printRets.clear();
+	printArgs.push_back(
+		new ir_expression_memory(
+			new ir_expression_unknown_to_ptr(
+				new ir_expression_temp_unknown(0))));
+	printArgs.push_back(
+		new ir_expression_intar_binop(
+			new ir_expression_unknown_to_int(
+				new ir_expression_memory(
+					new ir_expression_ptrar_binop(
+						new ir_expression_unknown_to_ptr(
+							new ir_expression_temp_unknown(0)),
+						new ir_expression_intconst(2),
+						IR_PTR_ADD))),
+			new ir_expression_intconst(8),
+			IR_INT_DIV));
+	
+	print->blocks[3].push_back(
+		new ir_statement_functioncall(
+			"__print",
+			printArgs,
+			printRets));
+	
+	pcArgs.clear();
+	pcRets.clear();
+	pcArgs.push_back(new ir_expression_intconst((int)')'));
+	
+	print->blocks[3].push_back(
+		new ir_statement_functioncall(
+			"_putCharacter",
+			pcArgs,
+			pcRets));
+	print->blocks[3].push_back(
+		new ir_statement_return());
+	
+	// Handle ints, lists and booleans	
+	print->add_block();
+	print->blocks[4].push_back(
+		new ir_statement_if(
+			new ir_expression_intcmp(
+				new ir_expression_temp_int(1),
+				new ir_expression_intconst(IRGEN_RUNTIME_INT),
+				IR_INT_EQ),
+			5,
+			6));
+	
+	printArgs.clear();
+	printRets.clear();
+	printArgs.push_back(
+		new ir_expression_unknown_to_int(
+			new ir_expression_temp_unknown(0)));
+	
+	print->add_block();
+	print->blocks[5].push_back(
+		new ir_statement_functioncall(
+			"_printInt",
+			printArgs,
+			printRets));
+	print->blocks[5].push_back(
+		new ir_statement_return());
+	
+	print->add_block();
+	print->blocks[6].push_back(
+		new ir_statement_if(
+			new ir_expression_intcmp(
+				new ir_expression_temp_int(1),
+				new ir_expression_intconst(IRGEN_RUNTIME_BOOL),
+				IR_INT_EQ),
+			7,
+			8));
+	
+	printArgs.clear();
+	printRets.clear();
+	printArgs.push_back(
+		new ir_expression_unknown_to_bool(
+			new ir_expression_temp_unknown(0)));
+	
+	print->add_block();
+	print->blocks[7].push_back(
+		new ir_statement_functioncall(
+			"_printBool",
+			printArgs,
+			printRets));
+	print->blocks[7].push_back(
+		new ir_statement_return());
+	
+	printArgs.clear();
+	printRets.clear();
+	printArgs.push_back(
+		new ir_expression_unknown_to_ptr(
+			new ir_expression_temp_unknown(0)));
+	
+	print->add_block();
+	print->blocks[8].push_back(
+		new ir_statement_functioncall(
+			"_printList",
+			printArgs,
+			printRets));
+	print->blocks[8].push_back(
+		new ir_statement_return());
+	
+	
+	// Add to module
+	module->functions["__print"] = print;
+}
+@
+
+<<generate printInt>>=
+void generate_printInt(ir_module *module)
+{
+	vector<ir_type> arguments;
+	vector<ir_type> returns;
+	
+	arguments.push_back(IR_TYPE_INT);
+	
+	ir_function *printInt = new ir_function(arguments, returns);
+	
+	// special case 0
+	printInt->add_block();
+	printInt->blocks[0].push_back(
+		new ir_statement_if(
+			new ir_expression_intcmp(
+				new ir_expression_temp_int(0),
+				new ir_expression_intconst(0),
+				IR_INT_EQ),
+			1,
+			2));
+	
+	vector<ir_expression*> pcArgs;
+	vector<int> pcRets;
+	
+	pcArgs.push_back(new ir_expression_intconst((int)'0'));
+	
+	printInt->add_block();
+	printInt->blocks[1].push_back(
+		new ir_statement_functioncall(
+			"_putCharacter",
+			pcArgs,
+			pcRets));
+	printInt->blocks[1].push_back(
+		new ir_statement_return());
+	
+	// handle negative numbers
+	printInt->add_block();
+	printInt->blocks[2].push_back(
+		new ir_statement_if(
+			new ir_expression_intcmp(
+				new ir_expression_temp_int(0),
+				new ir_expression_intconst(0),
+				IR_INT_LT),
+			3,
+			4));
+	
+	printInt->add_block();
+	printInt->blocks[3].push_back(
+		new ir_statement_assign_temp(
+			0,
+			new ir_expression_intar_unop(
+				new ir_expression_temp_int(0),
+				IR_INT_NEG)));
+	printInt->blocks[3].push_back(
+		new ir_statement_jump(4));
+	
+	// handoff to recursive print
+	vector<ir_expression*> recArgs;
+	vector<int> recRets;
+	
+	recArgs.push_back(new ir_expression_temp_int(0));
+	
+	printInt->add_block();
+	printInt->blocks[4].push_back(
+		new ir_statement_functioncall(
+			"_printIntRec",
+			recArgs,
+			recRets));
+	printInt->blocks[4].push_back(
+		new ir_statement_return());
+	
+	//add to module
+	module->functions["_printInt"] = printInt;
+}
+@
+
+<<generate printIntRec>>=
+void generate_printIntRec(ir_module *module)
+{
+	vector<ir_type> arguments;
+	vector<ir_type> returns;
+	
+	arguments.push_back(IR_TYPE_INT);
+	
+	ir_function *printIntRec = new ir_function(arguments, returns);
+	
+	// return on 0
+	printIntRec->add_block();
+	printIntRec->blocks[0].push_back(
+		new ir_statement_if(
+			new ir_expression_intcmp(
+				new ir_expression_temp_int(0),
+				new ir_expression_intconst(0),
+				IR_INT_EQ),
+			1,
+			2));;
+	
+	printIntRec->add_block();
+	printIntRec->blocks[1].push_back(
+		new ir_statement_return());
+	
+	// Recurse
+	
+	vector<ir_expression*> recArgs;
+	vector<int> recRets;
+	
+	recArgs.push_back(
+		new ir_expression_intar_binop(
+			new ir_expression_temp_int(0),
+			new ir_expression_intconst(10),
+			IR_INT_DIV));
+	
+	printIntRec->add_block();
+	printIntRec->blocks[2].push_back(
+		new ir_statement_functioncall(
+			"_printIntRec",
+			recArgs,
+			recRets));
+	
+	vector<ir_expression*> pcArgs;
+	vector<int> pcRets;
+	
+	pcArgs.push_back(
+		new ir_expression_intar_binop(
+			new ir_expression_intar_binop(
+				new ir_expression_temp_int(0),
+				new ir_expression_intconst(10),
+				IR_INT_MOD),
+			new ir_expression_intconst((int)'0'),
+			IR_INT_ADD));
+	
+	printIntRec->blocks[2].push_back(
+		new ir_statement_functioncall(
+			"_putCharacter",
+			pcArgs,
+			pcRets));
+	printIntRec->blocks[2].push_back(
+		new ir_statement_return());
+		
+	
+	//add to module
+	module->functions["_printIntRec"] = printIntRec;
+}
+@
+
+<<generate printBool>>=
+void generate_printBool(ir_module *module)
+{
+	vector<ir_type> arguments;
+	vector<ir_type> returns;
+	
+	arguments.push_back(IR_TYPE_BOOL);
+	
+	ir_function *printBool = new ir_function(arguments, returns);
+	
+	// select what to print based on input value
+	printBool->add_block();
+	printBool->blocks[0].push_back(
+		new ir_statement_if(
+			new ir_expression_temp_bool(0),
+			1,
+			2));
+	
+	vector<ir_expression*>pcArgs;
+	vector<int> pcRets;
+	
+	pcArgs.push_back(new ir_expression_intconst((int)'T'));
+	
+	printBool->add_block();
+	printBool->blocks[1].push_back(
+		new ir_statement_functioncall(
+			"_putCharacter",
+			pcArgs,
+			pcRets));
+	
+	pcArgs.clear();
+	pcArgs.push_back(new ir_expression_intconst((int)'r'));
+	
+	printBool->blocks[1].push_back(
+		new ir_statement_functioncall(
+			"_putCharacter",
+			pcArgs,
+			pcRets));
+	
+	pcArgs.clear();
+	pcArgs.push_back(new ir_expression_intconst((int)'u'));
+	
+	printBool->blocks[1].push_back(
+		new ir_statement_functioncall(
+			"_putCharacter",
+			pcArgs,
+			pcRets));
+	
+	pcArgs.clear();
+	pcArgs.push_back(new ir_expression_intconst((int)'e'));
+	
+	printBool->blocks[1].push_back(
+		new ir_statement_functioncall(
+			"_putCharacter",
+			pcArgs,
+			pcRets));
+	printBool->blocks[1].push_back(
+		new ir_statement_return());
+	
+	pcArgs.clear();
+	pcArgs.push_back(new ir_expression_intconst((int)'F'));
+	
+	printBool->add_block();
+	printBool->blocks[2].push_back(
+		new ir_statement_functioncall(
+			"_putCharacter",
+			pcArgs,
+			pcRets));
+	
+	pcArgs.clear();
+	pcArgs.push_back(new ir_expression_intconst((int)'a'));
+	
+	printBool->blocks[2].push_back(
+		new ir_statement_functioncall(
+			"_putCharacter",
+			pcArgs,
+			pcRets));
+	
+	pcArgs.clear();
+	pcArgs.push_back(new ir_expression_intconst((int)'l'));
+	
+	printBool->blocks[2].push_back(
+		new ir_statement_functioncall(
+			"_putCharacter",
+			pcArgs,
+			pcRets));
+	
+	pcArgs.clear();
+	pcArgs.push_back(new ir_expression_intconst((int)'s'));
+	
+	printBool->blocks[2].push_back(
+		new ir_statement_functioncall(
+			"_putCharacter",
+			pcArgs,
+			pcRets));
+	
+	pcArgs.clear();
+	pcArgs.push_back(new ir_expression_intconst((int)'e'));
+	
+	printBool->blocks[2].push_back(
+		new ir_statement_functioncall(
+			"_putCharacter",
+			pcArgs,
+			pcRets));
+	
+	printBool->blocks[2].push_back(
+		new ir_statement_return());
+	
+	// add to module
+	module->functions["_printBool"] = printBool;
+}
+@
+
+<<generate printList>>=
+void generate_printList(ir_module *module)
+{
+	vector<ir_type> arguments;
+	vector<ir_type> returns;
+	
+	arguments.push_back(IR_TYPE_PTR);
+	
+	ir_function *printList = new ir_function(arguments, returns);
+	
+	vector<ir_expression*> pcArgs;
+	vector<int> pcRets;
+	
+	pcArgs.push_back(
+		new ir_expression_intconst((int)'['));
+	
+	printList->add_block();
+	printList->blocks[0].push_back(
+		new ir_statement_assign_temp(
+			1,
+			new ir_expression_temp_ptr(0)));
+	printList->blocks[0].push_back(
+		new ir_statement_functioncall(
+			"_putCharacter",
+			pcArgs,
+			pcRets));
+	printList->blocks[0].push_back(
+		new ir_statement_jump(1));
+	
+	printList->add_block();
+	printList->blocks[1].push_back(
+		new ir_statement_if(
+			new ir_expression_ptrcmp(
+				new ir_expression_temp_ptr(0),
+				new ir_expression_label("NULL"),
+				IR_PTR_EQ),
+		2,
+		3));
+	
+	pcArgs.clear();
+	pcArgs.push_back(
+		new ir_expression_intconst((int)']'));
+	
+	printList->add_block();
+	printList->blocks[2].push_back(
+		new ir_statement_functioncall(
+			"_putCharacter",
+			pcArgs,
+			pcRets));
+	printList->blocks[2].push_back(
+		new ir_statement_return());
+	
+	vector<ir_expression*> printArgs;
+	vector<int> printRets;
+	
+	printArgs.push_back(
+		new ir_expression_memory(
+			new ir_expression_temp_ptr(0)));
+	printArgs.push_back(
+		new ir_expression_intar_binop(
+			new ir_expression_unknown_to_int(
+				new ir_expression_memory(
+					new ir_expression_ptrar_binop(
+						new ir_expression_temp_ptr(0),
+						new ir_expression_intconst(2),
+						IR_PTR_ADD))),
+			new ir_expression_intconst(8),
+			IR_INT_MOD));
+	
+	printList->add_block();
+	printList->blocks[3].push_back(
+		new ir_statement_functioncall(
+			"__print",
+			printArgs,
+			printRets));
+	
+	pcArgs.clear();
+	pcArgs.push_back(
+		new ir_expression_intconst((int)','));
+	
+	printList->blocks[3].push_back(
+		new ir_statement_functioncall(
+			"_putCharacter",
+			pcArgs,
+			pcRets));
+	printList->blocks[3].push_back(
+		new ir_statement_assign_temp(
+			0,
+			new ir_expression_unknown_to_ptr(
+				new ir_expression_memory(
+					new ir_expression_ptrar_binop(
+						new ir_expression_temp_ptr(0),
+						new ir_expression_intconst(1),
+						IR_PTR_ADD)))));
+	printList->blocks[3].push_back(
+		new ir_statement_if(
+			new ir_expression_ptrcmp(
+				new ir_expression_temp_ptr(0),
+				new ir_expression_label("NULL"),
+				IR_PTR_EQ),
+			2,
+			4));
+	
+	printArgs.clear();
+	printArgs.push_back(
+		new ir_expression_memory(
+			new ir_expression_temp_ptr(0)));
+	printArgs.push_back(
+		new ir_expression_intar_binop(
+			new ir_expression_unknown_to_int(
+				new ir_expression_memory(
+					new ir_expression_ptrar_binop(
+						new ir_expression_temp_ptr(0),
+						new ir_expression_intconst(2),
+						IR_PTR_ADD))),
+			new ir_expression_intconst(8),
+			IR_INT_MOD));
+	
+	printList->add_block();
+	printList->blocks[4].push_back(
+		new ir_statement_functioncall(
+			"__print",
+			printArgs,
+			printRets));
+	
+	pcArgs.clear();
+	pcArgs.push_back(
+		new ir_expression_intconst((int)','));
+	printList->blocks[4].push_back(
+		new ir_statement_functioncall(
+			"_putCharacter",
+			pcArgs,
+			pcRets));
+	printList->blocks[4].push_back(
+		new ir_statement_assign_temp(
+			0,
+			new ir_expression_unknown_to_ptr(
+				new ir_expression_memory(
+					new ir_expression_ptrar_binop(
+						new ir_expression_temp_ptr(0),
+						new ir_expression_intconst(1),
+						IR_PTR_ADD)))));
+	printList->blocks[4].push_back(
+		new ir_statement_assign_temp(
+			1,
+			new ir_expression_unknown_to_ptr(
+				new ir_expression_memory(
+					new ir_expression_ptrar_binop(
+						new ir_expression_temp_ptr(1),
+						new ir_expression_intconst(1),
+						IR_PTR_ADD)))));
+	printList->blocks[4].push_back(
+		new ir_statement_if(
+			new ir_expression_ptrcmp(
+				new ir_expression_temp_ptr(0),
+				new ir_expression_temp_ptr(1),
+				IR_PTR_EQ),
+			5,
+			1));
+	
+	pcArgs.clear();
+	pcArgs.push_back(new ir_expression_intconst((int)'.'));
+	
+	printList->add_block();
+	printList->blocks[5].push_back(
+		new ir_statement_functioncall(
+			"_putCharacter",
+			pcArgs,
+			pcRets));
+	pcArgs.clear();
+	pcArgs.push_back(new ir_expression_intconst((int)'.'));
+	printList->blocks[5].push_back(
+		new ir_statement_functioncall(
+			"_putCharacter",
+			pcArgs,
+			pcRets));
+	pcArgs.clear();
+	pcArgs.push_back(new ir_expression_intconst((int)'.'));
+	printList->blocks[5].push_back(
+		new ir_statement_functioncall(
+			"_putCharacter",
+			pcArgs,
+			pcRets));
+	
+	pcArgs.clear();
+	pcArgs.push_back(new ir_expression_intconst((int)']'));
+	printList->blocks[5].push_back(
+		new ir_statement_functioncall(
+			"_putCharacter",
+			pcArgs,
+			pcRets));
+	printList->blocks[5].push_back(
+		new ir_statement_return());
+	
+	//add to module
+	module->functions["_printList"] = printList;
+}
+@
+
 \section{Generating everything in a module}
 
 The following function forms the interface to the rest of the compiler. It adds all the runtime libraries functions to a given module.
@@ -1027,6 +1753,15 @@ void generate_runtime(ir_module *module)
 	
 	generate_makepair(module);
 	generate_makelist(module);
+	
+	generate_isempty(module);
+	generate_read(module);
+	generate_print(module);
+	
+	generate_printInt(module);
+	generate_printIntRec(module);
+	generate_printBool(module);
+	generate_printList(module);
 }
 @
 
@@ -1052,6 +1787,13 @@ using namespace std;
 <<generate infilistcmp>>
 <<generate makepair>>
 <<generate makelist>>
+<<generate isempty>>
+<<generate read>>
+<<generate print>>
+<<generate printInt>>
+<<generate printIntRec>>
+<<generate printBool>>
+<<generate printList>>
 
 <<generate runtime>>
 @
