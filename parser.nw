@@ -741,7 +741,7 @@ case TOKEN_CURLYBRACKET_LEFT:
 		ast_statement *stat = parse_statement(vardecl_allowed, false);
 		
 		// after first non-vardecl vardecls no longer allowed
-		if (typeid(stat) != typeid(ast_statement_vardecl))
+		if (typeid(*stat) != typeid(ast_statement_vardecl))
 			vardecl_allowed = false;
 			
 		stats.push_back(stat);
