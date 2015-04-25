@@ -597,6 +597,7 @@ void ssm_translate_module(ir_module *module, FILE *stream)
 	// starter
 	fprintf(stream, "\tbsr _init\n");
 	fprintf(stream, "\tbsr __main\n");
+	fprintf(stream, "\ttrap 0\n");
 	fprintf(stream, "\thalt\n");
 	fprintf(stream, "\n");
 	
@@ -634,6 +635,13 @@ void ssm_translate_module(ir_module *module, FILE *stream)
 	fprintf(stream, "\tunlink\n");
 	fprintf(stream, "\tret\n");
 	fprintf(stream, "\n");
+	
+	for (auto global : module->globals)
+	{
+		fprintf(stream, "%s:\n", global.first.c_str());
+		for (int i=0; i<global.second; i++)
+			fprintf(stream, "\tnop\n");
+	}
 	
 	for (auto function : module->functions)
 	{
