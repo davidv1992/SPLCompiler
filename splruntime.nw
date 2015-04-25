@@ -1176,8 +1176,11 @@ void generate_print(ir_module *module)
 	printRets.clear();
 	printArgs.push_back(
 		new ir_expression_memory(
-			new ir_expression_unknown_to_ptr(
-				new ir_expression_temp_unknown(0))));
+			new ir_expression_ptrar_binop(
+				new ir_expression_unknown_to_ptr(
+					new ir_expression_temp_unknown(0)),
+				new ir_expression_intconst(1),
+				IR_PTR_ADD)));
 	printArgs.push_back(
 		new ir_expression_intar_binop(
 			new ir_expression_unknown_to_int(
@@ -1553,6 +1556,8 @@ void generate_printList(ir_module *module)
 	
 	pcArgs.push_back(
 		new ir_expression_intconst((int)'['));
+	
+	printList->add_temp(IR_TYPE_PTR);
 	
 	printList->add_block();
 	printList->blocks[0].push_back(
