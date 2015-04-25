@@ -1,0 +1,7 @@
+Int main()
+{
+	print(1235);
+	print('
+');
+	return 1;
+}

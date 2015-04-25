@@ -1,0 +1,11 @@
+Void Inc(Int a)
+{
+	a = a + 1;
+}
+
+Int main()
+{
+	Int a = 1;
+	Inc(a);
+	return a;
+}

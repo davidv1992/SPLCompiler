@@ -1,0 +1,12 @@
+Bool eq(t a, t b)
+{
+	return a == b;
+}
+
+Int main()
+{
+	if ((1:2:3:[]) == (1:2:3:[]) && 'a'=='a')
+		return 1;
+	else
+		return 2; 
+}

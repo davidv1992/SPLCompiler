@@ -1,0 +1,13 @@
+Int main()
+{
+	[Int] a = 1:2:3:[];
+	a.tl.tl.tl = a.tl;
+	
+	[Int] b = 1:2:3:[];
+	b.tl.tl.tl = b.tl;
+	
+	if (a == b)
+		return 1;
+	else
+		return 2;
+}

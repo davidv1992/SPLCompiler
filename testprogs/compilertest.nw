@@ -1,0 +1,48 @@
+\section{Test compiler}
+
+This script checks the compilers output programs for correctness
+<<compilercorrect.sh>>=
+#!/bin/bash
+
+PASSES=0
+FAILS=0
+
+for SPL_FILE in $(ls tests/codegen/*.spl)
+do
+	valgrind --leak-check=full --error-exitcode=1 --quiet ./compiler $SPL_FILE > out.ssm
+	if [ $? -ne 0 ]
+	then
+		echo Failure in testcase $SPL_FILE
+		FAILS=$((FAILS+1))
+	else
+		java -jar testprogs/ssm.jar --autostart --autoquit --fast --usestdio out.ssm > testTmp.txt 2>/dev/null
+		diff -q testTmp.txt $SPL_FILE.exp
+		if [ $? -ne 0 ]
+		then
+			echo Failure in testcase $SPL_FILE
+			FAILS=$((FAILS+1))
+		else
+			PASSES=$((PASSES+1))
+		fi
+	fi
+	
+	rm -f out.ssm
+	rm -f testTmp.txt
+done
+
+echo Results for typechecking/correct suite:
+if [ $FAILS -eq 0 ]
+then
+	echo -ne '\E[32m'
+else
+	echo -ne '\E[31m'
+fi
+echo PASSED: $PASSES
+echo FAILED: $FAILS
+echo -ne '\E[0m'
+
+if [ $FAILS -ne 0 ]
+then
+	exit 1
+fi
+@

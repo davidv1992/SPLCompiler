@@ -1,12 +1,12 @@
 .PHONY: clean test limittest version.h
-.PHONY: test/tokentest test/parsetest test/typechecktest test/irgentest
+.PHONY: test/tokentest test/parsetest test/typechecktest test/irgentest test/compiler
 .PHONY: limittest/comment limittest/bracket
 #force version.h on every build
 
 BASH := /bin/bash
 CXXFLAGS := -I. -g -Wall -Wextra -Wno-unused-parameter -Wno-unused-variable -Werror -std=c++11
 
-test: test/tokentest test/parsetest test/typechecktest test/irgentest
+test: test/tokentest test/parsetest test/typechecktest test/irgentest test/compiler
 	@$(BASH) -c "echo -e '\E[32mAll tests passed\E[0m'"
 
 test/tokentest: testprogs/tokentest testprogs/tokencorrect.sh testprogs/tokenfail.sh
@@ -25,6 +25,9 @@ test/typechecktest: testprogs/typechecktest testprogs/typecheckcorrect.sh testpr
 
 test/irgentest: testprogs/irgentest testprogs/irgencorrect.sh
 	$(BASH) ./testprogs/irgencorrect.sh
+
+test/compiler: compiler testprogs/compilercorrect.sh
+	$(BASH) ./testprogs/compilercorrect.sh
 
 limittest: limittest/comment limittest/bracket
 	@$(BASH) -c "echo -e '\E[32mAll tests passed\E[0m'"
@@ -92,7 +95,7 @@ splruntime.h: splruntime.nw
 splruntime.cpp: splruntime.nw
 	notangle -L -Rsplruntime.cpp splruntime.nw | cpif splruntime.cpp
 
-main.o: main.cpp token.h parser.h ast.h position.h typecheck.h ir.h irgeneration.h settings.h splruntime.h ssm.h
+main.o: main.cpp token.h parser.h ast.h position.h typecheck.h ir.h irgeneration.h settings.h splruntime.h ssm.h error.h
 main.cpp: main.nw
 	notangle -L -Rmain.cpp main.nw | cpif main.cpp
 
@@ -108,8 +111,8 @@ settings.cpp: settings.nw token.nw parser.nw typecheck.nw error.nw
 settings.h: settings.nw token.nw parser.nw typecheck.nw error.nw
 	notangle -L -Rsettings.h token.nw parser.nw typecheck.nw error.nw settings.nw | cpif settings.h
 
-test.tex: testprogs/testheader.nw testprogs/testtrailer.nw testprogs/tokentest.nw testprogs/parsetest.nw testprogs/exprparsetest.nw testprogs/typeparsetest.nw testprogs/statementparsetest.nw testprogs/stresstest.nw
-	noweave -t4 -delay testprogs/testheader.nw testprogs/tokentest.nw testprogs/parsetest.nw testprogs/typeparsetest.nw testprogs/exprparsetest.nw testprogs/statementparsetest.nw testprogs/stresstest.nw testprogs/testtrailer.nw | cpif test.tex
+test.tex: testprogs/testheader.nw testprogs/testtrailer.nw testprogs/tokentest.nw testprogs/parsetest.nw testprogs/exprparsetest.nw testprogs/typeparsetest.nw testprogs/irgentest.nw testprogs/compilertest.nw testprogs/statementparsetest.nw testprogs/stresstest.nw
+	noweave -t4 -delay testprogs/testheader.nw testprogs/tokentest.nw testprogs/parsetest.nw testprogs/typeparsetest.nw testprogs/exprparsetest.nw testprogs/statementparsetest.nw testprogs/irgentest.nw testprogs/compilertest.nw testprogs/stresstest.nw testprogs/testtrailer.nw | cpif test.tex
 test.pdf: test.tex
 	latexmk -pdf test.tex
 	latexmk -c
@@ -204,6 +207,10 @@ testprogs/irgencorrect.sh: testprogs/irgentest.nw
 	notangle -L -Rirgencorrect.sh testprogs/irgentest.nw > testprogs/irgencorrect.sh
 	chmod +x testprogs/irgencorrect.sh
 
+testprogs/compilercorrect.sh: testprogs/compilertest.nw
+	notangle -L -Rcompilercorrect.sh testprogs/compilertest.nw > testprogs/compilercorrect.sh
+	chmod +x testprogs/compilercorrect.sh
+
 testprogs/commentgen: testprogs/commentgen.cpp
 testprogs/commentgen.cpp: testprogs/stresstest.nw
 	notangle -L -Rcommentgen.cpp testprogs/stresstest.nw | cpif testprogs/commentgen.cpp
@@ -237,7 +244,7 @@ clean:
 	rm -f testprogs/irgentest.cpp testprogs/irgentest.o testprogs/irgentest
 	rm -f testprogs/parsecorrect.sh testprogs/parsefail.sh testprogs/parsewarn.sh
 	rm -f testprogs/typecheckcorrect.sh testprogs/typecheckfail.sh testprogs/typecheckwarn.sh
-	rm -f testprogs/irgencorrect.sh
+	rm -f testprogs/irgencorrect.sh testprogs/compilercorrect.sh
 	rm -f testprogs/tokencorrect.sh testprogs/tokenfail.sh
 	rm -f testprogs/commentgen testprogs/commentgen.cpp
 	rm -f testprogs/bracketgen testprogs/bracketgen.cpp

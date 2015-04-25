@@ -1,0 +1,4 @@
+Int main()
+{
+	return -2/2;
+}

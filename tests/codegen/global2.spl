@@ -1,0 +1,6 @@
+[Int] a = 1:2:[];
+
+Int main()
+{
+	return a.tl.hd;
+}

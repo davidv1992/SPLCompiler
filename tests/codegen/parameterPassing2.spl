@@ -1,0 +1,11 @@
+Void Inc((Int, Int) pair)
+{
+	pair.fst = pair.fst+1;
+}
+
+Int main()
+{
+	(Int, Int) a = (0,2);
+	Inc(a);
+	return a.fst;
+}

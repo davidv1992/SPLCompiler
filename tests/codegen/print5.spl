@@ -1,0 +1,7 @@
+Int main()
+{
+	[Int] a = 1:2:[];
+	a.tl.tl = a;
+	print(a);
+	return 1;
+}
