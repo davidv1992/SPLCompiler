@@ -11,6 +11,7 @@ This file does all the chaining of the various parts of the compiler. It is resp
 #include "splruntime.h"
 #include "settings.h"
 #include "ssm.h"
+#include "error.h"
 #include <cstdio>
 #include <map>
 
@@ -30,6 +31,9 @@ int main(int argc, char **argv)
 	
 	ast_program *program = parse_program();
 	typecheck_program(program);
+	
+	if (eh_haveerror())
+		return 1;
 	
 	ir_module *module = irgen_translate_program(program);
 	
