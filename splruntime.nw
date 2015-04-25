@@ -405,7 +405,7 @@ void generate_listcmp(ir_module *module)
 			new ir_expression_intcmp(
 				new ir_expression_temp_int(2),
 				new ir_expression_intconst(0),
-				IR_INT_EQ),
+				IR_INT_NE),
 			8,
 			9));
 	
@@ -536,7 +536,7 @@ void generate_listcmp(ir_module *module)
 			new ir_expression_intcmp(
 				new ir_expression_temp_int(2),
 				new ir_expression_intconst(0),
-				IR_INT_EQ),
+				IR_INT_NE),
 			8,
 			16));
 	
@@ -974,7 +974,7 @@ void generate_makelist(ir_module *module)
 	vector<ir_expression*> allocArgs;
 	vector<int> allocRets;
 	
-	allocRets.push_back(4);
+	allocRets.push_back(3);
 	
 	makelist->add_block();
 	makelist->blocks[0].push_back(
