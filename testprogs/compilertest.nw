@@ -15,7 +15,7 @@ do
 		echo Failure in testcase $SPL_FILE
 		FAILS=$((FAILS+1))
 	else
-		java -jar testprogs/ssm.jar --autostart --autoquit --fast --usestdio out.ssm > testTmp.txt 2>/dev/null
+		java -jar testprogs/ssm.jar --autostart --autoquit --fast --usestdio --noui out.ssm > testTmp.txt 2>/dev/null
 		diff -q testTmp.txt $SPL_FILE.exp
 		if [ $? -ne 0 ]
 		then
