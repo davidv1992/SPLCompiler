@@ -89,7 +89,7 @@ void generate_cmp(ir_module *module)
 		new ir_statement_if(
 			new ir_expression_intcmp(
 				new ir_expression_temp_int(1),
-				new ir_expression_intconst(IRGEN_RUNTIME_BOOL),
+				new ir_expression_intconst(IRGEN_RUNTIME_PAIR),
 				IR_INT_EQ),
 			10,
 			5));
@@ -781,7 +781,7 @@ void generate_infilistcmp(ir_module *module)
 			new ir_expression_unknown_to_ptr(
 				new ir_expression_memory(
 					new ir_expression_ptrar_binop(
-						new ir_expression_temp_ptr(0),
+						new ir_expression_temp_ptr(1),
 						new ir_expression_intconst(1),
 						IR_PTR_ADD)))));
 	
