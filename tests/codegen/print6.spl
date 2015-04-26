@@ -1,0 +1,10 @@
+Int main()
+{
+	print(True);
+	print('
+');
+	print(False);
+	print('
+');
+	return 1;
+}

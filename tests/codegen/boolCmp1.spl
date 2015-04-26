@@ -1,0 +1,7 @@
+Int main()
+{
+	if (True == False)
+		return 2;
+	else
+		return 1;
+}

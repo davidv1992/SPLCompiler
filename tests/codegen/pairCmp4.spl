@@ -1,0 +1,7 @@
+Int main()
+{
+	if ((2,3) < (2,15))
+		return 1;
+	else
+		return 2;
+}

@@ -1,0 +1,10 @@
+Int main()
+{
+	[Int] a = 1:2:[];
+	a.tl.tl = a;
+	
+	if (a == (1:2:1:2:1:2:1:2:[]))
+		return 2;
+	else
+		return 1;
+}
