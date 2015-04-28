@@ -1,0 +1,14 @@
+Int main()
+{
+	Bool a = False;
+	Bool b = True;
+	
+	if (b)
+	{
+		print('X');
+		if (a)
+			print('Y');
+		print('X');
+	}
+	return 0;
+}
