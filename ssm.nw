@@ -445,23 +445,34 @@ ostringstream o;
 o << "bsr " << funcall->function;
 assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
 
+int stackAdjust = 0;
+
 for (unsigned int i=0; i<funcall->return_temporaries.size(); i++)
 {
 	if (funcall->return_temporaries[i] != -1)
 	{
+		if (stackAdjust != 0)
+		{
+			ostringstream o;
+			o << "ajs " << -stackAdjust;
+			assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
+		}
 		ostringstream o;
 		o << "stl " << link_offsets[funcall->return_temporaries[i]];
 		assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
 	}
 	else
 	{
-		assembly->blocks[trace].push_back(asm_statement("str 7",{},{},{}));
+		stackAdjust++;
 	}
 }
 
-for (unsigned int i=0; i<funcall->arguments.size(); i++)
+stackAdjust += funcall->arguments.size();
+if (stackAdjust != 0)
 {
-	assembly->blocks[trace].push_back(asm_statement("str 7",{},{},{}));
+	ostringstream o;
+	o << "ajs " << -stackAdjust;
+	assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
 }
 @
 
