@@ -161,8 +161,14 @@ void print_helptext(int argc, char **argv)
 	
 	for (int i=0; i<flag_table_length; i++)
 	{
-		fprintf(stderr, "\t-%s%s: %s\n", flag_table[i].flag.prefix.c_str(),
-			flag_table[i].flag.flag.c_str(), flag_table[i].flag.description.c_str());
+		if (flag_table[i].type == "bool")
+			fprintf(stderr, "\t-%s%s: %s\n", flag_table[i].flag.prefix.c_str(),
+				flag_table[i].flag.flag.c_str(), 
+				flag_table[i].flag.description.c_str());
+		else if (flag_table[i].type == "int")
+			fprintf(stderr, "\t-%s%s <INT>: %s\n", flag_table[i].flag.prefix.c_str(),
+				flag_table[i].flag.flag.c_str(), 
+				flag_table[i].flag.description.c_str());
 	}
 }
 int parse_int_extra(int argc, char **argv, int &index, string flag)
