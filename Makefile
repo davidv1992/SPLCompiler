@@ -83,7 +83,7 @@ typecheck.h: typecheck.nw
 typecheck.cpp: typecheck.nw
 	notangle -L -Rtypecheck.cpp typecheck.nw | cpif typecheck.cpp
 
-irgeneration.o: irgeneration.cpp irgeneration.h ast.h ir.h typecheck.h position.h
+irgeneration.o: irgeneration.cpp irgeneration.h ast.h ir.h typecheck.h position.h settings.h
 irgeneration.h: irgeneration.nw
 	notangle -L -Rirgeneration.h irgeneration.nw | cpif irgeneration.h
 irgeneration.cpp: irgeneration.nw
@@ -106,10 +106,10 @@ version.h:
 	echo \#define VERSION \"`git describe --abbrev=4 --dirty --always --tags`\" | cpif version.h
 
 settings.o: settings.cpp settings.h version.h
-settings.cpp: settings.nw token.nw parser.nw typecheck.nw error.nw
-	notangle -L -Rsettings.cpp token.nw parser.nw typecheck.nw error.nw settings.nw | cpif settings.cpp
-settings.h: settings.nw token.nw parser.nw typecheck.nw error.nw
-	notangle -L -Rsettings.h token.nw parser.nw typecheck.nw error.nw settings.nw | cpif settings.h
+settings.cpp: settings.nw token.nw parser.nw typecheck.nw error.nw ir.nw irgeneration.nw ssm.nw
+	notangle -L -Rsettings.cpp token.nw parser.nw typecheck.nw error.nw ir.nw irgeneration.nw ssm.nw settings.nw | cpif settings.cpp
+settings.h: settings.nw token.nw parser.nw typecheck.nw error.nw ir.nw irgeneration.nw ssm.nw
+	notangle -L -Rsettings.h token.nw parser.nw typecheck.nw error.nw ir.nw irgeneration.nw ssm.nw settings.nw | cpif settings.h
 
 test.tex: testprogs/testheader.nw testprogs/testtrailer.nw testprogs/tokentest.nw testprogs/parsetest.nw testprogs/exprparsetest.nw testprogs/typeparsetest.nw testprogs/irgentest.nw testprogs/compilertest.nw testprogs/statementparsetest.nw testprogs/stresstest.nw
 	noweave -t4 -delay testprogs/testheader.nw testprogs/tokentest.nw testprogs/parsetest.nw testprogs/typeparsetest.nw testprogs/exprparsetest.nw testprogs/statementparsetest.nw testprogs/irgentest.nw testprogs/compilertest.nw testprogs/stresstest.nw testprogs/testtrailer.nw | cpif test.tex

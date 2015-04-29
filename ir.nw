@@ -1075,6 +1075,34 @@ public:
 };
 @
 
+\subsection{Safety checks}
+
+For verifying that operations later on won't have undetermined behaviour, or that certain conditions are always satisfied, the IR provides an assertion statement.
+
+<<IR assert>>=
+class ir_statement_assert : public ir_statement
+{
+public:
+	ir_expression_bool *condition;
+
+	ir_statement_assert(ir_expression_bool *c)
+	{
+		condition = c;
+	}
+	virtual ~ir_statement_assert() { delete condition; }
+	virtual void print()
+	{
+		printf("ASSERT (");
+		condition->print();
+		printf(")\n");
+	}
+	virtual ir_base *copy()
+	{
+		return new ir_statement_assert((ir_expression_bool*)condition->copy());
+	}
+};
+@
+
 \section{Source files}
 
 <<ir.h>>=
@@ -1109,6 +1137,7 @@ public:
 <<IR jump>>
 <<IR if>>
 <<IR return>>
+<<IR assert>>
 
 <<IR function>>
 <<IR module>>

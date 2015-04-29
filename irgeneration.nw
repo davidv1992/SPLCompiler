@@ -8,6 +8,15 @@ IR generation, and possibly also it's translation to assembly, gives rise to a m
 \item When \_x is a name in the generated IR, the labels starting with x\_L and x\_T are guaranteed to not exist in the generated IRs
 \end{itemize}
 
+\section{Safety}
+
+Some of theoperations in the SPL language have undefined results in some conditions. However, we also want to provide a safe mode that checks that these conditions do not occur.
+<<compiler settings>>=
+#define CHECKSAFE_FLAG {"", "nosafe", "Enable safe mode"}
+COMPILER_SETTING(bool, checksafe, false, CHECKSAFE_FLAG)
+#undef CHECKSAFE_FLAG
+@
+
 \section{Implementing polymorphic functions}
 
 SPL has polymorphic functions, and it would be preferable to keep the translated variants of those functions also polymorphic. I have decided to solve this issue by passing around the types of polymorphic variables as function arguments. However, this is done with a slight twist: To keep the values indicating a type independent of the program being compiled for each argument where this is neccessary only the top-level (eg Int, Bool, Char, List, Tuple) type is passed along. For the more complex List and Tuple types, the record pointed to by the variable contains a hidden third field, containing the type descriptions of the two parts. This gives enough information for everything.
@@ -204,6 +213,23 @@ case OP_MOD:
 	ir_expression_int *rhs = dynamic_cast<ir_expression_int*>(
 		irgen_translate_expression(function, trace, binop->right, false).first);
 	assert(lhs != NULL && rhs != NULL);
+	
+	if (checksafe && (binop->op == OP_MOD || binop->op == OP_DIV))
+	{
+		int temp = function->add_temp(IR_TYPE_INT);
+		function->blocks[trace].push_back(
+			new ir_statement_assign_temp(
+				temp,
+				rhs));
+		function->blocks[trace].push_back(
+			new ir_statement_assert(
+				new ir_expression_intcmp(
+					new ir_expression_temp_int(temp),
+					new ir_expression_intconst(0),
+					IR_INT_NE)));
+		rhs = new ir_expression_temp_int(temp);
+	}
+	
 	result.first = new ir_expression_intar_binop(lhs, rhs, 
 		translate_ast_mathbinop(binop->op));
 	if (generate_type)
@@ -503,7 +529,17 @@ int address_temp = function->add_temp(IR_TYPE_PTR);
 function->blocks[trace].push_back(
 	new ir_statement_assign_temp(address_temp,
 		irgen_translate_expression(function, trace, field->base, false).first));
-	
+
+if (checksafe && typeid(*field->base) == typeid(ast_list_type))
+{
+	function->blocks[trace].push_back(
+		new ir_statement_assert(
+			new ir_expression_ptrcmp(
+				new ir_expression_temp_ptr(address_temp),
+				new ir_expression_label("NULL"),
+				IR_PTR_NE)));
+}
+
 if (field->field == "snd" || field->field == "tl")
 {
 	result.first =
@@ -1231,6 +1267,7 @@ ir_module* irgen_translate_program(ast_program *program)
 #include "ir.h"
 #include "irgeneration.h"
 #include "typecheck.h"
+#include "settings.h"
 #include <cassert>
 #include <vector>
 #include <string>

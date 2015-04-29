@@ -511,6 +511,14 @@ assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
 }
 @
 
+\subsection{Translate assert}
+
+<<ssm translate assert>>=
+ir_statement_assert *assertstat = (ir_statement_assert*)statement;
+ssm_translate_expression(assembly, trace, assertstat->condition);
+assembly->blocks[trace].push_back(asm_statement("brf error",{},{},{}));
+@
+
 \subsection{Translating statement}
 
 This is just the tieing together of the above.
@@ -539,6 +547,14 @@ else if (typeid(*statement) == typeid(ir_statement_if))
 else if (typeid(*statement) == typeid(ir_statement_return))
 {
 	<<ssm translate return>>
+}
+else if (typeid(*statement) == typeid(ir_statement_assert))
+{
+	<<ssm translate assert>>
+}
+else
+{
+	assert(0);
 }
 @
 
@@ -609,6 +625,21 @@ void ssm_translate_module(ir_module *module, FILE *stream)
 	fprintf(stream, "\tbsr _init\n");
 	fprintf(stream, "\tbsr __main\n");
 	fprintf(stream, "\ttrap 0\n");
+	fprintf(stream, "\thalt\n");
+	fprintf(stream, "\n");
+	
+	// error handler
+	fprintf(stream, "error:\n");
+	fprintf(stream, "\tldc 69\n");
+	fprintf(stream, "\ttrap 1\n");
+	fprintf(stream, "\tldc 82\n");
+	fprintf(stream, "\ttrap 1\n");
+	fprintf(stream, "\tldc 82\n");
+	fprintf(stream, "\ttrap 1\n");
+	fprintf(stream, "\tldc 79\n");
+	fprintf(stream, "\ttrap 1\n");
+	fprintf(stream, "\tldc 82\n");
+	fprintf(stream, "\ttrap 1\n");
 	fprintf(stream, "\thalt\n");
 	fprintf(stream, "\n");
 	
