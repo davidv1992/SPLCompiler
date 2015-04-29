@@ -1147,6 +1147,10 @@ void irgen_translate_function(ir_module *module, ast_fundecl *fun)
 	{
 		rets.push_back(IR_TYPE_PTR);
 	}
+	else if (typeid(*fun->type) == typeid(ast_void_type))
+	{
+		// no returns
+	}
 	else
 	{
 		rets.push_back(IR_TYPE_UNKNOWN);
