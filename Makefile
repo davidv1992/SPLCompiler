@@ -1,6 +1,7 @@
 .PHONY: clean test limittest version.h
 .PHONY: test/tokentest test/parsetest test/typechecktest test/irgentest test/compiler
 .PHONY: limittest/comment limittest/bracket
+.DEFAULT_GOAL := compiler
 #force version.h on every build
 
 BASH := /bin/bash

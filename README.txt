@@ -14,8 +14,11 @@ The implementation is entirely written in noweb, with c++ as the programming
 Building:
 ---------
 
-The current edition does not contain the entire compiler, and thus only test
- programs can be build. A testprogram <program> can be build by issuing
+Running make in the root directory will produce the compiler. This is a single
+ executable named compiler. Giving it the argument -help will give a usage
+ description.
+
+An individual testprogram <program> can be build by issuing
 
 	make testprogs/<program>
 
@@ -26,8 +29,9 @@ A suite with test input is provided in the tests/ directory tree. Running the
 
 Since the source is noweb, it can be turned into a pdf. This requires a latex 
  distribution to be available on the system that provides at the least the
- packages amsmath, mathpartir, noweb, geometry, textcomp, hyperref and longtable. Also the 
- tool latexmk needs to be available, it is used to manage the build process.
+ packages amsmath, mathpartir, noweb, geometry, textcomp, hypenat, hyperref and 
+ longtable. Also the tool latexmk needs to be available, it is used to manage
+ the build process.
  
 The pdf of the main compiler code can be produced with
 
