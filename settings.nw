@@ -13,7 +13,7 @@ The flags argument is a bit special, it should be a const struct containing two 
 
 For non-boolean flags, a value should be provided directly after the flag with using =value postfixed to the flag, or by having the next commandline argument be the value.
 
-Calls to this macro (and only calls to this macro) are added to the special \textless\textless compiler settings\textgreater\textgreater\ environment. This environment is then included everywhere the list is needed and the macro calls preprocessed to the form needed there.
+Calls to this macro (and only calls to this macro) are added to the special \linebreak \textless\textless compiler\nolinebreak\ settings\textgreater\textgreater\  environment. This environment is then included everywhere the list is needed and the macro calls preprocessed to the form needed there.
 
 \section{Flag structure}
 
@@ -39,7 +39,8 @@ Variables are needed in two places. First of all, we need them in the header so 
 
 Furthermore we need them in the source, where we use every bit of information.
 <<config variable definitions>>=
-#define COMPILER_SETTING(type, variable, default_value, flag) type variable = default_value;
+#define COMPILER_SETTING(type, variable, default_value, flag) \
+	type variable = default_value;
 <<compiler settings>>
 #undef COMPILER_SETTING
 @
@@ -58,7 +59,8 @@ struct config_flag_full
 @
 
 <<generate config flag table>>=
-#define COMPILER_SETTING(type, variable, default_value, flag) {&variable, #type, flag},
+#define COMPILER_SETTING(type, variable, default_value, flag) \
+	{&variable, #type, flag},
 config_flag_full flag_table[] = {
 <<compiler settings>>
 };
@@ -104,7 +106,8 @@ vector<string> parse_commandline(int argc, char **argv)
 		
 		for (int i=0; i<flag_table_length; i++)
 		{
-			string option = "-" + flag_table[i].flag.prefix + flag_table[i].flag.flag;
+			string option = "-" + flag_table[i].flag.prefix
+				+ flag_table[i].flag.flag;
 			
 			if (option == arg)
 			{
@@ -113,7 +116,8 @@ vector<string> parse_commandline(int argc, char **argv)
 				if (flag_table[i].type == "bool")
 					*(bool*)flag_table[i].variable = true;
 				else if (flag_table[i].type == "int")
-					*(int*)flag_table[i].variable = parse_int_extra(argc, argv, index, arg);
+					*(int*)flag_table[i].variable = parse_int_extra(argc, argv, 
+																	index, arg);
 				else
 					assert(0);
 					

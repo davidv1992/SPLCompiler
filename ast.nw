@@ -1,6 +1,7 @@
 \chapter{Abstract Syntax trees}
+\label{ch:ast}
 
-The end result of parsing is an abstract syntax tree. This tree contains all the known information on the source, and can be decorated with extra information in later stages of the compiler.
+The end result of parsing is an abstract syntax tree. This tree contains all the known information on the source, and is decorated with extra information in later stages of the compiler.
 
 \section{Implementation strategy}
 Abstract syntax trees are implemented using classes for each of the nodes. Each node is responsible for managing the memory used by itself and its subtrees. Upon passing pointers of an ast to a constructor for a node, that node acquires ownership of the memory associated with the ast, and should free it when it gets deleted. Also, each node is able to print a human-readable representation of itsef. Using c++ classes with inheritance means that it is possible to distinguish between various types of subclasses using the typeid operator.

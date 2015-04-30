@@ -1,4 +1,5 @@
 \chapter{Simple Stack Machine code generation}
+\label{ch:ssm}
 
 This is an initial (simple) version of code generation for the SSM stack machine emulator. The module in it's current form does not do any optimizations or clever stuff. It is really mostly just a one-to-one mapping of the IR onto SSM assembly instructions.
 
@@ -27,7 +28,8 @@ void ssm_determine_offsets(ir_function *function)
 		link_offsets.push_back(-2-i);
 	}
 	
-	for (int i=0; i<((int)function->temp_types.size())-function->num_args-function->num_returns; i++)
+	for (int i=0; i<((int)function->temp_types.size()) - 
+					function->num_args-function->num_returns; i++)
 	{
 		link_offsets.push_back(1+i);
 	}
@@ -320,7 +322,8 @@ default:
 This function checks the type of expression we have and dispatches accordingly
 
 <<ssm translate expression>>=
-void ssm_translate_expression(asm_function *assembly, int trace, ir_expression *expression)
+void ssm_translate_expression(asm_function *assembly, int trace, 
+								ir_expression *expression)
 {
 	if (typeid(*expression) == typeid(ir_expression_intconst))
 	{
@@ -577,7 +580,9 @@ asm_function *ssm_translate_function(ir_function *function, string fnname)
 	
 	{
 		ostringstream o;
-		o << "link " << ((int)function->temp_types.size())-function->num_args-function->num_returns;
+		o << "link " << ((int)function->temp_types.size())
+			- function->num_args 
+			- function->num_returns;
 		assembly->blocks[0].push_back(asm_statement(o.str(),{},{},{}));
 	}
 	

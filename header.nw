@@ -7,6 +7,7 @@
 \usepackage{textcomp}
 \usepackage{hyperref}
 \usepackage{longtable}
+\usepackage{hyphenat}
 \newcommand{\nonterm}[1]{\textlangle #1\textrangle}
 \newcommand{\bor}{\textbar}
 \newcommand{\term}[1]{'\textbf{#1}'}
@@ -22,8 +23,18 @@
 
 \chapter*{Introduction}
 
-Before you is the pretty-printed version of the sourcecode of my SPL compiler. This document contains all the modules that will eventually be part of the compiler. If you are looking for the test programs and their supporting infrastructure, these can be found in a seperate document, test.pdf.
+Before you is the pretty-printed version of the sourcecode of my SPL compiler. This document contains all the modules that are part of the compiler. If you are looking for the test programs and their supporting infrastructure, these can be found in a seperate document, test.pdf.
 
-Currently, there are only two major modules implemented, that together handle the first step of compilation, translating the source code to an abstract syntax tree. The remaining segments are smaller more utility oriented modules that implement tasks such as error handling and settings management.
+The compiler proper consists of 5 major modules, and their supporting code. The tokenizer (chapter \ref{ch:tokenizer}) and parser (chapter \ref{ch:parser}) together process the input file and produce an abstract syntax tree, described in chapter \ref{ch:ast}. This abstract syntax tree is typechecked and decorated with types by the typechecker (chapter \ref{ch:typechecker}).
 
-The tokenizer (section \ref{sec:tokenizer}) splits the input stream into tokens, and provides the input interface for the actual parser proper. This split was made because it significantly reduces the ammount of code in the parser itself, which makes this more manageable to implement and maintain.
+At this point the resulting abstract syntax tree is known to represent a valid SPL program, and we proceed to code generation. Code generation is done in two stages. The IR generator (chapter \ref{ch:irgenerator}) produces code in an intermediate representation described in (chapter \ref{ch:ir}). This is then combined with the IR for the platform independent parts of the runtime library (chapter \ref{ch:splruntime}) to form the completed program in IR form.
+
+The final step is to translate this IR to platform-specific assembly code. Currently only the SSM platform (chapter \ref{ch:ssm}) is supported. This translator translates the IR and adds platform-specific support code.
+
+\section*{How to read this document}
+
+This document contains both the source code, and the rational for how it is written. The start of each chapter usually contains most of the rationale for how a module is written. The rest of the chapter then focusses on the smaller details and the source code itself.
+
+For reading, when the goal is just to get a general feel for how the compiler is structured, it is advisable to start by only reading the first few sections of each chapter, ignoring the sections dealing with the actual implementation. You can then later come back to those sections should you want more detail.
+
+Chapter \ref{ch:spllang} is an exception to this. It contains a summary of all the information given on the SPL language during the course. It also contains a treatise on all the problems with this ``specification'', and all the design choices with respect to the language made over the course of writing this compiler. It can be read seperate from the rest of the compiler, and is meant primarily as a reference on the SPL language.

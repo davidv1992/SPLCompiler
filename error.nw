@@ -22,7 +22,8 @@ At various points in the compiler we dont want to proceed if the previous step h
 
 Furthermore, it is usefull to have a bailout when we get too many errors, and this is where we implement that.
 <<compiler settings>>=
-#define ERROR_LIMIT_FLAG {"", "errorlimit", "Number of errors processed before compilation is aborted."}
+#define ERROR_LIMIT_FLAG {"", "errorlimit", \
+	"Number of errors processed before compilation is aborted."}
 COMPILER_SETTING(int, error_limit, 100, ERROR_LIMIT_FLAG)
 @
 <<handle errors>>=

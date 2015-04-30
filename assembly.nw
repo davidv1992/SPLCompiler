@@ -1,6 +1,8 @@
 \chapter{Assembly utilities}
 
-There are a few pieces of functionality that are shared by all backends 
+There are a few pieces of functionality that are shared by all backends. All of them need a way to store assembly as it is generated, and all backends can benefit from register allocation and the livelyness analysis needed for it.
+
+Register allocation and liveliness analysis is not yet implemented, but implementing the data structure now saves time when building these later.
 
 \section{Assembly code datastructure}
 
@@ -14,7 +16,8 @@ public:
 	std::vector<int> fillin;
 	std::vector<int> defs, uses;
 	
-	asm_statement(std::string ins, std::vector<int> f, std::vector<int> d, std::vector<int> u)
+	asm_statement(std::string ins, std::vector<int> f, std::vector<int> d, 
+					std::vector<int> u)
 	{
 		instruction = ins;
 		fillin = f;

@@ -1,4 +1,5 @@
 \chapter{Type checking}
+\label{ch:typechecker}
 
 \section{Type checking rules}
 

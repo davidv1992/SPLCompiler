@@ -1,4 +1,7 @@
 \chapter{IR generation}
+\label{ch:irgenerator}
+
+The first step in code generation is the conversion from an SPL abstract syntax tree to an IR tree. During this conversion we solve all the issues related to polymorphism and the built-in overloaded functions and operators.
 
 \section{Namespacing and label name collisions}
 
@@ -476,16 +479,19 @@ else if (var->declaration != NULL)
 	if (typeid(*var->type) == typeid(ast_int_type)
 		|| typeid(*var->type) == typeid(ast_char_type))
 	{
-		result.first = new ir_expression_unknown_to_int((ir_expression_unknown*)result.first);
+		result.first = new ir_expression_unknown_to_int(
+			(ir_expression_unknown*)result.first);
 	}
 	else if (typeid(*var->type) == typeid(ast_bool_type))
 	{
-		result.first = new ir_expression_unknown_to_bool((ir_expression_unknown*)result.first);
+		result.first = new ir_expression_unknown_to_bool(
+			(ir_expression_unknown*)result.first);
 	}
 	else if (typeid(*var->type) == typeid(ast_list_type)
 		|| typeid(*var->type) == typeid(ast_tuple_type))
 	{
-		result.first = new ir_expression_unknown_to_ptr((ir_expression_unknown*)result.first);
+		result.first = new ir_expression_unknown_to_ptr(
+			(ir_expression_unknown*)result.first);
 	}
 	
 	if (generate_type)
@@ -561,16 +567,19 @@ else
 if (typeid(*field->type) == typeid(ast_int_type)
 	|| typeid(*field->type) == typeid(ast_char_type))
 {
-	result.first = new ir_expression_unknown_to_int((ir_expression_unknown*)result.first);
+	result.first = new ir_expression_unknown_to_int(
+		(ir_expression_unknown*)result.first);
 }
 else if (typeid(*field->type) == typeid(ast_bool_type))
 {
-	result.first = new ir_expression_unknown_to_bool((ir_expression_unknown*)result.first);
+	result.first = new ir_expression_unknown_to_bool(
+		(ir_expression_unknown*)result.first);
 }
 else if (typeid(*field->type) == typeid(ast_list_type)
 	|| typeid(*field->type) == typeid(ast_tuple_type))
 {
-	result.first = new ir_expression_unknown_to_ptr((ir_expression_unknown*)result.first);
+	result.first = new ir_expression_unknown_to_ptr(
+		(ir_expression_unknown*)result.first);
 }
 
 // Lookup subtype info if needed
@@ -598,7 +607,8 @@ function_definition *fundef = lookup_function(funcall->id);
 vector<ir_expression*> arguments;
 for (int i= funcall->arguments.size()-1; i>=0; i--)
 {
-	bool argument_needs_type = typeid(*fundef->argument_types[i]) == typeid(ast_simple_type);
+	bool argument_needs_type = 
+		typeid(*fundef->argument_types[i]) == typeid(ast_simple_type);
 	auto argir = irgen_translate_expression(function, trace, 
 		funcall->arguments[i], argument_needs_type);
 	
@@ -856,7 +866,8 @@ For variable declarations, we also need to handle the declaration of the relevan
 <<translate variable declaration>>=
 ast_statement_vardecl *vardecl = (ast_statement_vardecl*)stat;
 
-auto rhs = irgen_translate_expression(function, trace, vardecl->value, vardecl->generate_typetemp);
+auto rhs = irgen_translate_expression(function, trace, vardecl->value, 
+	vardecl->generate_typetemp);
 
 if (typeid(*vardecl->type) == typeid(ast_int_type)
 	|| typeid(*vardecl->type) == typeid(ast_char_type))
@@ -922,8 +933,10 @@ else
 Translating lvalues is a little tricky, because of the special case of a local variable, which requires a temp read which cannot be written as dereferencing a pointer.
 
 <<translate lvalue>>=
-#define VALUE_TEMP(x) ((x)->declaration?(x)->declaration->value_temp:(x)->funargdecl->value_temp)
-#define TYPE_TEMP(x) ((x)->declaration?(x)->declaration->type_temp:(x)->funargdecl->type_temp)
+#define VALUE_TEMP(x) \
+	((x)->declaration?(x)->declaration->value_temp:(x)->funargdecl->value_temp)
+#define TYPE_TEMP(x) \
+	((x)->declaration?(x)->declaration->type_temp:(x)->funargdecl->type_temp)
 ir_expression_ptr *irgen_translate_lvalue(ast_lvalue *lval)
 {
 	if (typeid(*lval) == typeid(ast_lvalue_variable))
@@ -984,7 +997,8 @@ ast_statement_expression *statexpr = (ast_statement_expression*)stat;
 delete statexpr->inner->type;
 statexpr->inner->type = new ast_void_type();
 
-ir_expression *lhs = irgen_translate_expression(function, trace, statexpr->inner, false).first;
+ir_expression *lhs = 
+	irgen_translate_expression(function, trace, statexpr->inner, false).first;
 assert(lhs == NULL);
 @
 
@@ -1089,7 +1103,8 @@ trace = outro_block;
 Those statements that produce flow control into trace will return true, all others depend on this to return false. This allows us to ignore that portion of the translation task when it is not relevant to a statement.
 
 <<translate statement>>=
-bool irgen_translate_statement(ir_function *function, int &trace, ast_statement *stat)
+bool irgen_translate_statement(ir_function *function, int &trace, 
+								ast_statement *stat)
 {
 	if (typeid(*stat) == typeid(ast_statement_block))
 	{

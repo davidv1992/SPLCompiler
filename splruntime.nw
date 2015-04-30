@@ -1,4 +1,5 @@
 \chapter{SPL runtime library}
+\label{ch:splruntime}
 
 A large part of the runtime support required by the IR generation module is does not really depend on the specific platform we are compiling for. The same holds for large portions of the function library visible to user programs. This means that it is also quite feasible to implement these portions in the intermediate language. This approach has as an advantage that we don't need to write most of the library again when porting the compiler to a new platform.
 

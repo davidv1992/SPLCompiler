@@ -1,4 +1,5 @@
 \chapter{Intermediate representation}
+\label{ch:ir}
 
 For ease of translation to other targets besides the SSM architecture, I made the decision to incorporate an intermediate representation in the compiler, instead of translating directly into SSM code. This IR is designed to be a bit higher level than the SSM architecture itself, and does not require explicit handling of stack frames and procedure entry, exit and calling. Instead it provides higher level views of these concepts with functions and temporaries for value storage.
 
@@ -229,7 +230,8 @@ public:
 	ir_expression_int *left, *right;
 	ir_intar_op op;
 	
-	ir_expression_intar_binop(ir_expression_int *l, ir_expression_int *r, ir_intar_op o)
+	ir_expression_intar_binop(ir_expression_int *l, ir_expression_int *r, 
+								ir_intar_op o)
 	{
 		left = l;
 		right = r;
@@ -295,7 +297,8 @@ public:
 	ir_expression_int *right;
 	ir_ptrar_op op;
 	
-	ir_expression_ptrar_binop(ir_expression_ptr *l, ir_expression_int *r, ir_ptrar_op o)
+	ir_expression_ptrar_binop(ir_expression_ptr *l, ir_expression_int *r,
+								ir_ptrar_op o)
 	{
 		left = l;
 		right = r;
@@ -346,7 +349,8 @@ public:
 	ir_expression_bool *left, *right;
 	ir_boolar_op op;
 	
-	ir_expression_boolar_binop(ir_expression_bool *l, ir_expression_bool *r, ir_boolar_op o)
+	ir_expression_boolar_binop(ir_expression_bool *l, ir_expression_bool *r,
+								ir_boolar_op o)
 	{
 		left = l;
 		right = r;
@@ -532,7 +536,8 @@ public:
 	ir_expression_int *left, *right;
 	ir_intcmp_op op;
 	
-	ir_expression_intcmp(ir_expression_int *l, ir_expression_int *r, ir_intcmp_op o)
+	ir_expression_intcmp(ir_expression_int *l, ir_expression_int *r, 
+							ir_intcmp_op o)
 	{
 		left = l;
 		right = r;
@@ -573,7 +578,8 @@ public:
 	ir_expression_ptr *left, *right;
 	ir_ptrcmp_op op;
 	
-	ir_expression_ptrcmp(ir_expression_ptr *l, ir_expression_ptr *r, ir_ptrcmp_op o)
+	ir_expression_ptrcmp(ir_expression_ptr *l, ir_expression_ptr *r, 
+							ir_ptrcmp_op o)
 	{
 		left = l;
 		right = r;
@@ -619,7 +625,8 @@ public:
 	ir_expression_bool *left, *right;
 	ir_boolcmp_op op;
 	
-	ir_expression_boolcmp(ir_expression_bool *l, ir_expression_bool *r, ir_boolcmp_op o)
+	ir_expression_boolcmp(ir_expression_bool *l, ir_expression_bool *r,
+							ir_boolcmp_op o)
 	{
 		left = l;
 		right = r;
@@ -665,7 +672,8 @@ public:
 	ir_expression_unknown *left, *right;
 	ir_unknowncmp_op op;
 	
-	ir_expression_unknowncmp(ir_expression_unknown *l, ir_expression_unknown *r, ir_unknowncmp_op o)
+	ir_expression_unknowncmp(ir_expression_unknown *l, ir_expression_unknown *r,
+								ir_unknowncmp_op o)
 	{
 		left = l;
 		right = r;
@@ -726,7 +734,8 @@ public:
 	virtual void print() { printf("INT("); inner->print(); printf(")"); }
 	virtual ir_base *copy()
 	{
-		return new ir_expression_unknown_to_int((ir_expression_unknown*)inner->copy());
+		return new ir_expression_unknown_to_int(
+			(ir_expression_unknown*)inner->copy());
 	}
 };
 class ir_expression_unknown_to_ptr : public ir_expression_ptr
@@ -739,7 +748,8 @@ public:
 	virtual void print() { printf("PTR("); inner->print(); printf(")"); }
 	virtual ir_base *copy()
 	{
-		return new ir_expression_unknown_to_ptr((ir_expression_unknown*)inner->copy());
+		return new ir_expression_unknown_to_ptr(
+			(ir_expression_unknown*)inner->copy());
 	}
 };
 class ir_expression_unknown_to_bool : public ir_expression_bool
@@ -752,7 +762,8 @@ public:
 	virtual void print() { printf("BOOL("); inner->print(); printf(")"); }
 	virtual ir_base *copy()
 	{
-		return new ir_expression_unknown_to_bool((ir_expression_unknown*)inner->copy());
+		return new ir_expression_unknown_to_bool(
+			(ir_expression_unknown*)inner->copy());
 	}
 };
 @
@@ -917,7 +928,8 @@ public:
 	}
 	virtual ir_base *copy()
 	{
-		return new ir_statement_assign_temp(target_temp_id, (ir_expression*)value->copy());
+		return new ir_statement_assign_temp(target_temp_id, 
+			(ir_expression*)value->copy());
 	}
 };
 @
@@ -963,7 +975,8 @@ public:
 	std::vector<int> return_temporaries;
 	std::string function;
 	
-	ir_statement_functioncall(std::string f, std::vector<ir_expression*> a,std::vector<int> r)
+	ir_statement_functioncall(std::string f, std::vector<ir_expression*> a,
+								std::vector<int> r)
 	{
 		function = f;
 		arguments = a;
@@ -1005,7 +1018,8 @@ public:
 		std::vector<ir_expression*> arg_copy;
 		for (auto arg : arguments)
 			arg_copy.push_back((ir_expression*)arg->copy());
-		return new ir_statement_functioncall(function, arg_copy, return_temporaries);
+		return new ir_statement_functioncall(function, arg_copy, 
+			return_temporaries);
 	}
 };
 @

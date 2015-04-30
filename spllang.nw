@@ -1,4 +1,6 @@
-\chapter{The spl language definition}
+\chapter{The SPL language definition}
+\label{ch:spllang}
+
 Before we can start with the compiler proper, we need to discuss the language we are going to compile. By the nature of the language specification given to us there are several points that require some attention beyond what is specified. For this reason the SPL language definition is included (almost) verbatim below. The original material comes from \cite{cc_ex1} and \cite{cc_ex2}. It is followed by notes on the choices and clarifications used in the rest of the code.
 
 \section{Grammar}
@@ -55,7 +57,7 @@ SPL has three buildin functions: \term{print}, \term{read} and \term{isEmpty}. \
 operator(s) & type\\
 \hline
 \term{*}, \term{\%}, \term{/} & $\text{\term{Int}} \times \text{\term{Int}} \rightarrow \text{\term{Int}}$\\
-\term{+}, \term{-}(binary) & $\text{\term{t}} \times \text{\term{t}} \rightarrow \text{\term{t}}$ & \term{t} represents either \term{Int} or \term{Char}\\
+\term{+}, \term{-}(binary) & $\text{\term{t}} \times \text{\term{t}} \rightarrow \text{\term{t}}$ & \term{t} is either \term{Int} or \term{Char}\\
 \term{==}, \term{\textless}, \term{\textgreater}, \term{\textless =}, \term{\textgreater =} & $\text{\term{t}} \times \text{\term{t}} \rightarrow \text{\term{Bool}}$\\
 \term{-}(unary) & $\text{\term{Int}} \rightarrow \text{\term{Int}}$\\
 \term{!} & $\text{\term{Bool}} \rightarrow \text{\term{Bool}}$\\
@@ -70,10 +72,10 @@ All operators obey the usual binding powers and directions.
 Global variables and functions can be used before they are defined, and since we only have first order functions, functions and variables should have seperate namespaces (ie. we should be able to have a function and variable with the same name.)
 
 \section{Comments, problems and decisions}
-The specification as given above has a umber of issues and is, at least in it's current form, quite a bit underspecified.
+The specification as given above has a number of issues and is, at least in its current form, quite a bit underspecified.
 
 \subsection{Parsing issues}
-To start with the first point, the operator binding power and direction. Since there is some variation in this between programming languages and mathematics, a baseline must be chosen. I made the choice to use the C operator binding powers and directions as a base, since it is something I am familiar with. This leaves the colon operator undecided, since it is not in the C language. I chose to make it the weakest binding operator, and make it right associative. Right associative is the better choice here because it allows \term{1:2:3:[]} to be interpreted as intended (the list with elements $1$,$2$,$3$ in that order). Making it weakest binding allows us to easily append the results of all sorts of expressions into the list without having to worry about brackets, making it also natural to work with lists of booleans. This gives us the following ordering of the operators (from strong binding to weak) with their associativity:
+To start with the first point, the operator binding power and direction is unclear. Since there is some variation in this between programming languages and mathematics, a baseline must be chosen. I made the choice to use the C operator binding powers and directions as a base, since it is something I am familiar with. This leaves the colon operator undecided, since it is not in the C language. I chose to make it the weakest binding operator, and make it right associative. Right associative is the better choice here because it allows \term{1:2:3:[]} to be interpreted as intended (the list with elements $1$,$2$,$3$ in that order). Making it weakest binding allows us to easily append the results of all sorts of expressions into the list without having to worry about brackets, making it also natural to work with lists of booleans. This gives us the following ordering of the operators (from strong binding to weak) with their associativity:
 
 \begin{tabular}{l|l}
 Operators & Associativity\\
@@ -90,11 +92,11 @@ Operators & Associativity\\
 
 The second issue we need to treat is that of the dangling else. In the grammar as written above, there are two interpretations of "\term{if (a) if (b)} \nonterm{Stmt} \term{else} \nonterm{Stmt}", namely "\term{if (a) \{ if (b)} \nonterm{Stmt} \term{\}} \term{else} \nonterm{Stmt}" and "\term{if (a) \{ if (b)} \nonterm{Stmt} \term{else} \nonterm{Stmt} \term{\}}". I personally prefer the second interpretation because it allows us to easily match an arbitrary number of \term{else} terms to \term{if}, without changing the meaning of an \term{else} when we add another one after it. Thus, each \term{else} is associated with the closest possible \term{if}.
 
-Finaly, character constants are not really that well specified. Currently, the implementation takes the next character after the opening \term{'} to be the value of it, and then immediately looks for the closing \term{'}. I might change this out at a later time for a more full implementation of the behaviour that C character constants have, since it allows a clearer representation of special characters such as newlines.
+Finaly, character constants are not well specified. Currently, the implementation takes the next character after the opening \term{'} to be the value of it, and then immediately looks for the closing \term{'}. I might change this out at a later time for a more full implementation of the behaviour that C character constants have, since it allows a clearer representation of special characters such as newlines.
 
 \subsection{Typechecking issues}
 
-The specification does not give an entire definition of what is allowed where. Most problematic, it does not specify any conditions on the initialization values of global variables. This is problematic as allowing all expressions for this gives no guarantee on whether those initializations can be carried out in an order that guarantees that each of them is initialized before it's first use. I therefore make the choice of restricting the initializations of global variables to expressions without functions, and requiring that each global variable that is used in the initializer of another global variable is defined before it's first use in that context.
+The specification does not give an entire definition of what is allowed where. Most problematic, it does not specify any conditions on the initialization values of global variables. This is problematic as allowing all expressions for this gives no guarantee on whether those initializations can be carried out in an order that guarantees that each of them is initialized before its first use. I therefore make the choice of restricting the initializations of global variables to expressions without functions, and requiring that each global variable that is used in the initializer of another global variable is defined before its first use in that context.
 
 \subsection{Semantics of list and tuples}
 
@@ -102,16 +104,16 @@ The SPL language does not completely specify the behaviour of tuples and list, a
 
 This has one big consequence. It is possible to have lists that are periodic but infinite in length. All build in functions are guaranteed to handle these correctly, and will not loop endlessly when passed such a list. The same holds for the comparison operators.
 
-However, comparison of lists does have some caveats when it comes to lists. First of all, in principle all lists are sorted in lexographic order. For this ordering, infinite lists are of infinite length. However, the behaviour regarding two infinite lists has some caveats. Two of those lists might be considered equal, and are guaranteed to be considered if they are also structurally equivalent (eq have the same period and lead time). However, when the two lists have a different period and lead time in the memory, their ordering is arbitrary, and the only guarantee given is that it will be consistent (eg, their ordering will be the same regardless of which of the comparison operators is used, and regardless of the order in which the two lists are given to the operator, hence $a < b$ will give the same result as $b > a$ and $!(a >= b)$)
+However, comparison of lists does have some caveats when it comes to lists. First of all, in principle all lists are sorted in lexographic order. For this ordering, infinite lists are of infinite length. However, the behaviour regarding two infinite lists has some caveats. Two of those lists might be considered equal, and are guaranteed to be considered if they are also structurally equivalent (cq. have the same period and lead time). However, when the two lists have a different period and lead time in the memory, their ordering is arbitrary, and the only guarantee given is that it will be consistent (eg, their ordering will be the same regardless of which of the comparison operators is used, and regardless of the order in which the two lists are given to the operator, hence $a < b$ will give the same result as $b > a$ and $!(a >= b)$)
 
 \subsection{Evaluation order of operator arguments}
 
-The SPL language definition does not specify in which order the arguments for buildin operators are evaluated. This might be important when functions with side effects are used inside such expressions. I have decided two things. First of all, all operator arguments are evaluated from left to right. Furthermore, none of the operators takes shortcut. In particular, the boolean and and or operators allways evaluate both of their arguments.
+The SPL language definition does not specify in which order the arguments for buildin operators are evaluated. This might be important when functions with side effects are used inside such expressions. I have decided two things. First of all, all operator arguments are evaluated from left to right. Furthermore, none of the operators takes shortcut. In particular, the boolean and and or operators always evaluate both of their arguments.
 
 \subsection{Evaluation order of function arguments}
 
-Function arguments are evaluated from last to first, matching the typicall order of pushing them on the stack.
+Function arguments are evaluated from last to first, matching the typical order of pushing them on the stack.
 
 \subsection{Emptylist field access and divison by zero}
 
-The SPL language definition does not explicitly specify the behaviour a program should have when we access the head or tail fields of an emptylist, nor what it should do when dividing an element by zero. I have decided to implement two modes with regards to this. In safe mode, the compiler guarantees that the program is aborted the first time one of these happens. In unsafe mode, the behaviour of the program after doing this is undefined. Unsafe mode is included because it has the potential of allowing more optimizations in a program, and because it is simpler to implement.
+The SPL language definition does not explicitly specify the behaviour a program should have when we access the head or tail fields of an emptylist, nor what it should do when dividing an element by zero. I have decided to implement two modes regarding this. In safe mode, the compiler guarantees that the program is aborted the first time one of these happens. In unsafe mode, the behaviour of the program after doing this is undefined. Unsafe mode is included because it has the potential of allowing more optimizations in a program, and because it is simpler to implement.

@@ -1,5 +1,5 @@
 \chapter{Tokenizer}
-\label{sec:tokenizer}
+\label{ch:tokenizer}
 
 In order to make the eventual parsing process a lot easier, the compiler first splits up the input into tokens. Because this is a handwritten tokenizer, the choice has been made to do this in two steps, one running directly after the other per token. The first generates the tokens all non-keyword tokens, and tokenizes keywords as identifiers. The second stage then filters out those identifiers that are actually keywords, and changes the produced token to reflect that.
 
