@@ -1,0 +1,223 @@
+\chapter{IR utilities}
+
+For dealing with the intermediate representation, especially during the generation of platform-specific assembly code, it is very usefull to have some utility functions.
+
+\section{Tile matching}
+
+This function provides matching of a IR expression tree against a temp. Null pointers act as wildcards in the temp. When strictmatching is true, also the operators in the IR tree are checked.
+
+<<match tiles header>>=
+bool isMatch(ir_expression *tree, ir_expression *temp, bool strictmatching);
+@
+<<match tiles>>=
+bool isMatch(ir_expression *tree, ir_expression *temp, bool strictmatching)
+{
+	if (temp == NULL)
+		return true;
+	
+	if (typeid(*tree) != typeid(*temp))
+		return false;
+	
+	if (typeid(*tree) == typeid(ir_expression_intar_binop))
+	{
+		<<match intar binop>>
+	}
+	else if (typeid(*tree) == typeid(ir_expression_ptrar_binop))
+	{
+		<<match ptrar binop>>
+	}
+	else if (typeid(*tree) == typeid(ir_expression_boolar_binop))
+	{
+		<<match boolar binop>>
+	}
+	else if (typeid(*tree) == typeid(ir_expression_intar_unop))
+	{
+		<<match intar unop>>
+	}
+	else if (typeid(*tree) == typeid(ir_expression_boolar_unop))
+	{
+		<<match boolar unop>>
+	}
+	else if (typeid(*tree) == typeid(ir_expression_intcmp))
+	{
+		<<match intcmp>>
+	}
+	else if (typeid(*tree) == typeid(ir_expression_ptrcmp))
+	{
+		<<match ptrcmp>>
+	}
+	else if (typeid(*tree) == typeid(ir_expression_boolcmp))
+	{
+		<<match boolcmp>>
+	}
+	else if (typeid(*tree) == typeid(ir_expression_unknowncmp))
+	{
+		<<match unknowncmp>>
+	}
+	else if (typeid(*tree) == typeid(ir_expression_unknown_to_int))
+	{
+		<<match unknown to int>>
+	}
+	else if (typeid(*tree) == typeid(ir_expression_unknown_to_ptr))
+	{
+		<<match unknown to ptr>>
+	}
+	else if (typeid(*tree) == typeid(ir_expression_unknown_to_bool))
+	{
+		<<match unknown to bool>>
+	}
+	else
+	{
+		retun true;
+	}
+}
+@
+
+<<match intar binop>>=
+ir_expression_intar_binop *ctree = (ir_expression_intar_binop*)tree;
+ir_expression_intar_binop *ctemp = (ir_expression_intar_binop*)temp;
+
+if (strictmatching && ctree->op != ctemp->op)
+	return false;
+
+return isMatch(ctree->left, ctemp->left, strictmatching) &&
+	isMatch(ctree->right, ctemp->right, strictmatching);
+@
+
+<<match ptrar binop>>=
+ir_expression_ptrar_binop *ctree = (ir_expression_ptrar_binop*)tree;
+ir_expression_ptrar_binop *ctemp = (ir_expression_ptrar_binop*)temp;
+
+if (strictmatching && ctree->op != ctemp->op)
+	return false;
+
+return isMatch(ctree->left, ctemp->left, strictmatching) &&
+	isMatch(ctree->right, ctemp->right, strictmatching);
+@
+
+<<match boolar binop>>=
+ir_expression_boolar_binop *ctree = (ir_expression_boolar_binop*)tree;
+ir_expression_boolar_binop *ctemp = (ir_expression_boolar_binop*)temp;
+
+if (strictmatching && ctree->op != ctemp->op)
+	return false;
+
+return isMatch(ctree->left, ctemp->left, strictmatching) &&
+	isMatch(ctree->right, ctemp->right, strictmatching);
+@
+
+<<match intar unop>>=
+ir_expression_intar_unop *ctree = (ir_expression_intar_unop*)tree;
+ir_expression_intar_unop *ctemp = (ir_expression_intar_unop*)temp;
+
+if (strictmatching && ctree->op != ctemp->op)
+	return false;
+
+return isMatch(ctree->inner, ctemp->inner, strictmatching);
+@
+
+<<match boolar unop>>=
+ir_expression_boolar_unop *ctree = (ir_expression_boolar_unop*)tree;
+ir_expression_boolar_unop *ctemp = (ir_expression_boolar_unop*)temp;
+
+if (strictmatching && ctree->op != ctemp->op)
+	return false;
+
+return isMatch(ctree->inner, ctemp->inner, strictmatching);
+@
+
+<<match intcmp>>=
+ir_expression_intcmp *ctree = (ir_expression_intcmp*)tree;
+ir_expression_intcmp *ctemp = (ir_expression_intcmp*)temp;
+
+if (strictmatching && ctree->op != ctemp->op)
+	return false;
+
+return isMatch(ctree->left, ctemp->left, strictmatching) &&
+	isMatch(ctree->right, ctemp->right, strictmatching);
+@
+
+<<match ptrcmp>>=
+ir_expression_ptrcmp *ctree = (ir_expression_ptrcmp*)tree;
+ir_expression_ptrcmp *ctemp = (ir_expression_ptrcmp*)temp;
+
+if (strictmatching && ctree->op != ctemp->op)
+	return false;
+
+return isMatch(ctree->left, ctemp->left, strictmatching) &&
+	isMatch(ctree->right, ctemp->right, strictmatching);
+@
+
+<<match boolcmp>>=
+ir_expression_boolcmp *ctree = (ir_expression_boolcmp*)tree;
+ir_expression_boolcmp *ctemp = (ir_expression_boolcmp*)temp;
+
+if (strictmatching && ctree->op != ctemp->op)
+	return false;
+
+return isMatch(ctree->left, ctemp->left, strictmatching) &&
+	isMatch(ctree->right, ctemp->right, strictmatching);
+@
+
+<<match unknowncmp>>=
+ir_expression_unknowncmp *ctree = (ir_expression_unknowncmp*)tree;
+ir_expression_unknowncmp *ctemp = (ir_expression_unknowncmp*)temp;
+
+if (strictmatching && ctree->op != ctemp->op)
+	return false;
+
+return isMatch(ctree->left, ctemp->left, strictmatching) &&
+	isMatch(ctree->right, ctemp->right, strictmatching);
+@
+
+<<match unknown to int>>=
+ir_expression_unknown_to_int *ctree = (ir_expression_unknown_to_int*)tree;
+ir_expression_unknown_to_int *ctemp = (ir_expression_unknown_to_int*)temp;
+
+return isMatch(ctree->inner, ctemp->inner, strictmatching);
+@
+
+<<match unknown to ptr>>=
+ir_expression_unknown_to_ptr *ctree = (ir_expression_unknown_to_ptr*)tree;
+ir_expression_unknown_to_ptr *ctemp = (ir_expression_unknown_to_ptr*)temp;
+
+return isMatch(ctree->inner, ctemp->inner, strictmatching);
+@
+
+<<match unknown to bool>>=
+ir_expression_unknown_to_bool *ctree = (ir_expression_unknown_to_bool*)tree;
+ir_expression_unknown_to_bool *ctemp = (ir_expression_unknown_to_bool*)temp;
+
+return isMatch(ctree->inner, ctemp->inner, strictmatching);
+@
+
+<<match memory read>>=
+ir_expression_memory *ctree = (ir_expression_memory*)tree;
+ir_expression_memory *ctemp = (ir_expression_memory*)temp;
+
+return isMatch(ctree->address, ctemp->address, strictmatching);
+@
+
+\section{Source and header}
+
+<<irutil.h>>=
+#ifndef IRUTIL_H
+#define IRUTIL_H
+
+#include "ir.h"
+
+<<match tiles header>>
+
+#endif
+@
+
+<<irutil.cpp>>=
+#include "ir.h"
+#include "irutil.h"
+#include <cassert>
+#include <typeinfo>
+
+using namespace std;
+
+<<match tiles>>
+@

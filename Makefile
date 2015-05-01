@@ -63,6 +63,12 @@ ast.cpp: ast.nw
 ir.h: ir.nw
 	notangle -L -Rir.h ir.nw | cpif ir.h
 
+irutil.o: irutil.cpp irutil.h ir.h
+irutil.h: irutils.nw
+	notangle -L -Rirutil.h irutils.nw | cpif irutil.h
+irutil.cpp: irutils.nw
+	notangle -L -Rirutil.cpp irutils.nw | cpif irutil.cpp
+
 assembly.h: assembly.nw
 	notangle -L -Rassembly.h assembly.nw | cpif assembly.h
 
@@ -118,8 +124,8 @@ test.pdf: test.tex
 	latexmk -pdf test.tex
 	latexmk -c
 
-code.tex: header.nw trailer.nw token.nw position.nw error.nw parser.nw settings.nw spllang.nw ast.nw typecheck.nw ir.nw irgeneration.nw main.nw splruntime.nw ssm.nw assembly.nw
-	noweave -t4 -delay header.nw spllang.nw ast.nw token.nw parser.nw typecheck.nw ir.nw irgeneration.nw splruntime.nw assembly.nw ssm.nw main.nw settings.nw position.nw error.nw trailer.nw | cpif code.tex
+code.tex: header.nw trailer.nw token.nw position.nw error.nw parser.nw settings.nw spllang.nw ast.nw typecheck.nw ir.nw irgeneration.nw main.nw splruntime.nw ssm.nw assembly.nw irutils.nw
+	noweave -t4 -delay header.nw spllang.nw ast.nw token.nw parser.nw typecheck.nw ir.nw irgeneration.nw splruntime.nw irutils.nw assembly.nw ssm.nw main.nw settings.nw position.nw error.nw trailer.nw | cpif code.tex
 code.pdf: code.tex compiler.bib
 	latexmk -pdf code.tex
 	latexmk -c
@@ -234,6 +240,9 @@ clean:
 	rm -f irgeneration.h irgeneration.cpp irgeneration.o
 	rm -f splruntime.h splruntime.cpp splruntime.o
 	rm -f assembly.h
+	rm -f irutil.h irutil.cpp irutil.o
+	rm -f settings.h settings.cpp settings.o
+	rm -f position.h version.h ir.h
 	rm -f ssm.h ssm.cpp ssm.o
 	rm -f testprogs/tokentest.cpp testprogs/tokentest.o testprogs/tokentest
 	rm -f testprogs/parsetest.cpp testprogs/parsetest.o testprogs/parsetest
@@ -250,7 +259,5 @@ clean:
 	rm -f testprogs/commentgen testprogs/commentgen.cpp
 	rm -f testprogs/bracketgen testprogs/bracketgen.cpp
 	rm -f testprogs/runtolim.sh
-	rm -f settings.h settings.cpp settings.o
-	rm -f position.h version.h ir.h
 	rm -f code.tex code.pdf code.bbl
 	rm -f test.tex test.pdf
