@@ -72,7 +72,7 @@ irutil.cpp: irutils.nw
 assembly.h: assembly.nw
 	notangle -L -Rassembly.h assembly.nw | cpif assembly.h
 
-ssm.o: ssm.cpp assembly.h ir.h ssm.h
+ssm.o: ssm.cpp assembly.h ir.h ssm.h irutil.h
 ssm.h: ssm.nw
 	notangle -L -Rssm.h ssm.nw | cpif ssm.h
 ssm.cpp: ssm.nw
@@ -106,8 +106,8 @@ main.o: main.cpp token.h parser.h ast.h position.h typecheck.h ir.h irgeneration
 main.cpp: main.nw
 	notangle -L -Rmain.cpp main.nw | cpif main.cpp
 
-compiler: main.o token.o parser.o ast.o error.o typecheck.o irgeneration.o settings.o splruntime.o ssm.o
-	g++ $(CXXFLASGS) -o compiler main.o token.o parser.o ast.o error.o typecheck.o irgeneration.o settings.o splruntime.o ssm.o
+compiler: main.o token.o parser.o ast.o error.o typecheck.o irgeneration.o settings.o splruntime.o ssm.o irutil.o
+	g++ $(CXXFLASGS) -o compiler main.o token.o parser.o ast.o error.o typecheck.o irgeneration.o settings.o splruntime.o ssm.o irutil.o
 
 version.h:
 	echo \#define VERSION \"`git describe --abbrev=4 --dirty --always --tags`\" | cpif version.h

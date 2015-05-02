@@ -2,14 +2,14 @@
 
 For dealing with the intermediate representation, especially during the generation of platform-specific assembly code, it is very usefull to have some utility functions.
 
-\section{Tile matching}
+\section{Expression tile matching}
 
 This function provides matching of a IR expression tree against a temp. Null pointers act as wildcards in the temp. When strictmatching is true, also the operators in the IR tree are checked.
 
-<<match tiles header>>=
+<<match expression tiles header>>=
 bool isMatch(ir_expression *tree, ir_expression *temp, bool strictmatching);
 @
-<<match tiles>>=
+<<match expression tiles>>=
 bool isMatch(ir_expression *tree, ir_expression *temp, bool strictmatching)
 {
 	if (temp == NULL)
@@ -66,9 +66,13 @@ bool isMatch(ir_expression *tree, ir_expression *temp, bool strictmatching)
 	{
 		<<match unknown to bool>>
 	}
+	else if (typeid(*tree) == typeid(ir_expression_memory))
+	{
+		<<match memory read>>
+	}
 	else
 	{
-		retun true;
+		return true;
 	}
 }
 @
@@ -198,6 +202,64 @@ ir_expression_memory *ctemp = (ir_expression_memory*)temp;
 return isMatch(ctree->address, ctemp->address, strictmatching);
 @
 
+\section{Statement tile matching}
+
+Matching tiles is of course also usefull for working with statements. Again, the input structure is the same as that for expression matching, and strictmatching guarantees matching of operators. For functioncalls, this function does nothing with the arguments.
+
+<<match statement tiles header>>=
+bool isMatch(ir_statement *tree, ir_statement *temp, bool strictmatching);
+@
+
+<<match statement tiles>>=
+bool isMatch(ir_statement *tree, ir_statement *temp, bool strictmatching)
+{
+	if (temp == NULL)
+		return true;
+	
+	if (typeid(*tree) != typeid(*temp))
+		return false;
+	
+	if (typeid(*tree) == typeid(ir_statement_assign_temp))
+	{
+		<<match assign temp>>
+	}
+	else if (typeid(*tree) == typeid(ir_statement_assign_memory))
+	{
+		<<match assign memory>>
+	}
+	else if (typeid(*tree) == typeid(ir_statement_if))
+	{
+		<<match if>>
+	}
+	else
+	{
+		return true;
+	}
+}
+@
+
+<<match assign temp>>=
+ir_statement_assign_temp *ctree = (ir_statement_assign_temp*)tree;
+ir_statement_assign_temp *ctemp = (ir_statement_assign_temp*)temp;
+
+return isMatch(ctree->value, ctemp->value, strictmatching);
+@
+
+<<match assign memory>>=
+ir_statement_assign_memory *ctree = (ir_statement_assign_memory*)tree;
+ir_statement_assign_memory *ctemp = (ir_statement_assign_memory*)temp;
+
+return isMatch(ctree->value, ctemp->value, strictmatching) &&
+	isMatch(ctree->target, ctemp->target, strictmatching);
+@
+
+<<match if>>=
+ir_statement_if *ctree = (ir_statement_if*)tree;
+ir_statement_if *ctemp = (ir_statement_if*)temp;
+
+return isMatch(ctree->condition, ctemp->condition, strictmatching);
+@
+
 \section{Source and header}
 
 <<irutil.h>>=
@@ -206,7 +268,8 @@ return isMatch(ctree->address, ctemp->address, strictmatching);
 
 #include "ir.h"
 
-<<match tiles header>>
+<<match expression tiles header>>
+<<match statement tiles header>>
 
 #endif
 @
@@ -219,5 +282,6 @@ return isMatch(ctree->address, ctemp->address, strictmatching);
 
 using namespace std;
 
-<<match tiles>>
+<<match expression tiles>>
+<<match statement tiles>>
 @

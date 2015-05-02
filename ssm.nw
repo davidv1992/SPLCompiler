@@ -120,6 +120,39 @@ ssm_translate_expression(assembly, trace, mem->address);
 assembly->blocks[trace].push_back(asm_statement("lda 0",{},{},{}));
 @
 
+The memory read instruction has facilities for an offset, lets make use of that
+
+<<ssm translater tiles>>=
+ir_expression *memoryOffsetAdd = new ir_expression_memory(
+	new ir_expression_ptrar_binop(
+		NULL,
+		new ir_expression_intconst(0),
+		IR_PTR_ADD));
+ir_expression *memoryOffsetSub = new ir_expression_memory(
+	new ir_expression_ptrar_binop(
+		NULL,
+		new ir_expression_intconst(0),
+		IR_PTR_SUB));
+@
+
+<<ssm translate memory offset>>=
+ir_expression_memory *memAccess = (ir_expression_memory*)expression;
+ir_expression_ptrar_binop *offsetAdd = (ir_expression_ptrar_binop*)memAccess->address;
+ir_expression_intconst *offsetConst = (ir_expression_intconst*)offsetAdd->right;
+int offsetValue = offsetConst->value;
+
+if (offsetAdd->op == IR_PTR_SUB)
+	offsetValue = -offsetValue;
+
+ssm_translate_expression(assembly, trace, offsetAdd->left);
+
+{
+	ostringstream o;
+	o << "lda " << offsetValue;
+	assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
+}
+@
+
 \subsection{Type conversions}
 
 The type conversions currently in the IR require no actions whatsoever, so we just translate the inner expression here.
@@ -255,7 +288,80 @@ default:
 
 \subsection{Translate binary operators}
 
-Again, perfectly matching what is available on the platform (if only AMD64 was so easy).
+Again, perfectly matching what is available on the platform (if only AMD64 was so easy). For addition/substraction of a constant, a special instruction is available that we can put to good use.
+
+<<ssm translater tiles>>=
+ir_expression *addConstantIntA = new ir_expression_intar_binop(
+	new ir_expression_intconst(0),
+	NULL,
+	IR_INT_ADD);
+ir_expression *addConstantIntB = new ir_expression_intar_binop(
+	NULL,
+	new ir_expression_intconst(0),
+	IR_INT_ADD);
+ir_expression *subConstantIntA = new ir_expression_intar_binop(
+	new ir_expression_intconst(0),
+	NULL,
+	IR_INT_SUB);
+ir_expression *subConstantIntB = new ir_expression_intar_binop(
+	NULL,
+	new ir_expression_intconst(0),
+	IR_INT_SUB);
+
+ir_expression *addConstantPtr = new ir_expression_ptrar_binop(
+	NULL,
+	new ir_expression_intconst(0),
+	IR_PTR_ADD);
+ir_expression *subConstantPtr = new ir_expression_ptrar_binop(
+	NULL,
+	new ir_expression_intconst(0),
+	IR_PTR_SUB);
+@
+
+<<ssm translate int addconstant A>>=
+ir_expression_intar_binop *binop = (ir_expression_intar_binop*)expression;
+ir_expression_intconst *cnst = (ir_expression_intconst*)binop->left;
+int constValue = cnst->value;
+if (binop->op == IR_INT_SUB)
+	constValue = -constValue;
+ssm_translate_expression(assembly, trace, binop->right);
+
+{
+	ostringstream o;
+	o << "ldaa " << constValue;
+	assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
+}
+@
+
+<<ssm translate int addconstant B>>=
+ir_expression_intar_binop *binop = (ir_expression_intar_binop*)expression;
+ir_expression_intconst *cnst = (ir_expression_intconst*)binop->right;
+int constValue = cnst->value;
+if (binop->op == IR_INT_SUB)
+	constValue = -constValue;
+ssm_translate_expression(assembly, trace, binop->left);
+
+{
+	ostringstream o;
+	o << "ldaa " << constValue;
+	assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
+}
+@
+
+<<ssm translate ptr addconstant>>=
+ir_expression_ptrar_binop *binop = (ir_expression_ptrar_binop*)expression;
+ir_expression_intconst *cnst = (ir_expression_intconst*)binop->right;
+int constValue = cnst->value;
+if (binop->op == IR_PTR_SUB)
+	constValue = -constValue;
+ssm_translate_expression(assembly, trace, binop->left);
+
+{
+	ostringstream o;
+	o << "ldaa " << constValue;
+	assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
+}
+@
 
 <<ssm translate int binop>>=
 ir_expression_intar_binop *binop = (ir_expression_intar_binop*)expression;
@@ -325,7 +431,27 @@ This function checks the type of expression we have and dispatches accordingly
 void ssm_translate_expression(asm_function *assembly, int trace, 
 								ir_expression *expression)
 {
-	if (typeid(*expression) == typeid(ir_expression_intconst))
+	if (isMatch(expression, memoryOffsetAdd, true) ||
+		isMatch(expression, memoryOffsetSub, true))
+	{
+		<<ssm translate memory offset>>
+	}
+	else if (isMatch(expression, addConstantIntA, true) ||
+		isMatch(expression, subConstantIntA, true))
+	{
+		<<ssm translate int addconstant A>>
+	}
+	else if (isMatch(expression, addConstantIntB, true) ||
+		isMatch(expression, subConstantIntB, true))
+	{
+		<<ssm translate int addconstant B>>
+	}
+	else if (isMatch(expression, addConstantPtr, true) ||
+		isMatch(expression, subConstantPtr, true))
+	{
+		<<ssm translate ptr addconstant>>
+	}
+	else if (typeid(*expression) == typeid(ir_expression_intconst))
 	{
 		<<ssm translate intconst>>
 	}
@@ -433,6 +559,35 @@ ssm_translate_expression(assembly, trace, assign->target);
 assembly->blocks[trace].push_back(asm_statement("sta 0",{},{},{}));
 @
 
+For assignments we can take advantage of offsets as well:
+
+<<ssm translater tiles>>=
+ir_statement *memoryWriteOffset = new ir_statement_assign_memory(
+	new ir_expression_ptrar_binop(
+		NULL,
+		new ir_expression_intconst(0),
+		IR_PTR_ADD),
+	NULL);
+@
+
+<<ssm translate assign memory offset>>=
+ir_statement_assign_memory *assign = (ir_statement_assign_memory*)statement;
+ir_expression_ptrar_binop *offsetOp = (ir_expression_ptrar_binop*)assign->target;
+ir_expression_intconst *offsetConst = (ir_expression_intconst*)offsetOp->right;
+int offsetValue = offsetConst->value;
+
+if (offsetOp->op == IR_PTR_SUB)
+	offsetValue = -offsetValue;
+
+ssm_translate_expression(assembly, trace, assign->value);
+ssm_translate_expression(assembly, trace, offsetOp->left);
+{
+	ostringstream o;
+	o << "sta " << offsetValue;
+	assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
+}
+@
+
 \subsection{Translating functioncall}
 
 For a functioncall, we push the arguments in reverse order. Then the function is called. Afterwards, results that should be stored are stored in temps and the arguments are popped.
@@ -502,15 +657,25 @@ assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
 <<ssm translate if>>=
 ir_statement_if *ifstat = (ir_statement_if*)statement;
 ssm_translate_expression(assembly, trace, ifstat->condition);
+if (trace == ifstat->target_true)
 {
-ostringstream o;
-o << "brt " << fnname.substr(1) << "_L" << ifstat->target_true;
-assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
+	ostringstream o;
+	o << "brf " << fnname.substr(1) << "_L" << ifstat->target_false;
+	assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
 }
+else
 {
-ostringstream o;
-o << "bra " << fnname.substr(1) << "_L" << ifstat->target_false;
-assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
+	{
+	ostringstream o;
+	o << "brt " << fnname.substr(1) << "_L" << ifstat->target_true;
+	assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
+	}
+	if (ifstat->target_false != trace)
+	{
+		ostringstream o;
+		o << "bra " << fnname.substr(1) << "_L" << ifstat->target_false;
+		assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
+	}
 }
 @
 
@@ -527,7 +692,11 @@ assembly->blocks[trace].push_back(asm_statement("brf error",{},{},{}));
 This is just the tieing together of the above.
 
 <<ssm translate statement>>=
-if (typeid(*statement) == typeid(ir_statement_assign_temp))
+if (isMatch(statement, memoryWriteOffset, false))
+{
+	<<ssm translate assign memory offset>>
+}
+else if (typeid(*statement) == typeid(ir_statement_assign_temp))
 {
 	<<ssm translate assign temp>>
 }
@@ -713,12 +882,15 @@ void ssm_translate_module(ir_module *module, FILE *stream)
 <<ssm.cpp>>=
 #include "assembly.h"
 #include "ir.h"
+#include "irutil.h"
 #include "ssm.h"
 #include <sstream>
 #include <cstdio>
 #include <typeinfo>
 
 using namespace std;
+
+<<ssm translater tiles>>
 
 <<ssm temporary offsets>>
 <<ssm translate expression>>
