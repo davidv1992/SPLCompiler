@@ -84,30 +84,74 @@ The SSM architecture has no internal types, so every temp is just an ldl.
 
 <<ssm translate temp int>>=
 ir_expression_temp_int *temp = (ir_expression_temp_int*)expression;
-ostringstream o;
-o << "ldl " << link_offsets[temp->temp_id];
-assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
+if (temp->temp_id >= function->num_args + function->num_returns)
+{
+	int tempIndex = temp->temp_id
+		- function->num_args
+		- function->num_returns;
+	assembly->blocks[trace].push_back(
+		asm_statement("ldl %#%", {tempIndex},{},{tempIndex}));
+}
+else
+{
+	ostringstream o;
+	o << "ldl " << link_offsets[temp->temp_id];
+	assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
+}
 @
 
 <<ssm translate temp bool>>=
 ir_expression_temp_bool *temp = (ir_expression_temp_bool*)expression;
-ostringstream o;
-o << "ldl " << link_offsets[temp->temp_id];
-assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
+if (temp->temp_id >= function->num_args + function->num_returns)
+{
+	int tempIndex = temp->temp_id
+		- function->num_args
+		- function->num_returns;
+	assembly->blocks[trace].push_back(
+		asm_statement("ldl %#%", {tempIndex},{},{tempIndex}));
+}
+else
+{
+	ostringstream o;
+	o << "ldl " << link_offsets[temp->temp_id];
+	assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
+}
 @
 
 <<ssm translate temp ptr>>=
 ir_expression_temp_ptr *temp = (ir_expression_temp_ptr*)expression;
-ostringstream o;
-o << "ldl " << link_offsets[temp->temp_id];
-assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
+if (temp->temp_id >= function->num_args + function->num_returns)
+{
+	int tempIndex = temp->temp_id
+		- function->num_args
+		- function->num_returns;
+	assembly->blocks[trace].push_back(
+		asm_statement("ldl %#%", {tempIndex},{},{tempIndex}));
+}
+else
+{
+	ostringstream o;
+	o << "ldl " << link_offsets[temp->temp_id];
+	assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
+}
 @
 
 <<ssm translate temp unknown>>=
 ir_expression_temp_unknown *temp = (ir_expression_temp_unknown*)expression;
-ostringstream o;
-o << "ldl " << link_offsets[temp->temp_id];
-assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
+if (temp->temp_id >= function->num_args + function->num_returns)
+{
+	int tempIndex = temp->temp_id
+		- function->num_args
+		- function->num_returns;
+	assembly->blocks[trace].push_back(
+		asm_statement("ldl %#%", {tempIndex},{},{tempIndex}));
+}
+else
+{
+	ostringstream o;
+	o << "ldl " << link_offsets[temp->temp_id];
+	assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
+}
 @
 
 \subsection{Memory read}
@@ -116,7 +160,7 @@ Memory read is first nested expression. First translate inner expression, then o
 
 <<ssm translate memory read>>=
 ir_expression_memory *mem = (ir_expression_memory*)expression;
-ssm_translate_expression(assembly, trace, mem->address);
+ssm_translate_expression(function, assembly, trace, mem->address);
 assembly->blocks[trace].push_back(asm_statement("lda 0",{},{},{}));
 @
 
@@ -144,7 +188,7 @@ int offsetValue = offsetConst->value;
 if (offsetAdd->op == IR_PTR_SUB)
 	offsetValue = -offsetValue;
 
-ssm_translate_expression(assembly, trace, offsetAdd->left);
+ssm_translate_expression(function, assembly, trace, offsetAdd->left);
 
 {
 	ostringstream o;
@@ -159,17 +203,17 @@ The type conversions currently in the IR require no actions whatsoever, so we ju
 
 <<ssm translate unknown to int>>=
 ir_expression_unknown_to_int *conv = (ir_expression_unknown_to_int*)expression;
-ssm_translate_expression(assembly, trace, conv->inner);
+ssm_translate_expression(function, assembly, trace, conv->inner);
 @
 
 <<ssm translate unknown to bool>>=
 ir_expression_unknown_to_bool *conv = (ir_expression_unknown_to_bool*)expression;
-ssm_translate_expression(assembly, trace, conv->inner);
+ssm_translate_expression(function, assembly, trace, conv->inner);
 @
 
 <<ssm translate unknown to ptr>>=
 ir_expression_unknown_to_ptr *conv = (ir_expression_unknown_to_ptr*)expression;
-ssm_translate_expression(assembly, trace, conv->inner);
+ssm_translate_expression(function, assembly, trace, conv->inner);
 @
 
 \subsection{Translate comparison}
@@ -178,8 +222,8 @@ We have the fortune that the equality operators in the IR directly match those a
 
 <<ssm translate intcmp>>=
 ir_expression_intcmp *cmp = (ir_expression_intcmp*)expression;
-ssm_translate_expression(assembly, trace, cmp->left);
-ssm_translate_expression(assembly, trace, cmp->right);
+ssm_translate_expression(function, assembly, trace, cmp->left);
+ssm_translate_expression(function, assembly, trace, cmp->right);
 switch(cmp->op)
 {
 case IR_INT_EQ:
@@ -207,8 +251,8 @@ default:
 
 <<ssm translate ptrcmp>>=
 ir_expression_ptrcmp *cmp = (ir_expression_ptrcmp*)expression;
-ssm_translate_expression(assembly, trace, cmp->left);
-ssm_translate_expression(assembly, trace, cmp->right);
+ssm_translate_expression(function, assembly, trace, cmp->left);
+ssm_translate_expression(function, assembly, trace, cmp->right);
 switch(cmp->op)
 {
 case IR_PTR_EQ:
@@ -224,8 +268,8 @@ default:
 
 <<ssm translate boolcmp>>=
 ir_expression_boolcmp *cmp = (ir_expression_boolcmp*)expression;
-ssm_translate_expression(assembly, trace, cmp->left);
-ssm_translate_expression(assembly, trace, cmp->right);
+ssm_translate_expression(function, assembly, trace, cmp->left);
+ssm_translate_expression(function, assembly, trace, cmp->right);
 switch(cmp->op)
 {
 case IR_BOOL_EQ:
@@ -241,8 +285,8 @@ default:
 
 <<ssm translate unknowncmp>>=
 ir_expression_unknowncmp *cmp = (ir_expression_unknowncmp*)expression;
-ssm_translate_expression(assembly, trace, cmp->left);
-ssm_translate_expression(assembly, trace, cmp->right);
+ssm_translate_expression(function, assembly, trace, cmp->left);
+ssm_translate_expression(function, assembly, trace, cmp->right);
 switch(cmp->op)
 {
 case IR_UNKNOWN_EQ:
@@ -262,7 +306,7 @@ Again, these operators have instructions that directly correspond to them.
 
 <<ssm translate int unop>>=
 ir_expression_intar_unop *unop = (ir_expression_intar_unop*)expression;
-ssm_translate_expression(assembly, trace, unop->inner);
+ssm_translate_expression(function, assembly, trace, unop->inner);
 switch(unop->op)
 {
 case IR_INT_NEG:
@@ -275,7 +319,7 @@ default:
 
 <<ssm translate bool unop>>=
 ir_expression_boolar_unop *unop = (ir_expression_boolar_unop*)expression;
-ssm_translate_expression(assembly, trace, unop->inner);
+ssm_translate_expression(function, assembly, trace, unop->inner);
 switch(unop->op)
 {
 case IR_BOOL_NOT:
@@ -324,7 +368,7 @@ ir_expression_intconst *cnst = (ir_expression_intconst*)binop->left;
 int constValue = cnst->value;
 if (binop->op == IR_INT_SUB)
 	constValue = -constValue;
-ssm_translate_expression(assembly, trace, binop->right);
+ssm_translate_expression(function, assembly, trace, binop->right);
 
 {
 	ostringstream o;
@@ -339,7 +383,7 @@ ir_expression_intconst *cnst = (ir_expression_intconst*)binop->right;
 int constValue = cnst->value;
 if (binop->op == IR_INT_SUB)
 	constValue = -constValue;
-ssm_translate_expression(assembly, trace, binop->left);
+ssm_translate_expression(function, assembly, trace, binop->left);
 
 {
 	ostringstream o;
@@ -354,7 +398,7 @@ ir_expression_intconst *cnst = (ir_expression_intconst*)binop->right;
 int constValue = cnst->value;
 if (binop->op == IR_PTR_SUB)
 	constValue = -constValue;
-ssm_translate_expression(assembly, trace, binop->left);
+ssm_translate_expression(function, assembly, trace, binop->left);
 
 {
 	ostringstream o;
@@ -365,8 +409,8 @@ ssm_translate_expression(assembly, trace, binop->left);
 
 <<ssm translate int binop>>=
 ir_expression_intar_binop *binop = (ir_expression_intar_binop*)expression;
-ssm_translate_expression(assembly, trace, binop->left);
-ssm_translate_expression(assembly, trace, binop->right);
+ssm_translate_expression(function, assembly, trace, binop->left);
+ssm_translate_expression(function, assembly, trace, binop->right);
 switch(binop->op)
 {
 case IR_INT_ADD:
@@ -391,8 +435,8 @@ default:
 
 <<ssm translate ptr binop>>=
 ir_expression_ptrar_binop *binop = (ir_expression_ptrar_binop*)expression;
-ssm_translate_expression(assembly, trace, binop->left);
-ssm_translate_expression(assembly, trace, binop->right);
+ssm_translate_expression(function, assembly, trace, binop->left);
+ssm_translate_expression(function, assembly, trace, binop->right);
 switch(binop->op)
 {
 case IR_PTR_ADD:
@@ -408,8 +452,8 @@ default:
 
 <<ssm translate bool binop>>=
 ir_expression_boolar_binop *binop = (ir_expression_boolar_binop*)expression;
-ssm_translate_expression(assembly, trace, binop->left);
-ssm_translate_expression(assembly, trace, binop->right);
+ssm_translate_expression(function, assembly, trace, binop->left);
+ssm_translate_expression(function, assembly, trace, binop->right);
 switch(binop->op)
 {
 case IR_BOOL_OR:
@@ -428,7 +472,7 @@ default:
 This function checks the type of expression we have and dispatches accordingly
 
 <<ssm translate expression>>=
-void ssm_translate_expression(asm_function *assembly, int trace, 
+void ssm_translate_expression(ir_function *function, asm_function *assembly, int trace, 
 								ir_expression *expression)
 {
 	if (isMatch(expression, memoryOffsetAdd, true) ||
@@ -546,16 +590,28 @@ Because there is no construct that forces me to introduce extra conditional jump
 
 <<ssm translate assign temp>>=
 ir_statement_assign_temp *assign = (ir_statement_assign_temp*)statement;
-ssm_translate_expression(assembly, trace, assign->value);
-ostringstream o;
-o << "stl " << link_offsets[assign->target_temp_id];
-assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
+ssm_translate_expression(function, assembly, trace, assign->value);
+if (assign->target_temp_id >= function->num_args+function->num_returns)
+{
+	int tempIndex = assign->target_temp_id
+		- function->num_args
+		- function->num_returns;
+	
+	assembly->blocks[trace].push_back(
+		asm_statement("stl %#%", {tempIndex},{tempIndex},{}));
+}
+else
+{
+	ostringstream o;
+	o << "stl " << link_offsets[assign->target_temp_id];
+	assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
+}
 @
 
 <<ssm translate assign memory>>=
 ir_statement_assign_memory *assign = (ir_statement_assign_memory*)statement;
-ssm_translate_expression(assembly, trace, assign->value);
-ssm_translate_expression(assembly, trace, assign->target);
+ssm_translate_expression(function, assembly, trace, assign->value);
+ssm_translate_expression(function, assembly, trace, assign->target);
 assembly->blocks[trace].push_back(asm_statement("sta 0",{},{},{}));
 @
 
@@ -579,8 +635,8 @@ int offsetValue = offsetConst->value;
 if (offsetOp->op == IR_PTR_SUB)
 	offsetValue = -offsetValue;
 
-ssm_translate_expression(assembly, trace, assign->value);
-ssm_translate_expression(assembly, trace, offsetOp->left);
+ssm_translate_expression(function, assembly, trace, assign->value);
+ssm_translate_expression(function, assembly, trace, offsetOp->left);
 {
 	ostringstream o;
 	o << "sta " << offsetValue;
@@ -596,7 +652,7 @@ For a functioncall, we push the arguments in reverse order. Then the function is
 ir_statement_functioncall *funcall = (ir_statement_functioncall*)statement;
 for (int i=funcall->arguments.size()-1; i >= 0; i--)
 {
-	ssm_translate_expression(assembly, trace, funcall->arguments[i]);
+	ssm_translate_expression(function, assembly, trace, funcall->arguments[i]);
 }
 
 ostringstream o;
@@ -615,9 +671,20 @@ for (unsigned int i=0; i<funcall->return_temporaries.size(); i++)
 			o << "ajs " << -stackAdjust;
 			assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
 		}
-		ostringstream o;
-		o << "stl " << link_offsets[funcall->return_temporaries[i]];
-		assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
+		if (funcall->return_temporaries[i] >= function->num_args + function->num_returns)
+		{
+			int tempIndex = funcall->return_temporaries[i]
+				- function->num_args
+				- function->num_returns;
+			assembly->blocks[trace].push_back(
+				asm_statement("stl %#%",{tempIndex},{tempIndex},{}));
+		}
+		else
+		{
+			ostringstream o;
+			o << "stl " << link_offsets[funcall->return_temporaries[i]];
+			assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
+		}
 	}
 	else
 	{
@@ -647,16 +714,19 @@ assembly->blocks[trace].push_back(asm_statement("ret",{},{},{}));
 
 <<ssm translate jump>>=
 ir_statement_jump *jump = (ir_statement_jump*)statement;
-ostringstream o;
-o << "bra " << fnname.substr(1) << "_L" << jump->target_block;
-assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
+if (trace != jump->target_block)
+{
+	ostringstream o;
+	o << "bra " << fnname.substr(1) << "_L" << jump->target_block;
+	assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
+}
 @
 
 \subsection{Translate if}
 
 <<ssm translate if>>=
 ir_statement_if *ifstat = (ir_statement_if*)statement;
-ssm_translate_expression(assembly, trace, ifstat->condition);
+ssm_translate_expression(function, assembly, trace, ifstat->condition);
 if (trace == ifstat->target_true)
 {
 	ostringstream o;
@@ -683,7 +753,7 @@ else
 
 <<ssm translate assert>>=
 ir_statement_assert *assertstat = (ir_statement_assert*)statement;
-ssm_translate_expression(assembly, trace, assertstat->condition);
+ssm_translate_expression(function, assembly, trace, assertstat->condition);
 assembly->blocks[trace].push_back(asm_statement("brf error",{},{},{}));
 @
 
@@ -735,7 +805,7 @@ else
 Translate an entire assembly function to ir.
 
 <<ssm translate function>>=
-asm_function *ssm_translate_function(ir_function *function, string fnname)
+void ssm_translate_function(FILE *stream, ir_function *function, string fnname)
 {
 	asm_function *assembly = new asm_function();
 	
@@ -778,9 +848,20 @@ asm_function *ssm_translate_function(ir_function *function, string fnname)
 		}
 	}
 	
-	ssm_clear_offsets();
+	vector<string> tempTable;
 	
-	return assembly;
+	for (unsigned int i=0; i<function->temp_types.size()-function->num_args-function->num_returns; i++)
+	{
+		ostringstream o;
+		o << i+1;
+		tempTable.push_back(o.str());
+	}
+	
+	assembly->print(stream, tempTable);
+	fprintf(stream, "\n");
+	delete assembly;
+	
+	ssm_clear_offsets();
 }
 @
 
@@ -861,10 +942,7 @@ void ssm_translate_module(ir_module *module, FILE *stream)
 	
 	for (auto function : module->functions)
 	{
-		asm_function *res = ssm_translate_function(function.second, function.first);
-		res->print(stream);
-		fprintf(stream, "\n");
-		delete res;
+		ssm_translate_function(stream, function.second, function.first);
 	}
 }
 @

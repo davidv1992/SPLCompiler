@@ -25,11 +25,26 @@ public:
 		uses = u;
 	}
 	
-	void print(FILE *stream)
+	void print(FILE *stream, std::vector<std::string> fillin_data)
 	{
-		assert(fillin.size() == 0);
+		std::string output;
 		
-		fprintf(stream, "\t%s\n", instruction.c_str());
+		size_t i = 0;
+		size_t nMatch = 0;
+		size_t match = -1;
+		
+		while ((match = instruction.find("%#%", i)) != instruction.npos)
+		{
+			output += instruction.substr(i, match-i);
+			assert(nMatch < fillin.size());
+			output += fillin_data[fillin[nMatch]];
+			nMatch++;
+			i = match+3;
+		}
+		
+		output += instruction.substr(i);
+		
+		fprintf(stream, "\t%s\n", output.c_str());
 	}
 };
 class asm_function
@@ -39,7 +54,7 @@ public:
 	std::vector<std::string> blockLabels;
 	std::vector<std::vector<std::string>> blockFollows;
 
-	void print (FILE *stream)
+	void print (FILE *stream, std::vector<std::string> fillin_data)
 	{
 		assert(blocks.size() == blockLabels.size());
 		
@@ -47,7 +62,7 @@ public:
 		{
 			fprintf(stream, "%s:\n", blockLabels[i].c_str());
 			for (unsigned int j=0; j<blocks[i].size(); j++)
-				blocks[i][j].print(stream);
+				blocks[i][j].print(stream, fillin_data);
 		}
 	}
 };
