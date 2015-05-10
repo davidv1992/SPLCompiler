@@ -720,6 +720,11 @@ if (trace != jump->target_block)
 	o << "bra " << fnname.substr(1) << "_L" << jump->target_block;
 	assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
 }
+{
+	ostringstream o;
+	o << fnname.substr(1) << "_L" << jump->target_block;
+	assembly->blockFollows[trace].push_back(o.str());
+}
 @
 
 \subsection{Translate if}
@@ -746,6 +751,14 @@ else
 		o << "bra " << fnname.substr(1) << "_L" << ifstat->target_false;
 		assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
 	}
+}
+
+{
+	ostringstream truelabel, falselabel;
+	truelabel << fnname.substr(1) << "_L" << ifstat->target_true;
+	falselabel << fnname.substr(1) << "_L" << ifstat->target_false;
+	assembly->blockFollows[trace].push_back(truelabel.str());
+	assembly->blockFollows[trace].push_back(falselabel.str());
 }
 @
 
@@ -812,6 +825,7 @@ void ssm_translate_function(FILE *stream, ir_function *function, string fnname)
 	ssm_determine_offsets(function);
 	
 	assembly->blocks.resize(function->blocks.size()+1);
+	assembly->blockFollows.resize(function->blocks.size()+1);
 	assembly->blockLabels.push_back(fnname);
 	
 	for (int i=0; i<function->num_returns; i++)
@@ -839,6 +853,8 @@ void ssm_translate_function(FILE *stream, ir_function *function, string fnname)
 			ostringstream o;
 			o << fnname.substr(1) << "_L" << i;
 			assembly->blockLabels.push_back(o.str());
+			if (i == 0)
+				assembly->blockFollows[0].push_back(o.str());
 		}
 		for (unsigned int j=0; j<function->blocks[i].size(); j++)
 		{
