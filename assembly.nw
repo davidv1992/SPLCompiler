@@ -68,6 +68,354 @@ public:
 };
 @
 
+\section{liveness analysis and register allocation}
+
+Almost all computer architectures require the compiler to have some form of register allocation, and the procedure is also usefull on platforms that don't require it.
+
+\subsection{Preparations}
+
+The assembly code datastructure contains all the data we need. However, the block order data is not really in a form that is immediately usefull. Hence we build two arrays that contain indices of the predecessors and successors of a block. Furthermore, we need to initialize datastructures for the live-in and live-out sets.
+
+<<prepare datastructures>>=
+vector<vector<int>> pred(func->blocks.size());
+vector<vector<int>> succ(func->blocks.size());
+vector<vector<set<int>>> livein;
+vector<vector<set<int>>> liveout;
+map<string, int> labelIndex;
+
+for (unsigned int i=0; i<func->blocks.size(); i++)
+{
+	labelIndex[func->blockLabels[i]] = i;
+	livein.push_back(vector<set<int>>(func->blocks[i].size()));
+	liveout.push_back(vector<set<int>>(func->blocks[i].size()));
+}
+
+for (unsigned int i=0; i<func->blocks.size(); i++)
+{
+	for (unsigned int j=0; j<func->blockFollows[i].size(); j++)
+	{
+		pred[labelIndex[func->blockFollows[i][j]]].push_back(i);
+		succ[i].push_back(labelIndex[func->blockFollows[i][j]]);
+	}
+}
+@
+
+\subsection{Liveness analysis}
+
+Plain old liveness analysis. The initial order of nodes is back to front, since this is usually a reasonalbe approximation to a quasi-topological sort order.
+
+<<liveness analysis>>=
+set<pair<int, int>> inQueue;
+queue<pair<int, int>> work;
+
+for (int i=func->blocks.size()-1; i>=0; i--)
+{
+	for (int j=func->blocks[i].size()-1; j>=0; j--)
+	{
+		inQueue.insert(make_pair(i,j));
+		work.push(make_pair(i,j));
+	}
+}
+
+while (!work.empty())
+{
+	pair<int, int> statement = work.front();
+	work.pop();
+	inQueue.erase(statement);
+	
+	if ((unsigned int)statement.second < func->blocks[statement.first].size()-1)
+	{
+		liveout[statement.first][statement.second]
+			 = livein[statement.first][statement.second+1];
+	}
+	else
+	{
+		liveout[statement.first][statement.second].clear();
+		//fprintf(stderr, "%d %lu %lu\n", statement.first, succ.size(), succ[statement.first].size());
+		for (unsigned int i=0; i<succ[statement.first].size(); i++)
+		{
+			liveout[statement.first][statement.second].insert(
+				livein[succ[statement.first][i]][0].begin(),
+				livein[succ[statement.first][i]][0].end());
+		}
+	}
+	
+	set<int> newLivein = liveout[statement.first][statement.second];
+	for (auto def : func->blocks[statement.first][statement.second].defs)
+	{
+		newLivein.erase(def);
+	}
+	newLivein.insert(
+		func->blocks[statement.first][statement.second].uses.begin(),
+		func->blocks[statement.first][statement.second].uses.end());
+	
+	if (newLivein != livein[statement.first][statement.second])
+	{
+		livein[statement.first][statement.second] = newLivein;
+		if (statement.second > 0)
+		{
+			pair<int, int> cand = make_pair(
+				statement.first, statement.second-1);
+			if (!inQueue.count(cand))
+			{
+				inQueue.insert(cand);
+				work.push(cand);
+			}
+		}
+		else
+		{
+			for (unsigned int i=0; i<pred[statement.first].size(); i++)
+			{
+				pair<int, int> cand = make_pair(
+					pred[statement.first][i],
+					func->blocks[pred[statement.first][i]].size()-1);
+				if (!inQueue.count(cand))
+				{
+					inQueue.insert(cand);
+					work.push(cand);
+				}
+			}
+		}
+	}
+}
+@
+
+\subsection{Building interference graph}
+
+The liveness data can now be used to build an interference graph. I represent this graph using a matrix, keeping the degree of each node in a seperate array.
+
+<<build interference graph>>=
+int maxID = -1;
+for (unsigned int i=0; i<func->blocks.size(); i++)
+{
+	for (unsigned int j = 0; j<func->blocks[i].size(); j++)
+	{
+		for (auto k : func->blocks[i][j].uses)
+		{
+			maxID = max(maxID, k);
+		}
+		for (auto k : func->blocks[i][j].defs)
+		{
+			maxID = max(maxID, k);
+		}
+	}
+}
+
+vector<vector<bool>> interference(maxID+1, vector<bool>(maxID+1,false));
+
+for (unsigned int i=0; i<func->blocks.size(); i++)
+{
+	for (unsigned int j = 0; j<func->blocks[i].size(); j++)
+	{
+		for (auto it = livein[i][j].begin(); it != livein[i][j].end(); it++)
+		{
+			auto jt = it;
+			jt++;
+			for (; jt != livein[i][j].end(); jt++)
+			{
+				if (*it == *jt)
+					continue;
+				interference[*it][*jt] = true;
+				interference[*jt][*it] = true;
+			}
+		}
+		for (auto it = liveout[i][j].begin(); it != liveout[i][j].end(); it++)
+		{
+			auto jt = it;
+			jt++;
+			for (; jt != liveout[i][j].end(); jt++)
+			{
+				if (*it == *jt)
+					continue;
+				interference[*it][*jt] = true;
+				interference[*jt][*it] = true;
+			}
+			for (auto jt = func->blocks[i][j].defs.begin(); jt != func->blocks[i][j].defs.end(); jt++)
+			{
+				if (*it == *jt)
+					continue;
+				interference[*it][*jt] = true;
+				interference[*jt][*it] = true;
+			}
+		}
+	}
+}
+
+vector<int> degree(maxID+1);
+	
+for (int i=0; i<=maxID; i++)
+{
+	int count = 0;
+	for (int j=0; j<=maxID; j++)
+	{
+		if (interference[i][j])	
+			count++;
+	}
+	degree[i] = count;
+}
+@
+
+\subsection{Graph coloring}
+
+The current graph colorer is very primitive, trying to simplify and using the least number of colors, but it does not handle spilling nor precolored temps. It just simply increases the number of colors it allows every time it needs it.
+
+<<do graph coloring>>=
+stack<int> simplifyStack;
+vector<bool> done(maxID+1,false);
+int nSimp = 0;
+
+queue<int> simplifyQueue;
+
+for (int numCol = 1; nSimp < maxID+1; numCol++)
+{
+	for (int i=0; i<=maxID; i++)
+	{
+		if (done[i])
+			continue;
+		
+		if (degree[i] < numCol)
+		{
+			done[i] = true;
+			simplifyQueue.push(i);
+		}
+	}
+	
+	while (!simplifyQueue.empty())
+	{
+		int cur = simplifyQueue.front();
+		simplifyQueue.pop();
+		simplifyStack.push(cur);
+		nSimp++;
+		
+		for (int i=0; i<=maxID; i++)
+		{
+			if (done[i])
+				continue;
+			
+			if (interference[i][cur])
+				degree[i]--;
+			
+			if (degree[i] < numCol)
+			{
+				done[i] = true;
+				simplifyQueue.push(i);
+			}
+		}
+	}
+}
+
+vector<int> coloring(maxID+1,-1);
+
+while (!simplifyStack.empty())
+{
+	int cur = simplifyStack.top();
+	simplifyStack.pop();
+	set<int> colorsUsed;
+	
+	for (int i=0; i<=maxID; i++)
+	{
+		if (interference[i][cur])
+			colorsUsed.insert(coloring[i]);
+	}
+	
+	int color = 0;
+	for (auto it : colorsUsed)
+	{
+		if (it == color)
+			color++;
+		else if (it > color)
+			break;
+	}
+	
+	coloring[cur] = color;
+}
+@
+
+\subsection{Debug printing routines}
+
+For debugging the liveness analysis and graph coloring it is very usefull to print the information generated by them. This code does that.
+
+<<print analysis results>>=
+for (unsigned int i = 0; i<func->blocks.size(); i++)
+{
+	fprintf(stderr, "%s: (%d, follows", func->blockLabels[i].c_str(), i);
+	for (auto follow : pred[i])
+	{
+		fprintf(stderr, "%d, ", follow);
+	}
+	fprintf(stderr, ")\n");
+	
+	for (unsigned int j = 0; j<func->blocks[i].size(); j++)
+	{
+		fprintf(stderr, "\t%s (", func->blocks[i][j].instruction.c_str());
+		for (auto fill : func->blocks[i][j].fillin)
+		{
+			fprintf(stderr, "%d, ", fill);
+		}
+		fprintf(stderr, "uses: ");
+		for (auto use : func->blocks[i][j].uses)
+		{
+			fprintf(stderr, "%d, ", use);
+		}
+		fprintf(stderr, "defines: ");
+		for (auto def : func->blocks[i][j].defs)
+		{
+			fprintf(stderr, "%d, ", def);
+		}
+		fprintf(stderr, "in: ");
+		for (auto lin : livein[i][j])
+		{
+			fprintf(stderr, "%d, ", lin);
+		}
+		fprintf(stderr, "out: ");
+		for (auto lin : liveout[i][j])
+		{
+			fprintf(stderr, "%d, ", lin);
+		}
+		fprintf(stderr, ")\n");
+	}
+	
+	fprintf(stderr, "(successors: ");
+	for (auto follow : succ[i])
+	{
+		fprintf(stderr, "%d, ", follow);
+	}
+	fprintf(stderr, ")\n\n");
+}
+@
+
+<<print coloring>>=
+for (unsigned int i=0; i<coloring.size(); i++)
+{
+	fprintf(stderr, "%d: %d\n", i, coloring[i]);
+}
+fprintf(stderr, "\n\n\n");
+@
+
+\subsection{Putting it all together}
+
+<<register allocation header>>=
+std::vector<int> registerAlloc(asm_function *func);
+@
+<<register allocation>>=
+vector<int> registerAlloc(asm_function *func)
+{
+	<<prepare datastructures>>
+	
+	<<liveness analysis>>
+	
+	/*<<print analysis results>>*/
+	
+	<<build interference graph>>
+	
+	<<do graph coloring>>
+	
+	/*<<print coloring>>*/
+	
+	return coloring;
+}
+@
+
 \section{Source and headers}
 
 <<assembly.h>>=
@@ -78,5 +426,22 @@ public:
 #include <cassert>
 
 <<assembly code datastructure>>
+<<register allocation header>>
 #endif
+@
+
+<<assembly.cpp>>=
+#include "assembly.h"
+#include<cassert>
+#include<vector>
+#include<queue>
+#include<set>
+#include<string>
+#include<map>
+#include<stack>
+#include<iostream>
+
+using namespace std;
+
+<<register allocation>>
 @

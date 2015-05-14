@@ -69,8 +69,11 @@ irutil.h: irutils.nw
 irutil.cpp: irutils.nw
 	notangle -L -Rirutil.cpp irutils.nw | cpif irutil.cpp
 
+assembly.o: assembly.cpp assembly.h
 assembly.h: assembly.nw
 	notangle -L -Rassembly.h assembly.nw | cpif assembly.h
+assembly.cpp: assembly.nw
+	notangle -L -Rassembly.cpp assembly.nw | cpif assembly.cpp
 
 ssm.o: ssm.cpp assembly.h ir.h ssm.h irutil.h
 ssm.h: ssm.nw
@@ -106,8 +109,8 @@ main.o: main.cpp token.h parser.h ast.h position.h typecheck.h ir.h irgeneration
 main.cpp: main.nw
 	notangle -L -Rmain.cpp main.nw | cpif main.cpp
 
-compiler: main.o token.o parser.o ast.o error.o typecheck.o irgeneration.o settings.o splruntime.o ssm.o irutil.o
-	g++ $(CXXFLASGS) -o compiler main.o token.o parser.o ast.o error.o typecheck.o irgeneration.o settings.o splruntime.o ssm.o irutil.o
+compiler: main.o token.o parser.o ast.o error.o typecheck.o irgeneration.o settings.o splruntime.o ssm.o irutil.o assembly.o
+	g++ $(CXXFLASGS) -o compiler main.o token.o parser.o ast.o error.o typecheck.o irgeneration.o settings.o splruntime.o ssm.o irutil.o assembly.o
 
 version.h:
 	echo \#define VERSION \"`git describe --abbrev=4 --dirty --always --tags`\" | cpif version.h
@@ -239,7 +242,7 @@ clean:
 	rm -f main.cpp main.o compiler
 	rm -f irgeneration.h irgeneration.cpp irgeneration.o
 	rm -f splruntime.h splruntime.cpp splruntime.o
-	rm -f assembly.h
+	rm -f assembly.h assembly.cpp assembly.o
 	rm -f irutil.h irutil.cpp irutil.o
 	rm -f settings.h settings.cpp settings.o
 	rm -f position.h version.h ir.h

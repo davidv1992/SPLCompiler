@@ -720,6 +720,11 @@ if (trace != jump->target_block)
 	o << "bra " << fnname.substr(1) << "_L" << jump->target_block;
 	assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
 }
+else
+{
+	assembly->blocks[trace].push_back(asm_statement("",{},{},{}));
+}
+
 {
 	ostringstream o;
 	o << fnname.substr(1) << "_L" << jump->target_block;
@@ -828,24 +833,7 @@ void ssm_translate_function(FILE *stream, ir_function *function, string fnname)
 	assembly->blockFollows.resize(function->blocks.size()+1);
 	assembly->blockLabels.push_back(fnname);
 	
-	for (int i=0; i<function->num_returns; i++)
-		assembly->blocks[0].push_back(asm_statement("ldc 0",{},{},{}));
-	
-	{
-		ostringstream o;
-		o << "link " << ((int)function->temp_types.size())
-			- function->num_args 
-			- function->num_returns;
-		assembly->blocks[0].push_back(asm_statement(o.str(),{},{},{}));
-	}
-	
-	if (function->num_returns != 0)
-	{
-		ostringstream o;
-		o << "ldl " << -1-function->num_returns;
-		assembly->blocks[0].push_back(asm_statement(o.str(),{},{},{}));
-		assembly->blocks[0].push_back(asm_statement("stl -1",{},{},{}));
-	}
+	assembly->blocks[0].push_back(asm_statement("",{},{},{}));
 	
 	for (unsigned int i=0; i<function->blocks.size(); i++)
 	{
@@ -866,10 +854,37 @@ void ssm_translate_function(FILE *stream, ir_function *function, string fnname)
 	
 	vector<string> tempTable;
 	
+	vector<int> coloring = registerAlloc(assembly);
+	
+	assembly->blocks[0].pop_back();
+	
+	int maxColor = -1;
+	for (unsigned int i=0; i<coloring.size(); i++)
+	{
+		maxColor = max(maxColor, coloring[i]);
+	}
+	
+	for (int i=0; i<function->num_returns; i++)
+		assembly->blocks[0].push_back(asm_statement("ldc 0",{},{},{}));
+	
+	{
+		ostringstream o;
+		o << "link " << maxColor+1;
+		assembly->blocks[0].push_back(asm_statement(o.str(),{},{},{}));
+	}
+	
+	if (function->num_returns != 0)
+	{
+		ostringstream o;
+		o << "ldl " << -1-function->num_returns;
+		assembly->blocks[0].push_back(asm_statement(o.str(),{},{},{}));
+		assembly->blocks[0].push_back(asm_statement("stl -1",{},{},{}));
+	}
+	
 	for (unsigned int i=0; i<function->temp_types.size()-function->num_args-function->num_returns; i++)
 	{
 		ostringstream o;
-		o << i+1;
+		o << coloring[i]+1;
 		tempTable.push_back(o.str());
 	}
 	
