@@ -182,7 +182,7 @@ while (!work.empty())
 
 \subsection{Building interference graph}
 
-The liveness data can now be used to build an interference graph. I represent this graph using a matrix, keeping the degree of each node in a seperate array.
+The liveness data can now be used to build an interference graph and use counts. I represent the graph using a matrix, keeping the degree of each node in a seperate array.
 
 <<build interference graph>>=
 int maxID = -1;
@@ -202,11 +202,16 @@ for (unsigned int i=0; i<func->blocks.size(); i++)
 }
 
 vector<vector<bool>> interference(maxID+1, vector<bool>(maxID+1,false));
+vector<int> uses(maxID+1,0);
 
 for (unsigned int i=0; i<func->blocks.size(); i++)
 {
 	for (unsigned int j = 0; j<func->blocks[i].size(); j++)
 	{
+		for (auto use : func->blocks[i][j].uses)
+		{
+			uses[use]++;
+		}
 		for (auto it = livein[i][j].begin(); it != livein[i][j].end(); it++)
 		{
 			auto jt = it;
@@ -259,10 +264,13 @@ for (int i=0; i<=maxID; i++)
 
 The current graph colorer is very primitive, trying to simplify and using the least number of colors, but it does not handle spilling nor precolored temps. It just simply increases the number of colors it allows every time it needs it.
 
-<<do graph coloring>>=
+<<do simple graph coloring>>=
 stack<int> simplifyStack;
 vector<bool> done(maxID+1,false);
-int nSimp = 0;
+int nSimp = preColor.size();
+
+for (auto kv : preColor)
+	done[kv.first] = true;
 
 queue<int> simplifyQueue;
 
@@ -304,7 +312,113 @@ for (int numCol = 1; nSimp < maxID+1; numCol++)
 	}
 }
 
-vector<int> coloring(maxID+1,-1);
+coloring.clear();
+coloring.resize(maxID+1,-1);
+
+for (auto kv : preColor)
+	coloring[kv.first] = kv.second;
+
+while (!simplifyStack.empty())
+{
+	int cur = simplifyStack.top();
+	simplifyStack.pop();
+	set<int> colorsUsed;
+	
+	for (int i=0; i<=maxID; i++)
+	{
+		if (interference[i][cur])
+			colorsUsed.insert(coloring[i]);
+	}
+	
+	int color = 0;
+	for (auto it : colorsUsed)
+	{
+		if (it == color)
+			color++;
+		else if (it > color)
+			break;
+	}
+	
+	coloring[cur] = color;
+}
+@
+
+The following is a more advanced graph coloring routine, allowing precolored nodes, a fixed number of colors, and spills
+<<do advanced graph coloring>>=
+stack<int> simplifyStack;
+vector<bool> done(maxID+1,false);
+int nSimp = preColor.size();
+
+for (auto kv : preColor)
+	done[kv.first] = true;
+
+queue<int> simplifyQueue;
+
+while (nSimp < maxID+1)
+{
+	for (int i=0; i<=maxID; i++)
+	{
+		if (!done[i] && degree[i] < maxColor)
+		{
+			done[i] = true;
+			simplifyQueue.push(i);
+		}
+	}
+	
+	while (!simplifyQueue.empty())
+	{
+		int cur = simplifyQueue.front();
+		simplifyQueue.pop();
+		simplifyStack.push(cur);
+		nSimp++;
+		
+		for (int i=0; i<=maxID; i++)
+		{
+			if (done[i])
+				continue;
+			
+			if (interference[i][cur])
+				degree[i]--;
+			
+			if (degree[i] < maxColor)
+			{
+				done[i] = true;
+				simplifyQueue.push(i);
+			}
+		}
+	}
+	
+	if (nSimp == maxID+1)
+		break;
+	
+	int bestSpill = -1;
+	double bestSpillScore = 0.0;
+	for (int i=0; i<=maxID; i++)
+	{
+		if (done[i])
+			continue;
+		
+		double curScore = degree[i];
+		if (uses[i] != 0)
+			curScore = double(degree[i])/double(uses[i]);
+		
+		if (curScore > bestSpillScore)
+		{
+			bestSpillScore = curScore;
+			bestSpill = i;
+		}
+	}
+	
+	done[bestSpill] = true;
+	simplifyStack.push(bestSpill);
+	nSimp++;
+}
+
+coloring.clear();
+coloring.resize(maxID+1,-1);
+
+for (auto kv : preColor)
+	coloring[kv.first] = kv.second;
 
 while (!simplifyStack.empty())
 {
@@ -395,10 +509,10 @@ fprintf(stderr, "\n\n\n");
 \subsection{Putting it all together}
 
 <<register allocation header>>=
-std::vector<int> registerAlloc(asm_function *func);
+std::vector<int> registerAlloc(asm_function *func, std::map<int, int> preColor, int maxColor);
 @
 <<register allocation>>=
-vector<int> registerAlloc(asm_function *func)
+vector<int> registerAlloc(asm_function *func, map<int, int> preColor, int maxColor)
 {
 	<<prepare datastructures>>
 	
@@ -408,7 +522,16 @@ vector<int> registerAlloc(asm_function *func)
 	
 	<<build interference graph>>
 	
-	<<do graph coloring>>
+	vector<int> coloring;
+	
+	if (maxColor == -1)
+	{
+		<<do simple graph coloring>>
+	}
+	else
+	{
+		<<do advanced graph coloring>>
+	}
 	
 	/*<<print coloring>>*/
 	
@@ -424,6 +547,7 @@ vector<int> registerAlloc(asm_function *func)
 #include <string>
 #include <vector>
 #include <cassert>
+#include <map>
 
 <<assembly code datastructure>>
 <<register allocation header>>

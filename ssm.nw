@@ -84,73 +84,37 @@ The SSM architecture has no internal types, so every temp is just an ldl.
 
 <<ssm translate temp int>>=
 ir_expression_temp_int *temp = (ir_expression_temp_int*)expression;
-if (temp->temp_id >= function->num_args + function->num_returns)
 {
-	int tempIndex = temp->temp_id
-		- function->num_args
-		- function->num_returns;
+	int tempIndex = temp->temp_id;
 	assembly->blocks[trace].push_back(
 		asm_statement("ldl %#%", {tempIndex},{},{tempIndex}));
-}
-else
-{
-	ostringstream o;
-	o << "ldl " << link_offsets[temp->temp_id];
-	assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
 }
 @
 
 <<ssm translate temp bool>>=
 ir_expression_temp_bool *temp = (ir_expression_temp_bool*)expression;
-if (temp->temp_id >= function->num_args + function->num_returns)
 {
-	int tempIndex = temp->temp_id
-		- function->num_args
-		- function->num_returns;
+	int tempIndex = temp->temp_id;
 	assembly->blocks[trace].push_back(
 		asm_statement("ldl %#%", {tempIndex},{},{tempIndex}));
-}
-else
-{
-	ostringstream o;
-	o << "ldl " << link_offsets[temp->temp_id];
-	assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
 }
 @
 
 <<ssm translate temp ptr>>=
 ir_expression_temp_ptr *temp = (ir_expression_temp_ptr*)expression;
-if (temp->temp_id >= function->num_args + function->num_returns)
 {
-	int tempIndex = temp->temp_id
-		- function->num_args
-		- function->num_returns;
+	int tempIndex = temp->temp_id;
 	assembly->blocks[trace].push_back(
 		asm_statement("ldl %#%", {tempIndex},{},{tempIndex}));
-}
-else
-{
-	ostringstream o;
-	o << "ldl " << link_offsets[temp->temp_id];
-	assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
 }
 @
 
 <<ssm translate temp unknown>>=
 ir_expression_temp_unknown *temp = (ir_expression_temp_unknown*)expression;
-if (temp->temp_id >= function->num_args + function->num_returns)
 {
-	int tempIndex = temp->temp_id
-		- function->num_args
-		- function->num_returns;
+	int tempIndex = temp->temp_id;
 	assembly->blocks[trace].push_back(
 		asm_statement("ldl %#%", {tempIndex},{},{tempIndex}));
-}
-else
-{
-	ostringstream o;
-	o << "ldl " << link_offsets[temp->temp_id];
-	assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
 }
 @
 
@@ -591,20 +555,10 @@ Because there is no construct that forces me to introduce extra conditional jump
 <<ssm translate assign temp>>=
 ir_statement_assign_temp *assign = (ir_statement_assign_temp*)statement;
 ssm_translate_expression(function, assembly, trace, assign->value);
-if (assign->target_temp_id >= function->num_args+function->num_returns)
 {
-	int tempIndex = assign->target_temp_id
-		- function->num_args
-		- function->num_returns;
-	
+	int tempIndex = assign->target_temp_id;
 	assembly->blocks[trace].push_back(
 		asm_statement("stl %#%", {tempIndex},{tempIndex},{}));
-}
-else
-{
-	ostringstream o;
-	o << "stl " << link_offsets[assign->target_temp_id];
-	assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
 }
 @
 
@@ -671,19 +625,11 @@ for (unsigned int i=0; i<funcall->return_temporaries.size(); i++)
 			o << "ajs " << -stackAdjust;
 			assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
 		}
-		if (funcall->return_temporaries[i] >= function->num_args + function->num_returns)
+		
 		{
-			int tempIndex = funcall->return_temporaries[i]
-				- function->num_args
-				- function->num_returns;
+			int tempIndex = funcall->return_temporaries[i];
 			assembly->blocks[trace].push_back(
 				asm_statement("stl %#%",{tempIndex},{tempIndex},{}));
-		}
-		else
-		{
-			ostringstream o;
-			o << "stl " << link_offsets[funcall->return_temporaries[i]];
-			assembly->blocks[trace].push_back(asm_statement(o.str(),{},{},{}));
 		}
 	}
 	else
@@ -854,7 +800,12 @@ void ssm_translate_function(FILE *stream, ir_function *function, string fnname)
 	
 	vector<string> tempTable;
 	
-	vector<int> coloring = registerAlloc(assembly);
+	map<int, int> preColor;
+	
+	for (int i=0; i<function->num_args+function->num_returns; i++)
+		preColor[i] = i;
+	
+	vector<int> coloring = registerAlloc(assembly, preColor, 2);
 	
 	assembly->blocks[0].pop_back();
 	
@@ -869,7 +820,7 @@ void ssm_translate_function(FILE *stream, ir_function *function, string fnname)
 	
 	{
 		ostringstream o;
-		o << "link " << maxColor+1;
+		o << "link " << maxColor+1-function->num_args-function->num_returns;
 		assembly->blocks[0].push_back(asm_statement(o.str(),{},{},{}));
 	}
 	
@@ -881,10 +832,23 @@ void ssm_translate_function(FILE *stream, ir_function *function, string fnname)
 		assembly->blocks[0].push_back(asm_statement("stl -1",{},{},{}));
 	}
 	
-	for (unsigned int i=0; i<function->temp_types.size()-function->num_args-function->num_returns; i++)
+	for (unsigned int i=0; i<function->temp_types.size(); i++)
 	{
 		ostringstream o;
-		o << coloring[i]+1;
+		if (coloring[i] < function->num_args)
+		{
+			o << -2-function->num_returns-coloring[i];
+		}
+		else if (coloring[i] < function->num_returns+function->num_args)
+		{
+			o << -2 - (coloring[i]-function->num_args);
+		}
+		else
+		{
+			o << 1 + (coloring[i]-function->num_args-function->num_returns);
+		}
+		//fprintf(stderr, "%d: %d %s\n", i, coloring[i], o.str().c_str());
+
 		tempTable.push_back(o.str());
 	}
 	

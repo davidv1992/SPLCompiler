@@ -1,3 +1,4 @@
+\part{Interface utilities}
 \chapter{Compiler proper}
 
 This file does all the chaining of the various parts of the compiler. It is responsible for calling the different parts of the compiler in the right order.

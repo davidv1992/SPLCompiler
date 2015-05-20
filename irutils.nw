@@ -1,3 +1,4 @@
+\part{Assembly generation}
 \chapter{IR utilities}
 
 For dealing with the intermediate representation, especially during the generation of platform-specific assembly code, it is very usefull to have some utility functions.
