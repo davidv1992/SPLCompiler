@@ -201,6 +201,11 @@ for (unsigned int i=0; i<func->blocks.size(); i++)
 	}
 }
 
+for (auto kv : preColor)
+{
+	maxID = max(maxID, kv.first);
+}
+
 vector<vector<bool>> interference(maxID+1, vector<bool>(maxID+1,false));
 vector<int> uses(maxID+1,0);
 
