@@ -872,7 +872,7 @@ void ssm_translate_module(ir_module *module, FILE *stream);
 void ssm_translate_module(ir_module *module, FILE *stream)
 {
 	// starter
-	fprintf(stream, "\tbsr _init\n");
+	fprintf(stream, "\tbsr _splinit\n");
 	fprintf(stream, "\tbsr __main\n");
 	fprintf(stream, "\ttrap 0\n");
 	fprintf(stream, "\thalt\n");

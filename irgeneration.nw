@@ -1221,7 +1221,7 @@ void irgen_translate_function(ir_module *module, ast_fundecl *fun)
 
 \section{Translating programs}
 
-Translating global variables, we need to somehow implement the initialization of globals. This is done by placing the statements for that in a special \_init function.
+Translating global variables, we need to somehow implement the initialization of globals. This is done by placing the statements for that in a special \_splinit function.
 
 <<translate program header>>=
 ir_module* irgen_translate_program(ast_program *program);
@@ -1251,7 +1251,7 @@ ir_module* irgen_translate_program(ast_program *program)
 	init->blocks[initTrace].push_back(
 		new ir_statement_return());
 	
-	module->functions["_init"] = init;
+	module->functions["_splinit"] = init;
 	
 	for (auto fundecl : program->functions)
 	{
