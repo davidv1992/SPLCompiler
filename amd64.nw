@@ -1,0 +1,1143 @@
+\chapter{AMD64 code generation}
+
+I have, for my expansion project, decided to implement code generation for the AMD64 processor architecture.
+
+\section{Word size and calling convention}
+
+
+\section{Dealing with temporaries}
+
+Due to the fact that almost all AMD64 instruction use register operands, the assembly generation process will also produce temporaries of itself. These are untyped, but relevant for the register allocation process. This all means we need to pay some attention to associations between the various assembly temporaries and higher level objects. I have decided to use the following convention:
+\begin{tabular}{|l|l|}
+\hline
+Assembly temporary & Use\\
+\hline
+$0$ & \%rax register.\\
+$1$ & \%rbx register.\\
+$2$ & \%rcx register.\\
+$3$ & \%rdx register.\\
+$4$ & \%rsi register.\\
+$5$ & \%rdi register.\\
+$6-13$ & \%r8 - \%r15 registers.\\
+$14-14+\text{#IRtemps}$ & IR temporaries.\\
+Onwards & Assembly temporaries.\\
+\hline
+\end{tabular}
+
+The next temporary number available is managed by the following two functions
+
+<<AMD64 manage temporaries>>=
+int next_temp;
+
+void amd64_inittemp(int IRtemps)
+{
+	next_temp = 14+IRtemps;
+}
+
+int amd64_gettemp()
+{
+	return next_temp++;
+}
+@
+
+\section{Translating expressions}
+
+\subsection{Constant values}
+
+Load a constant with mov.
+
+<<AMD64 translate intconst>>=
+if (restemp == -1)
+	restemp = amd64_gettemp();
+ir_expression_intconst *ic = (ir_expression_intconst*)expression;
+ostringstream o;
+o << "mov %#%, " << ic->value;
+assembly->blocks[trace].push_back(
+	asm_statement(o.str(), {restemp}, {restemp}, {}));
+@
+
+<<AMD64 translate boolconst>>=
+if (restemp == -1)
+	restemp = amd64_gettemp();
+ir_expression_boolconst *bc = (ir_expression_boolconst*)expression;
+if (bc->value)
+{
+	assembly->blocks[trace].push_back(
+		asm_statement("mov %#%, 0xFFFFFFFFFFFFFFFF", {restemp}, {restemp}, {}));
+}
+else
+{
+	assembly->blocks[trace].push_back(
+		asm_statement("mov %#%, 0", {restemp}, {restemp}, {}));
+}
+@
+
+<<AMD64 translate label>>=
+if (restemp == -1)
+	restemp = amd64_gettemp();
+ir_expression_label *label = (ir_expression_label*)expression;
+if (label->label == "NULL")
+{
+	assembly->blocks[trace].push_back(
+		asm_statement("mov %#%, 0", {restemp}, {restemp}, {}));
+}
+else
+{
+	ostringstream o;
+	o << "mov %#%, offset " << label->label;
+	assembly->blocks[trace].push_back(
+		asm_statement(o.str(), {restemp}, {restemp}, {}));
+}
+@
+
+\subsection{Load temporary}
+
+The result of a translated expression is a piece of code that leaves the desired value in some temp. In this case, that temp will already exist, so unless we have an explicit target temp, we don't actually need to do anything except translate the temp number.
+
+<<AMD64 translate temp int>>=
+ir_expression_temp_int *temp = (ir_expression_temp_int*)expression;
+if (restemp == -1)
+{
+	restemp = temp->temp_id+14;
+}
+else
+{
+	assembly->blocks[trace].push_back(
+		asm_statement("mov %#%, %#%", {restemp, temp->temp_id+14},
+			{restemp}, {temp->temp_id+14}));
+}
+@
+
+<<AMD64 translate temp bool>>=
+ir_expression_temp_bool *temp = (ir_expression_temp_bool*)expression;
+if (restemp == -1)
+{
+	restemp = temp->temp_id+14;
+}
+else
+{
+	assembly->blocks[trace].push_back(
+		asm_statement("mov %#%, %#%", {restemp, temp->temp_id+14},
+			{restemp}, {temp->temp_id+14}));
+}
+@
+
+<<AMD64 translate temp ptr>>=
+ir_expression_temp_ptr *temp = (ir_expression_temp_ptr*)expression;
+if (restemp == -1)
+{
+	restemp = temp->temp_id+14;
+}
+else
+{
+	assembly->blocks[trace].push_back(
+		asm_statement("mov %#%, %#%", {restemp, temp->temp_id+14},
+			{restemp}, {temp->temp_id+14}));
+}
+@
+
+<<AMD64 translate temp unknown>>=
+ir_expression_temp_unknown *temp = (ir_expression_temp_unknown*)expression;
+if (restemp == -1)
+{
+	restemp = temp->temp_id+14;
+}
+else
+{
+	assembly->blocks[trace].push_back(
+		asm_statement("mov %#%, %#%", {restemp, temp->temp_id+14},
+			{restemp}, {temp->temp_id+14}));
+}
+@
+
+\subsection{Memory access}
+
+Again a job for the versatile mov.
+
+<<AMD64 translate memory read>>=
+ir_expression_memory *mem = (ir_expression_memory*)expression;
+if (restemp == -1)
+	restemp = amd64_gettemp();
+
+int addresstemp = amd64_translate_expression(function, assembly, trace,
+	mem->address, -1);
+assembly->blocks[trace].push_back(
+	asm_statement("mov %#%, [%#%]", {restemp, addresstemp},
+		{restemp}, {addresstemp}));
+@
+
+\subsection{Type conversion}
+
+Like the SSM platform, AMD64 also has no need for making these conversions explicit.
+
+<<AMD64 translate unknown to int>>=
+ir_expression_unknown_to_int *conv = (ir_expression_unknown_to_int*)expression;
+restemp = amd64_translate_expression(function, assembly, trace,
+	conv->inner, restemp);
+@
+
+<<AMD64 translate unknown to ptr>>=
+ir_expression_unknown_to_ptr *conv = (ir_expression_unknown_to_ptr*)expression;
+restemp = amd64_translate_expression(function, assembly, trace,
+	conv->inner, restemp);
+@
+
+<<AMD64 translate unknown to bool>>=
+ir_expression_unknown_to_bool *conv = (ir_expression_unknown_to_bool*)expression;
+restemp = amd64_translate_expression(function, assembly, trace,
+	conv->inner, restemp);
+@
+
+\subsection{Translate comparison}
+
+Comparisons are a bit more tricky on AMD64, since we do not have a direct instruction for comparing and assigning the result. Hence i use a sequence of three instructions, assigning false, doing the comparison, and then conditionally moving true.
+
+<<AMD64 translate intcmp>>=
+ir_expression_intcmp *cmp = (ir_expression_intcmp*)expression;
+int regA = amd64_translate_expression(function, assembly, trace,
+	cmp->left, -1);
+int regB = amd64_translate_expression(function, assembly, trace,
+	cmp->right, -1);
+if (restemp == -1)
+	restemp = amd64_gettemp();
+int etemp = amd64_gettemp();
+assembly->blocks[trace].push_back(
+	asm_statement("mov %#%, 0", {restemp}, {restemp}, {}));
+assembly->blocks[trace].push_back(
+	asm_statement("mov %#%, 0xFFFFFFFFFFFFFFFF", {etemp}, {etemp}, {}));
+assembly->blocks[trace].push_back(
+	asm_statement("cmp %#%, %#%", {regA, regB}, {}, {regA, regB}));
+
+switch(cmp->op)
+{
+case IR_INT_EQ:
+	assembly->blocks[trace].push_back(
+		asm_statement("cmove %#%, %#%", {restemp, etemp}, {restemp}, {restemp, etemp}));
+	break;
+case IR_INT_NE:
+	assembly->blocks[trace].push_back(
+		asm_statement("cmovne %#%, %#%", {restemp, etemp}, {restemp}, {restemp, etemp}));
+	break;
+case IR_INT_LT:
+	assembly->blocks[trace].push_back(
+		asm_statement("cmovl %#%, %#%", {restemp, etemp}, {restemp}, {restemp, etemp}));
+	break;
+case IR_INT_LE:
+	assembly->blocks[trace].push_back(
+		asm_statement("cmovle %#%, %#%", {restemp, etemp}, {restemp}, {restemp, etemp}));
+	break;
+case IR_INT_GT:
+	assembly->blocks[trace].push_back(
+		asm_statement("cmovg %#%, %#%", {restemp, etemp}, {restemp}, {restemp, etemp}));
+	break;
+case IR_INT_GE:
+	assembly->blocks[trace].push_back(
+		asm_statement("cmovge %#%, %#%", {restemp, etemp}, {restemp}, {restemp, etemp}));
+	break;
+default:
+	assert(0);
+}
+@
+
+<<AMD64 translate ptrcmp>>=
+ir_expression_ptrcmp *cmp = (ir_expression_ptrcmp*)expression;
+int regA = amd64_translate_expression(function, assembly, trace,
+	cmp->left, -1);
+int regB = amd64_translate_expression(function, assembly, trace,
+	cmp->right, -1);
+if (restemp == -1)
+	restemp = amd64_gettemp();
+int etemp = amd64_gettemp();
+assembly->blocks[trace].push_back(
+	asm_statement("mov %#%, 0", {restemp}, {restemp}, {}));
+assembly->blocks[trace].push_back(
+	asm_statement("mov %#%, 0xFFFFFFFFFFFFFFFF", {etemp}, {etemp}, {}));
+assembly->blocks[trace].push_back(
+	asm_statement("cmp %#%, %#%", {regA, regB}, {}, {regA, regB}));
+
+switch(cmp->op)
+{
+case IR_PTR_EQ:
+	assembly->blocks[trace].push_back(
+		asm_statement("cmove %#%, %#%", {restemp, etemp}, {restemp}, {restemp, etemp}));
+	break;
+case IR_PTR_NE:
+	assembly->blocks[trace].push_back(
+		asm_statement("cmovne %#%, %#%", {restemp, etemp}, {restemp}, {restemp, etemp}));
+	break;
+default:
+	assert(0);
+}
+@
+
+<<AMD64 translate boolcmp>>=
+ir_expression_boolcmp *cmp = (ir_expression_boolcmp*)expression;
+int regA = amd64_translate_expression(function, assembly, trace,
+	cmp->left, -1);
+int regB = amd64_translate_expression(function, assembly, trace,
+	cmp->right, -1);
+if (restemp == -1)
+	restemp = amd64_gettemp();
+int etemp = amd64_gettemp();
+assembly->blocks[trace].push_back(
+	asm_statement("mov %#%, 0", {restemp}, {restemp}, {}));
+assembly->blocks[trace].push_back(
+	asm_statement("mov %#%, 0xFFFFFFFFFFFFFFFF", {etemp}, {etemp}, {}));
+assembly->blocks[trace].push_back(
+	asm_statement("cmp %#%, %#%", {regA, regB}, {}, {regA, regB}));
+
+switch(cmp->op)
+{
+case IR_BOOL_EQ:
+	assembly->blocks[trace].push_back(
+		asm_statement("cmove %#%, %#%", {restemp, etemp}, {restemp}, {restemp, etemp}));
+	break;
+case IR_BOOL_NE:
+	assembly->blocks[trace].push_back(
+		asm_statement("cmovne %#%, %#%", {restemp, etemp}, {restemp}, {restemp, etemp}));
+	break;
+default:
+	assert(0);
+}
+@
+
+<<AMD64 translate unknowncmp>>=
+ir_expression_unknowncmp *cmp = (ir_expression_unknowncmp*)expression;
+int regA = amd64_translate_expression(function, assembly, trace,
+	cmp->left, -1);
+int regB = amd64_translate_expression(function, assembly, trace,
+	cmp->right, -1);
+if (restemp == -1)
+	restemp = amd64_gettemp();
+int etemp = amd64_gettemp();
+assembly->blocks[trace].push_back(
+	asm_statement("mov %#%, 0", {restemp}, {restemp}, {}));
+assembly->blocks[trace].push_back(
+	asm_statement("mov %#%, 0xFFFFFFFFFFFFFFFF", {etemp}, {etemp}, {})); 
+assembly->blocks[trace].push_back(
+	asm_statement("cmp %#%, %#%", {regA, regB}, {}, {regA, regB}));
+
+switch(cmp->op)
+{
+case IR_UNKNOWN_EQ:
+	assembly->blocks[trace].push_back(
+		asm_statement("cmove %#%, %#%", {restemp, etemp}, {restemp}, {restemp, etemp}));
+	break;
+case IR_UNKNOWN_NE:
+	assembly->blocks[trace].push_back(
+		asm_statement("cmovne %#%, %#%", {restemp, etemp}, {restemp}, {restemp, etemp}));
+	break;
+default:
+	assert(0);
+}
+@
+
+\subsection{Translating unary operators}
+
+The AMD64 processor architecture has the property that for the math operations, it usually has one of the source operands overlapping the destination operand. We deal with this by moving the first operand into the result register beforehand.
+
+<<AMD64 translate int unop>>=
+ir_expression_intar_unop *unop = (ir_expression_intar_unop *)expression;
+if (restemp == -1)
+	restemp = amd64_gettemp();
+amd64_translate_expression(function, assembly, trace,
+	unop->inner, restemp);
+switch(unop->op)
+{
+case IR_INT_NEG:
+	assembly->blocks[trace].push_back(
+		asm_statement("neg %#%", {restemp}, {restemp}, {restemp}));
+	break;
+default:
+	assert(0);
+}
+@
+
+<<AMD64 translate bool unop>>=
+ir_expression_boolar_unop *unop = (ir_expression_boolar_unop*)expression;
+if (restemp == -1)
+	restemp = amd64_gettemp();
+amd64_translate_expression(function, assembly, trace,
+	unop->inner, restemp);
+switch(unop->op)
+{
+case IR_BOOL_NOT:
+	assembly->blocks[trace].push_back(
+		asm_statement("not %#%", {restemp}, {restemp}, {restemp}));
+	break;
+default:
+	assert(0);
+}
+@
+
+\subsection{Translating binary operators}
+
+The binary operators vary in the registers they can use, so we handle them seperately
+
+<<AMD64 translate int binop>>=
+ir_expression_intar_binop *binop = (ir_expression_intar_binop*)expression;
+switch(binop->op)
+{
+<<AMD64 translate int add and sub>>
+<<AMD64 translate int mul>>
+<<AMD64 translate int div and mod>>
+default:
+	assert(0);
+}
+@
+
+Add and sub work similarly to neg and not, but with an extra arg.
+
+<<AMD64 translate int add and sub>>=
+case IR_INT_ADD:
+case IR_INT_SUB:
+{
+	if (restemp == -1)
+		restemp = amd64_gettemp();
+	amd64_translate_expression(function, assembly, trace,
+		binop->left, restemp);
+	int secArg = amd64_translate_expression(function, assembly, trace,
+		binop->right, -1);
+	if (binop->op == IR_INT_ADD)
+	{
+		assembly->blocks[trace].push_back(
+			asm_statement("add %#%, %#%", {restemp, secArg}, {restemp},
+				{restemp, secArg}));
+	}
+	else
+	{
+		assembly->blocks[trace].push_back(
+			asm_statement("sub %#%, %#%", {restemp, secArg}, {restemp},
+				{restemp, secArg}));
+	}
+	break;
+}
+@
+
+The multiply instruction always takes one input from the rax register, and produces output (which we don't use) in the rdx register.
+
+<<AMD64 translate int mul>>=
+case IR_INT_MUL:
+{
+	if (restemp == -1)
+		restemp = amd64_gettemp();
+	int secArg = amd64_translate_expression(function, assembly, trace,
+		binop->right, -1);
+	amd64_translate_expression(function, assembly, trace,
+		binop->left, restemp);
+	assembly->blocks[trace].push_back(
+		asm_statement("imul %#%, %#%", {restemp, secArg}, {restemp}, {restemp, secArg}));
+	break;
+}
+@
+
+<<AMD64 translate int div and mod>>=
+case IR_INT_DIV:
+case IR_INT_MOD:
+{
+	if (restemp == -1)
+		restemp = amd64_gettemp();
+	int secArg = amd64_translate_expression(function, assembly, trace,
+		binop->right, -1);
+	amd64_translate_expression(function, assembly, trace,
+		binop->left, 0);
+	assembly->blocks[trace].push_back(
+		asm_statement("cqo", {3}, {0, 3}, {}));
+	assembly->blocks[trace].push_back(
+		asm_statement("idiv %#%", {secArg}, {0,3}, {0,3,secArg}));
+	if (binop->op == IR_INT_DIV)
+	{
+		assembly->blocks[trace].push_back(
+			asm_statement("mov %#%, %#%", {restemp, 0}, {restemp}, {0}));
+	}
+	else
+	{
+		assembly->blocks[trace].push_back(
+			asm_statement("mov %#%, %#%", {restemp, 3}, {restemp}, {3}));
+	}
+	break;
+}
+@
+
+The AMD64 uses byte addressing, but the word size my implemenation uses on this platform is 8 bytes, hence we need to do multiplication before the pointer additions/substractions.
+
+<<AMD64 translate ptr binop>>=
+ir_expression_ptrar_binop *binop = (ir_expression_ptrar_binop*)expression;
+if (restemp == -1)
+	restemp = amd64_gettemp();
+
+int ptrArg = amd64_translate_expression(function, assembly, trace,
+	binop->left, -1);
+int offArg = amd64_translate_expression(function, assembly, trace,
+	binop->right, -1);
+
+if (binop->op == IR_PTR_SUB)
+{
+	assembly->blocks[trace].push_back(
+		asm_statement("neg %#%", {offArg}, {offArg}, {offArg}));
+}
+
+assembly->blocks[trace].push_back(
+	asm_statement("lea %#%, [%#%+%#%*8]", {restemp, ptrArg, offArg}, {restemp},
+		{ptrArg, offArg}));
+@
+
+<<AMD64 translate bool binop>>=
+ir_expression_boolar_binop *binop = (ir_expression_boolar_binop*)expression;
+if (restemp == -1)
+	restemp = amd64_gettemp();
+
+amd64_translate_expression(function, assembly, trace,
+	binop->left, restemp);
+int secArg = amd64_translate_expression(function, assembly, trace,
+	binop->right, -1);
+
+switch(binop->op)
+{
+case IR_BOOL_AND:
+	assembly->blocks[trace].push_back(
+		asm_statement("and %#%, %#%", {restemp, secArg}, {restemp}, {restemp, secArg}));
+	break;
+case IR_BOOL_OR:
+	assembly->blocks[trace].push_back(
+		asm_statement("or %#%, %#%", {restemp, secArg}, {restemp}, {restemp, secArg}));
+	break;
+default:
+	assert(0);
+}
+@
+
+\subsection{Putting it all together}
+
+<<AMD64 translate expression>>=
+int amd64_translate_expression(ir_function *function, asm_function *assembly, int trace, 
+								ir_expression *expression, int restemp)
+{	
+	if (typeid(*expression) == typeid(ir_expression_intconst))
+	{
+		<<AMD64 translate intconst>>
+	}
+	else if (typeid(*expression) == typeid(ir_expression_boolconst))
+	{
+		<<AMD64 translate boolconst>>
+	}
+	else if (typeid(*expression) == typeid(ir_expression_label))
+	{
+		<<AMD64 translate label>>
+	}
+	else if (typeid(*expression) == typeid(ir_expression_temp_int))
+	{
+		<<AMD64 translate temp int>>
+	}
+	else if (typeid(*expression) == typeid(ir_expression_temp_bool))
+	{
+		<<AMD64 translate temp bool>>
+	}
+	else if (typeid(*expression) == typeid(ir_expression_temp_ptr))
+	{
+		<<AMD64 translate temp ptr>>
+	}
+	else if (typeid(*expression) == typeid(ir_expression_temp_unknown))
+	{
+		<<AMD64 translate temp unknown>>
+	}
+	else if (typeid(*expression) == typeid(ir_expression_memory))
+	{
+		<<AMD64 translate memory read>>
+	}
+	else if (typeid(*expression) == typeid(ir_expression_unknown_to_int))
+	{
+		<<AMD64 translate unknown to int>>
+	}
+	else if (typeid(*expression) == typeid(ir_expression_unknown_to_ptr))
+	{
+		<<AMD64 translate unknown to ptr>>
+	}
+	else if (typeid(*expression) == typeid(ir_expression_unknown_to_bool))
+	{
+		<<AMD64 translate unknown to bool>>
+	}
+	else if (typeid(*expression) == typeid(ir_expression_intcmp))
+	{
+		<<AMD64 translate intcmp>>
+	}
+	else if (typeid(*expression) == typeid(ir_expression_ptrcmp))
+	{
+		<<AMD64 translate ptrcmp>>
+	}
+	else if (typeid(*expression) == typeid(ir_expression_boolcmp))
+	{
+		<<AMD64 translate boolcmp>>
+	}
+	else if (typeid(*expression) == typeid(ir_expression_unknowncmp))
+	{
+		<<AMD64 translate unknowncmp>>
+	}
+	else if (typeid(*expression) == typeid(ir_expression_intar_unop))
+	{
+		<<AMD64 translate int unop>>
+	}
+	else if (typeid(*expression) == typeid(ir_expression_boolar_unop))
+	{
+		<<AMD64 translate bool unop>>
+	}
+	else if (typeid(*expression) == typeid(ir_expression_intar_binop))
+	{
+		<<AMD64 translate int binop>>
+	}
+	else if (typeid(*expression) == typeid(ir_expression_ptrar_binop))
+	{
+		<<AMD64 translate ptr binop>>
+	}
+	else if (typeid(*expression) == typeid(ir_expression_boolar_binop))
+	{
+		<<AMD64 translate bool binop>>
+	}
+	else
+	{
+		assert(0);
+	}
+	
+	return restemp;
+}
+@
+
+\section{Translating statements and functions}
+
+\subsection{Translating assign}
+
+<<AMD64 translate assign temp>>=
+ir_statement_assign_temp *assign = (ir_statement_assign_temp*)statement;
+amd64_translate_expression(function, assembly, trace, 
+	assign->value, assign->target_temp_id+14);
+@
+
+<<AMD64 translate assign memory>>=
+ir_statement_assign_memory *assign = (ir_statement_assign_memory*)statement;
+int valTemp = amd64_translate_expression(function, assembly, trace,
+	assign->value, -1);
+int adrTemp = amd64_translate_expression(function, assembly, trace,
+	assign->target, -1);
+assembly->blocks[trace].push_back(
+	asm_statement("mov [%#%], %#%", {adrTemp, valTemp}, {}, {adrTemp, valTemp}));
+@
+
+\subsection{Translating functioncall}
+
+<<AMD64 translate functioncall>>=
+ir_statement_functioncall *call = (ir_statement_functioncall*)statement;
+assert(call->arguments.size() <= 6);
+assert(call->return_temporaries.size() <= 2);
+
+vector<int> argTemps;
+
+for (auto arg : call->arguments)
+{
+	argTemps.push_back(amd64_translate_expression(function, assembly, trace,
+		arg, -1));
+}
+
+vector<int> callUses;
+
+for (unsigned int i = 0; i<argTemps.size(); i++)
+{
+	assembly->blocks[trace].push_back(
+		asm_statement("mov %#%, %#%", {argumentRegisters[i], argTemps[i]},
+			{argumentRegisters[i]}, {argTemps[i]}));
+	callUses.push_back(argumentRegisters[i]);
+}
+
+assembly->blocks[trace].push_back(
+	asm_statement("call " + call->function, {},
+		{0, 2, 3, 4, 5, 6, 7, 8, 9}, callUses));
+
+for (unsigned int i = 0; i<call->return_temporaries.size(); i++)
+{
+	if (call->return_temporaries[i] == -1)
+		continue;
+	assembly->blocks[trace].push_back(
+		asm_statement("mov %#%, %#%", {call->return_temporaries[i]+14, returnRegisters[i]},
+			{call->return_temporaries[i]+14}, {returnRegisters[i]}));
+}
+@
+
+\subsection{Translating return}
+
+On return, jump to outro
+
+<<AMD64 translate return>>=
+assembly->blocks[trace].push_back(
+	asm_statement("jmp " + fnname.substr(1) + "_TE", {}, {}, {}));
+assembly->blockFollows[trace].push_back(fnname.substr(1)+"_TE");
+@
+
+\subsection{Translating jump}
+
+Really obvious:
+
+<<AMD64 translate jump>>=
+ir_statement_jump *jump = (ir_statement_jump*)statement;
+ostringstream o;
+o << fnname.substr(1) << "_L" << jump->target_block;
+assembly->blocks[trace].push_back(
+	asm_statement("jmp " + o.str(), {}, {}, {}));
+assembly->blockFollows[trace].push_back(o.str());
+@
+
+\subsection{Translating if}
+
+Conditional jumping requires the use of cmp to set status flags to useable values
+
+<<AMD64 translate if>>=
+ir_statement_if *ifstat = (ir_statement_if*)statement;
+int condTemp = amd64_translate_expression(function, assembly, trace,
+	ifstat->condition, -1);
+assembly->blocks[trace].push_back(
+	asm_statement("cmp %#%, 0", {condTemp}, {}, {condTemp}));
+
+{
+	ostringstream o;
+	o << fnname.substr(1) << "_L" << ifstat->target_false;
+	assembly->blocks[trace].push_back(
+		asm_statement("je " + o.str(), {}, {}, {}));
+	assembly->blockFollows[trace].push_back(o.str());
+}
+{
+	ostringstream o;
+	o << fnname.substr(1) << "_L" << ifstat->target_true;
+	assembly->blocks[trace].push_back(
+		asm_statement("jmp " + o.str(), {}, {}, {}));
+	assembly->blockFollows[trace].push_back(o.str());
+}
+@
+
+\subsection{Translating statements}
+<<AMD64 translate statement>>=
+if (typeid(*statement) == typeid(ir_statement_assign_temp))
+{
+	<<AMD64 translate assign temp>>
+}
+else if (typeid(*statement) == typeid(ir_statement_assign_memory))
+{
+	<<AMD64 translate assign memory>>
+}
+else if (typeid(*statement) == typeid(ir_statement_functioncall))
+{
+	<<AMD64 translate functioncall>>
+}
+else if (typeid(*statement) == typeid(ir_statement_return))
+{
+	<<AMD64 translate return>>
+}
+else if (typeid(*statement) == typeid(ir_statement_jump))
+{
+	<<AMD64 translate jump>>
+}
+else if (typeid(*statement) == typeid(ir_statement_if))
+{
+	<<AMD64 translate if>>
+}
+@
+
+\subsection{Translate function}
+
+The following tables map colors to register names, and provide the information for the calling convention.
+
+<<AMD64 register map>>=
+string regNames[] = {
+	"%rax",
+	"%rbx",
+	"%rcx",
+	"%rdx",
+	"%rsi",
+	"%rdi",
+	"%r8",
+	"%r9",
+	"%r10",
+	"%r11",
+	"%r12",
+	"%r13",
+	"%r14",
+	"%r15"
+};
+
+int argumentRegisters[] = {
+	5,
+	4,
+	3,
+	2,
+	6,
+	7
+};
+
+int returnRegisters[] = {
+	0,
+	3
+};
+@
+
+On function entry and exit, we (re)store all callee save registers.
+
+<<AMD64 generate function entry exit>>=
+{
+	int rbxTemp = amd64_gettemp();
+	int r12Temp = amd64_gettemp();
+	int r13Temp = amd64_gettemp();
+	int r14Temp = amd64_gettemp();
+	int r15Temp = amd64_gettemp();
+	
+	assembly->blocks[0].push_back(
+		asm_statement(".cfi_startproc", {}, {}, {}));
+	assembly->blocks[0].push_back(
+		asm_statement("push %rbp", {}, {}, {}));
+	assembly->blocks[0].push_back(
+		asm_statement(".cfi_def_cfa_offset 16", {}, {}, {}));
+	assembly->blocks[0].push_back(
+		asm_statement(".cfi_offset 6, -16", {}, {}, {}));
+	assembly->blocks[0].push_back(
+		asm_statement("mov %rbp, %rsp", {}, {}, {}));
+	assembly->blocks[0].push_back(
+		asm_statement(".cfi_def_cfa_register 6", {}, {}, {}));
+	
+	//placeholder for stack resize
+	assembly->blocks[0].push_back(
+		asm_statement("",{},{},{}));
+	
+	//callee saves
+	assembly->blocks[0].push_back(
+		asm_statement("mov %#%, %#%", {rbxTemp, 1}, {rbxTemp}, {1}));
+	assembly->blocks[0].push_back(
+		asm_statement("mov %#%, %#%", {r12Temp, 10}, {r12Temp}, {10}));
+	assembly->blocks[0].push_back(
+		asm_statement("mov %#%, %#%", {r13Temp, 11}, {r13Temp}, {11}));
+	assembly->blocks[0].push_back(
+		asm_statement("mov %#%, %#%", {r14Temp, 12}, {r14Temp}, {12}));
+	assembly->blocks[0].push_back(
+		asm_statement("mov %#%, %#%", {r15Temp, 13}, {r15Temp}, {13}));
+		
+	assert(function->num_args <= 6);
+	
+	for (int i=0; i<function->num_args; i++)
+	{
+		assembly->blocks[0].push_back(
+			asm_statement("mov %#%, %#%", 
+				{14+i, argumentRegisters[i]}, {14+i}, {argumentRegisters[i]}));
+	}
+	
+	vector<int> retUses = {1, 10, 11, 12, 13};
+	
+	for (int i=0; i<function->num_returns; i++)
+	{
+		assembly->blocks.back().push_back(
+			asm_statement("mov %#%, %#%",
+				{returnRegisters[i], 14+i+function->num_args},
+				{returnRegisters[i]},
+				{14+i+function->num_args}));
+		
+		retUses.push_back(returnRegisters[i]);
+	}
+	
+	assembly->blocks.back().push_back(
+		asm_statement("mov %#%, %#%", {13, r15Temp}, {13}, {r15Temp}));
+	assembly->blocks.back().push_back(
+		asm_statement("mov %#%, %#%", {12, r14Temp}, {12}, {r14Temp}));
+	assembly->blocks.back().push_back(
+		asm_statement("mov %#%, %#%", {11, r13Temp}, {11}, {r13Temp}));
+	assembly->blocks.back().push_back(
+		asm_statement("mov %#%, %#%", {10, r12Temp}, {10}, {r12Temp}));
+	assembly->blocks.back().push_back(
+		asm_statement("mov %#%, %#%", {1, rbxTemp}, {1}, {rbxTemp}));
+	
+	assembly->blocks.back().push_back(
+		asm_statement("leave", {}, {}, {}));
+	assembly->blocks.back().push_back(
+		asm_statement(".cfi_def_cfa 7, 8", {}, {}, {}));
+	assembly->blocks.back().push_back(
+		asm_statement("ret", {}, {}, retUses));
+	assembly->blocks.back().push_back(
+		asm_statement(".cfi_endproc", {}, {}, {}));
+}
+@
+
+We need to be able to detect spilling
+
+<<AMD64 coloring has spill>>=
+bool amd64_has_spill(vector<int> coloring)
+{
+	for (auto col : coloring)
+	{
+		if (col >= 14)
+			return true;
+	}
+	return false;
+}
+@
+
+<<AMD64 translate function>>=
+void amd64_translate_function(FILE *stream, ir_function *function, string fnname)
+{		
+	asm_function *assembly = new asm_function();
+	
+	assembly->blocks.resize(function->blocks.size()+2);
+	assembly->blockFollows.resize(function->blocks.size()+2);
+	assembly->blockLabels.push_back(fnname);
+	
+	amd64_inittemp(function->temp_types.size());
+	
+	<<AMD64 generate function entry exit>>
+	
+	for (unsigned int i=0; i<function->blocks.size(); i++)
+	{
+		{
+			ostringstream o;
+			o << fnname.substr(1) << "_L" << i;
+			assembly->blockLabels.push_back(o.str());
+			if (i == 0)
+				assembly->blockFollows[0].push_back(o.str());
+		}
+		for (unsigned int j=0; j<function->blocks[i].size(); j++)
+		{
+			ir_statement *statement = function->blocks[i][j];
+			int trace = i+1;
+			<<AMD64 translate statement>>
+		}
+	}
+	
+	assembly->blockLabels.push_back(fnname.substr(1)+"_TE");
+	
+	map<int, int> preColor;
+	
+	for (int i=0; i<14;i++)
+	{
+		preColor[i] = i;
+	}
+	
+	vector<int> coloring = registerAlloc(assembly, preColor, 14);
+	map<int, int> spillOffsets;
+	int maxSpilloffset = 0;
+	
+	while (amd64_has_spill(coloring))
+	{
+		<<AMD64 rewrite with spilling>>
+		coloring = registerAlloc(assembly, preColor, 14);
+	}
+	
+	if (maxSpilloffset != 0)
+	{
+		if (maxSpilloffset % 16 == 8)
+			maxSpilloffset+=8;
+		ostringstream o;
+		o << "sub %rsp, " << maxSpilloffset;
+		assembly->blocks[0][6].instruction = o.str();
+	}
+	
+	vector<string> tempTable;
+	
+	for (auto color : coloring)
+	{
+		if (color >= 14)
+			tempTable.push_back("%rax");
+		else
+			tempTable.push_back(regNames[color]);
+	}
+	
+	fprintf(stream, "\t.globl %s\n", fnname.c_str());
+	fprintf(stream, "\t.type %s, @function\n", fnname.c_str());
+	assembly->print(stream, tempTable);
+	fprintf(stream, "\n\n");
+	
+	delete assembly;
+}
+@
+
+Rewriting with spilling:
+
+<<AMD64 rewrite with spilling>>=
+for (unsigned int i=0; i<assembly->blocks.size(); i++)
+{
+	vector<asm_statement> newBlock;
+	
+	for (unsigned int j=0; j<assembly->blocks[i].size(); j++)
+	{
+		map<int, int> newTemps;
+		
+		for (auto use : assembly->blocks[i][j].uses)
+		{
+			if (coloring[use] < 14)
+				continue;
+			
+			newTemps[use] = amd64_gettemp();
+			
+			if (spillOffsets.count(use) != 0)
+				continue;
+			
+			maxSpilloffset+=8;
+			spillOffsets[use] = maxSpilloffset;
+		}
+		
+		for (auto def : assembly->blocks[i][j].defs)
+		{
+			if (coloring[def] < 14)
+				continue;
+			if (newTemps.count(def) != 0)
+				continue;
+			
+			newTemps[def] = amd64_gettemp();
+			
+			if (spillOffsets.count(def) != 0)
+				continue;
+			
+			maxSpilloffset += 8;
+			spillOffsets[def] = maxSpilloffset;
+		}
+		
+		vector<int> nuse;
+		
+		for (auto use : assembly->blocks[i][j].uses)
+		{
+			if (newTemps.count(use) == 0)
+			{
+				nuse.push_back(use);
+				continue;
+			}
+			nuse.push_back(newTemps[use]);
+			
+			ostringstream o;
+			o << "mov %#%, [%rbp-" << spillOffsets[use] << "]";
+			newBlock.push_back(
+				asm_statement(o.str(), {newTemps[use]}, {newTemps[use]}, {}));
+		}
+		
+		vector<int> ndef;
+		
+		for (auto def : assembly->blocks[i][j].defs)
+		{
+			if (newTemps.count(def) == 0)
+				ndef.push_back(def);
+			else
+				ndef.push_back(newTemps[def]);
+		}
+		
+		vector<int> nfillin;
+		for (auto fill : assembly->blocks[i][j].fillin)
+		{
+			if (newTemps.count(fill) == 0)
+				nfillin.push_back(fill);
+			else
+				nfillin.push_back(newTemps[fill]);
+		}
+		
+		newBlock.push_back(
+			asm_statement(assembly->blocks[i][j].instruction, nfillin, ndef, nuse));
+		
+		for (auto def : assembly->blocks[i][j].defs)
+		{
+			if (newTemps.count(def) == 0)
+				continue;
+			
+			ostringstream o;
+			o << "mov [%rbp-" << spillOffsets[def] << "], %#%";
+			newBlock.push_back(
+				asm_statement(o.str(), {newTemps[def]}, {}, {newTemps[def]}));
+		}
+	}
+	
+	assembly->blocks[i] = newBlock;
+}
+@
+
+\section{Translate ir module}
+
+<<AMD64 translate module header>>=
+void amd64_translate_module(ir_module *module, FILE *stream);
+@
+<<AMD64 translate module>>=
+void amd64_translate_module(ir_module *module, FILE *stream)
+{
+	fprintf(stream, "\t.file \"SPLCODE\"\n");
+	fprintf(stream, ".intel_syntax\n");
+	fprintf(stream, "\t.text\n");
+	for (auto function : module->functions)
+	{
+		amd64_translate_function(stream, function.second, function.first);
+	}
+	
+	fprintf(stream, "\t.bss\n");
+	for (auto glob : module->globals)
+	{
+		fprintf(stream, "\t.globl %s\n", glob.first.c_str());
+		fprintf(stream, "%s:\n", glob.first.c_str());
+		for (int i=0; i<glob.second; i++)
+			fprintf(stream, "\t.quad 0\n");
+	}
+}
+@
+
+\section{Platform library}
+
+The easiest solution for the platform library is to use the c standard library.
+
+<<cplatform.c>>=
+#include <stdlib.h>
+#include <stdio.h>
+
+void _splinit();
+long long __main();
+
+long long _getCharacter()
+{
+	return getchar();
+}
+
+void _putCharacter(long long v)
+{
+	putchar((int)v);
+}
+
+void *_allocRecord()
+{
+	return malloc(sizeof(long long)*3);
+}
+
+int main()
+{
+	_splinit();
+	long long result = __main();
+	printf("%lld\n", result);
+	printf("machine halted\n");
+	return 0;
+}
+@
+
+\section{Headers and source}
+
+<<amd64.h>>=
+#ifndef AMD64_H
+#define AMD64_H
+#include "ir.h"
+
+<<AMD64 translate module header>>
+#endif
+@
+
+<<amd64.cpp>>=
+#include "assembly.h"
+#include "ir.h"
+#include "irutil.h"
+#include "amd64.h"
+#include <sstream>
+#include <cstdio>
+#include <typeinfo>
+
+using namespace std;
+
+<<AMD64 manage temporaries>>
+
+<<AMD64 register map>>
+
+<<AMD64 coloring has spill>>
+
+<<AMD64 translate expression>>
+<<AMD64 translate function>>
+<<AMD64 translate module>>
+@

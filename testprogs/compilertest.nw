@@ -9,7 +9,7 @@ FAILS=0
 
 for SPL_FILE in $(ls tests/codegen/*.spl)
 do
-	valgrind --leak-check=full --error-exitcode=1 --quiet ./compiler $SPL_FILE > out.ssm
+	valgrind --leak-check=full --error-exitcode=1 --quiet ./compiler -ssm $SPL_FILE > out.ssm
 	if [ $? -ne 0 ]
 	then
 		echo Failure in testcase $SPL_FILE
@@ -27,6 +27,53 @@ do
 	fi
 	
 	rm -f out.ssm
+	rm -f testTmp.txt
+done
+
+echo Results for typechecking/correct suite:
+if [ $FAILS -eq 0 ]
+then
+	echo -ne '\E[32m'
+else
+	echo -ne '\E[31m'
+fi
+echo PASSED: $PASSES
+echo FAILED: $FAILS
+echo -ne '\E[0m'
+
+if [ $FAILS -ne 0 ]
+then
+	exit 1
+fi
+@
+
+<<amdcorrect.sh>>=
+#!/bin/bash
+
+PASSES=0
+FAILS=0
+
+for SPL_FILE in $(ls tests/codegen/*.spl)
+do
+	valgrind --leak-check=full --error-exitcode=1 --quiet ./compiler $SPL_FILE > out.s
+	if [ $? -ne 0 ]
+	then
+		echo Failure in testcase $SPL_FILE
+		FAILS=$((FAILS+1))
+	else
+		gcc out.s cplatform.c
+		./a.out > testTmp.txt
+		diff -q testTmp.txt $SPL_FILE.exp
+		if [ $? -ne 0 ]
+		then
+			echo Failure in testcase $SPL_FILE
+			FAILS=$((FAILS+1))
+		else
+			PASSES=$((PASSES+1))
+		fi
+	fi
+	
+	rm -f out.s a.out
 	rm -f testTmp.txt
 done
 

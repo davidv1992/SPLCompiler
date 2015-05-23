@@ -1,5 +1,5 @@
 .PHONY: clean test limittest version.h
-.PHONY: test/tokentest test/parsetest test/typechecktest test/irgentest test/compiler
+.PHONY: test/tokentest test/parsetest test/typechecktest test/irgentest test/compiler test/amd
 .PHONY: limittest/comment limittest/bracket
 .DEFAULT_GOAL := compiler
 #force version.h on every build
@@ -29,6 +29,9 @@ test/irgentest: testprogs/irgentest testprogs/irgencorrect.sh
 
 test/compiler: compiler testprogs/compilercorrect.sh
 	$(BASH) ./testprogs/compilercorrect.sh
+
+test/amd: compiler testprogs/amdcorrect.sh cplatform.c
+	$(BASH) ./testprogs/amdcorrect.sh
 
 limittest: limittest/comment limittest/bracket
 	@$(BASH) -c "echo -e '\E[32mAll tests passed\E[0m'"
@@ -105,21 +108,30 @@ splruntime.h: splruntime.nw
 splruntime.cpp: splruntime.nw
 	notangle -L -Rsplruntime.cpp splruntime.nw | cpif splruntime.cpp
 
-main.o: main.cpp token.h parser.h ast.h position.h typecheck.h ir.h irgeneration.h settings.h splruntime.h ssm.h error.h
+main.o: main.cpp token.h parser.h ast.h position.h typecheck.h ir.h irgeneration.h settings.h splruntime.h ssm.h error.h amd64.h
 main.cpp: main.nw
 	notangle -L -Rmain.cpp main.nw | cpif main.cpp
 
-compiler: main.o token.o parser.o ast.o error.o typecheck.o irgeneration.o settings.o splruntime.o ssm.o irutil.o assembly.o
-	g++ $(CXXFLASGS) -o compiler main.o token.o parser.o ast.o error.o typecheck.o irgeneration.o settings.o splruntime.o ssm.o irutil.o assembly.o
+compiler: main.o token.o parser.o ast.o error.o typecheck.o irgeneration.o settings.o splruntime.o ssm.o irutil.o assembly.o amd64.o
+	g++ $(CXXFLASGS) -o compiler main.o token.o parser.o ast.o error.o typecheck.o irgeneration.o settings.o splruntime.o ssm.o irutil.o assembly.o amd64.o
+
+amd64.o: amd64.cpp amd64.h assembly.h ir.h irutil.h
+amd64.h: amd64.nw
+	notangle -L -Ramd64.h amd64.nw | cpif amd64.h
+amd64.cpp: amd64.nw
+	notangle -L -Ramd64.cpp amd64.nw | cpif amd64.cpp
+
+cplatform.c: amd64.nw
+	notangle -L -Rcplatform.c amd64.nw | cpif cplatform.c
 
 version.h:
 	echo \#define VERSION \"`git describe --abbrev=4 --dirty --always --tags`\" | cpif version.h
 
 settings.o: settings.cpp settings.h version.h
-settings.cpp: settings.nw token.nw parser.nw typecheck.nw error.nw ir.nw irgeneration.nw ssm.nw
-	notangle -L -Rsettings.cpp token.nw parser.nw typecheck.nw error.nw ir.nw irgeneration.nw ssm.nw settings.nw | cpif settings.cpp
-settings.h: settings.nw token.nw parser.nw typecheck.nw error.nw ir.nw irgeneration.nw ssm.nw
-	notangle -L -Rsettings.h token.nw parser.nw typecheck.nw error.nw ir.nw irgeneration.nw ssm.nw settings.nw | cpif settings.h
+settings.cpp: settings.nw token.nw parser.nw typecheck.nw error.nw ir.nw irgeneration.nw ssm.nw main.nw
+	notangle -L -Rsettings.cpp token.nw parser.nw typecheck.nw error.nw ir.nw irgeneration.nw ssm.nw settings.nw main.nw | cpif settings.cpp
+settings.h: settings.nw token.nw parser.nw typecheck.nw error.nw ir.nw irgeneration.nw ssm.nw main.nw
+	notangle -L -Rsettings.h token.nw parser.nw typecheck.nw error.nw ir.nw irgeneration.nw ssm.nw settings.nw main.nw | cpif settings.h
 
 test.tex: testprogs/testheader.nw testprogs/testtrailer.nw testprogs/tokentest.nw testprogs/parsetest.nw testprogs/exprparsetest.nw testprogs/typeparsetest.nw testprogs/irgentest.nw testprogs/compilertest.nw testprogs/statementparsetest.nw testprogs/stresstest.nw
 	noweave -t4 -delay testprogs/testheader.nw testprogs/tokentest.nw testprogs/parsetest.nw testprogs/typeparsetest.nw testprogs/exprparsetest.nw testprogs/statementparsetest.nw testprogs/irgentest.nw testprogs/compilertest.nw testprogs/stresstest.nw testprogs/testtrailer.nw | cpif test.tex
@@ -221,6 +233,10 @@ testprogs/compilercorrect.sh: testprogs/compilertest.nw
 	notangle -L -Rcompilercorrect.sh testprogs/compilertest.nw > testprogs/compilercorrect.sh
 	chmod +x testprogs/compilercorrect.sh
 
+testprogs/amdcorrect.sh: testprogs/compilertest.nw
+	notangle -L -Ramdcorrect.sh testprogs/compilertest.nw > testprogs/amdcorrect.sh
+	chmod +x testprogs/amdcorrect.sh
+
 testprogs/commentgen: testprogs/commentgen.cpp
 testprogs/commentgen.cpp: testprogs/stresstest.nw
 	notangle -L -Rcommentgen.cpp testprogs/stresstest.nw | cpif testprogs/commentgen.cpp
@@ -247,6 +263,7 @@ clean:
 	rm -f settings.h settings.cpp settings.o
 	rm -f position.h version.h ir.h
 	rm -f ssm.h ssm.cpp ssm.o
+	rm -f amd64.h amd64.cpp amd64.o cplatform.c
 	rm -f testprogs/tokentest.cpp testprogs/tokentest.o testprogs/tokentest
 	rm -f testprogs/parsetest.cpp testprogs/parsetest.o testprogs/parsetest
 	rm -f testprogs/typeparsetest.cpp testprogs/typeparsetest.o testprogs/typeparsetest
@@ -257,7 +274,7 @@ clean:
 	rm -f testprogs/irgentest.cpp testprogs/irgentest.o testprogs/irgentest
 	rm -f testprogs/parsecorrect.sh testprogs/parsefail.sh testprogs/parsewarn.sh
 	rm -f testprogs/typecheckcorrect.sh testprogs/typecheckfail.sh testprogs/typecheckwarn.sh
-	rm -f testprogs/irgencorrect.sh testprogs/compilercorrect.sh
+	rm -f testprogs/irgencorrect.sh testprogs/compilercorrect.sh testprogs/amdcorrect.sh
 	rm -f testprogs/tokencorrect.sh testprogs/tokenfail.sh
 	rm -f testprogs/commentgen testprogs/commentgen.cpp
 	rm -f testprogs/bracketgen testprogs/bracketgen.cpp
