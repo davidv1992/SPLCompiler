@@ -20,7 +20,7 @@ Int facI ( Int n ) {
 }
 
 // A main function to check the results
-Void main () {
+Int main () {
 	Int n = 0;
 	Int facN = 1;
 	Bool ok = True;
@@ -35,6 +35,7 @@ Void main () {
 	print ( ok );
 	print ('
 ');
+	return 0;
 }
 
 // A list based factorial function
