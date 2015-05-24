@@ -15,14 +15,16 @@ public:
 	std::string instruction;
 	std::vector<int> fillin;
 	std::vector<int> defs, uses;
+	bool isMove;
 	
 	asm_statement(std::string ins, std::vector<int> f, std::vector<int> d, 
-					std::vector<int> u)
+					std::vector<int> u, bool _isMove=false)
 	{
 		instruction = ins;
 		fillin = f;
 		defs = d;
 		uses = u;
+		isMove = _isMove;
 	}
 	
 	void print(FILE *stream, std::vector<std::string> fillin_data)
@@ -32,6 +34,9 @@ public:
 		size_t i = 0;
 		size_t nMatch = 0;
 		size_t match = -1;
+		
+		if (isMove && fillin_data[fillin[0]] == fillin_data[fillin[1]])
+			return;
 		
 		while ((match = instruction.find("%#%", i)) != instruction.npos)
 		{

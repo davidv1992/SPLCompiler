@@ -104,7 +104,7 @@ else
 {
 	assembly->blocks[trace].push_back(
 		asm_statement("mov %#%, %#%", {restemp, temp->temp_id+14},
-			{restemp}, {temp->temp_id+14}));
+			{restemp}, {temp->temp_id+14}, true));
 }
 @
 
@@ -118,7 +118,7 @@ else
 {
 	assembly->blocks[trace].push_back(
 		asm_statement("mov %#%, %#%", {restemp, temp->temp_id+14},
-			{restemp}, {temp->temp_id+14}));
+			{restemp}, {temp->temp_id+14}, true));
 }
 @
 
@@ -132,7 +132,7 @@ else
 {
 	assembly->blocks[trace].push_back(
 		asm_statement("mov %#%, %#%", {restemp, temp->temp_id+14},
-			{restemp}, {temp->temp_id+14}));
+			{restemp}, {temp->temp_id+14}, true));
 }
 @
 
@@ -146,7 +146,7 @@ else
 {
 	assembly->blocks[trace].push_back(
 		asm_statement("mov %#%, %#%", {restemp, temp->temp_id+14},
-			{restemp}, {temp->temp_id+14}));
+			{restemp}, {temp->temp_id+14}, true));
 }
 @
 
@@ -448,12 +448,12 @@ case IR_INT_MOD:
 	if (binop->op == IR_INT_DIV)
 	{
 		assembly->blocks[trace].push_back(
-			asm_statement("mov %#%, %#%", {restemp, 0}, {restemp}, {0}));
+			asm_statement("mov %#%, %#%", {restemp, 0}, {restemp}, {0}, true));
 	}
 	else
 	{
 		assembly->blocks[trace].push_back(
-			asm_statement("mov %#%, %#%", {restemp, 3}, {restemp}, {3}));
+			asm_statement("mov %#%, %#%", {restemp, 3}, {restemp}, {3}, true));
 	}
 	break;
 }
@@ -626,7 +626,6 @@ assembly->blocks[trace].push_back(
 
 <<AMD64 translate functioncall>>=
 ir_statement_functioncall *call = (ir_statement_functioncall*)statement;
-assert(call->arguments.size() <= 6);
 assert(call->return_temporaries.size() <= 2);
 
 vector<int> argTemps;
@@ -639,17 +638,38 @@ for (auto arg : call->arguments)
 
 vector<int> callUses;
 
-for (unsigned int i = 0; i<argTemps.size(); i++)
+for (unsigned int i = 0; i<argTemps.size() && i < 6; i++)
 {
 	assembly->blocks[trace].push_back(
 		asm_statement("mov %#%, %#%", {argumentRegisters[i], argTemps[i]},
-			{argumentRegisters[i]}, {argTemps[i]}));
+			{argumentRegisters[i]}, {argTemps[i]}, true));
 	callUses.push_back(argumentRegisters[i]);
+}
+
+if (argTemps.size() > 6 && argTemps.size() % 2 == 1)
+	assembly->blocks[trace].push_back(
+		asm_statement("sub %rsp, 8", {}, {}, {}));
+
+for (int i = argTemps.size()-1; i >= 6; i--)
+{
+	assembly->blocks[trace].push_back(
+		asm_statement("push %#%", {argTemps[i]}, {}, {argTemps[i]}));
 }
 
 assembly->blocks[trace].push_back(
 	asm_statement("call " + call->function, {},
 		{0, 2, 3, 4, 5, 6, 7, 8, 9}, callUses));
+
+if (argTemps.size() > 6)
+{
+	int adj = argTemps.size()-6;
+	if (adj % 2 == 1)
+		adj++;
+	ostringstream o;
+	o << "add %rsp, " << adj*8;
+	assembly->blocks[trace].push_back(
+		asm_statement(o.str(), {}, {}, {}));
+}
 
 for (unsigned int i = 0; i<call->return_temporaries.size(); i++)
 {
@@ -657,7 +677,7 @@ for (unsigned int i = 0; i<call->return_temporaries.size(); i++)
 		continue;
 	assembly->blocks[trace].push_back(
 		asm_statement("mov %#%, %#%", {call->return_temporaries[i]+14, returnRegisters[i]},
-			{call->return_temporaries[i]+14}, {returnRegisters[i]}));
+			{call->return_temporaries[i]+14}, {returnRegisters[i]}, true));
 }
 @
 
@@ -805,23 +825,29 @@ On function entry and exit, we (re)store all callee save registers.
 	
 	//callee saves
 	assembly->blocks[0].push_back(
-		asm_statement("mov %#%, %#%", {rbxTemp, 1}, {rbxTemp}, {1}));
+		asm_statement("mov %#%, %#%", {rbxTemp, 1}, {rbxTemp}, {1}, true));
 	assembly->blocks[0].push_back(
-		asm_statement("mov %#%, %#%", {r12Temp, 10}, {r12Temp}, {10}));
+		asm_statement("mov %#%, %#%", {r12Temp, 10}, {r12Temp}, {10}, true));
 	assembly->blocks[0].push_back(
-		asm_statement("mov %#%, %#%", {r13Temp, 11}, {r13Temp}, {11}));
+		asm_statement("mov %#%, %#%", {r13Temp, 11}, {r13Temp}, {11}, true));
 	assembly->blocks[0].push_back(
-		asm_statement("mov %#%, %#%", {r14Temp, 12}, {r14Temp}, {12}));
+		asm_statement("mov %#%, %#%", {r14Temp, 12}, {r14Temp}, {12}, true));
 	assembly->blocks[0].push_back(
-		asm_statement("mov %#%, %#%", {r15Temp, 13}, {r15Temp}, {13}));
-		
-	assert(function->num_args <= 6);
+		asm_statement("mov %#%, %#%", {r15Temp, 13}, {r15Temp}, {13}, true));
 	
-	for (int i=0; i<function->num_args; i++)
+	for (int i=0; i<function->num_args && i < 6; i++)
 	{
 		assembly->blocks[0].push_back(
 			asm_statement("mov %#%, %#%", 
-				{14+i, argumentRegisters[i]}, {14+i}, {argumentRegisters[i]}));
+				{14+i, argumentRegisters[i]}, {14+i}, {argumentRegisters[i]}, true));
+	}
+	
+	for (int i=6; i<function->num_args; i++)
+	{
+		ostringstream o;
+		o << "mov %#%, [%rbp+" << (i-4)*8 << "]";
+		assembly->blocks[0].push_back(
+			asm_statement(o.str(), {14+i}, {14+i}, {}));
 	}
 	
 	vector<int> retUses = {1, 10, 11, 12, 13};
@@ -832,21 +858,21 @@ On function entry and exit, we (re)store all callee save registers.
 			asm_statement("mov %#%, %#%",
 				{returnRegisters[i], 14+i+function->num_args},
 				{returnRegisters[i]},
-				{14+i+function->num_args}));
+				{14+i+function->num_args}, true));
 		
 		retUses.push_back(returnRegisters[i]);
 	}
 	
 	assembly->blocks.back().push_back(
-		asm_statement("mov %#%, %#%", {13, r15Temp}, {13}, {r15Temp}));
+		asm_statement("mov %#%, %#%", {13, r15Temp}, {13}, {r15Temp}, true));
 	assembly->blocks.back().push_back(
-		asm_statement("mov %#%, %#%", {12, r14Temp}, {12}, {r14Temp}));
+		asm_statement("mov %#%, %#%", {12, r14Temp}, {12}, {r14Temp}, true));
 	assembly->blocks.back().push_back(
-		asm_statement("mov %#%, %#%", {11, r13Temp}, {11}, {r13Temp}));
+		asm_statement("mov %#%, %#%", {11, r13Temp}, {11}, {r13Temp}, true));
 	assembly->blocks.back().push_back(
-		asm_statement("mov %#%, %#%", {10, r12Temp}, {10}, {r12Temp}));
+		asm_statement("mov %#%, %#%", {10, r12Temp}, {10}, {r12Temp}, true));
 	assembly->blocks.back().push_back(
-		asm_statement("mov %#%, %#%", {1, rbxTemp}, {1}, {rbxTemp}));
+		asm_statement("mov %#%, %#%", {1, rbxTemp}, {1}, {rbxTemp}, true));
 	
 	assembly->blocks.back().push_back(
 		asm_statement("leave", {}, {}, {}));

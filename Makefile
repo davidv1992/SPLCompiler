@@ -7,7 +7,7 @@
 BASH := /bin/bash
 CXXFLAGS := -I. -g -Wall -Wextra -Wno-unused-parameter -Wno-unused-variable -Werror -std=c++11
 
-test: test/tokentest test/parsetest test/typechecktest test/irgentest test/compiler
+test: test/tokentest test/parsetest test/typechecktest test/irgentest test/compiler test/compileramd
 	@$(BASH) -c "echo -e '\E[32mAll tests passed\E[0m'"
 
 test/tokentest: testprogs/tokentest testprogs/tokencorrect.sh testprogs/tokenfail.sh
@@ -30,7 +30,7 @@ test/irgentest: testprogs/irgentest testprogs/irgencorrect.sh
 test/compiler: compiler testprogs/compilercorrect.sh
 	$(BASH) ./testprogs/compilercorrect.sh
 
-test/amd: compiler testprogs/amdcorrect.sh cplatform.c
+test/compileramd: compiler testprogs/amdcorrect.sh cplatform.c
 	$(BASH) ./testprogs/amdcorrect.sh
 
 limittest: limittest/comment limittest/bracket
