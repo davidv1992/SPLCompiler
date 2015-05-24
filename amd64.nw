@@ -1,13 +1,19 @@
 \chapter{AMD64 code generation}
 
-I have, for my expansion project, decided to implement code generation for the AMD64 processor architecture.
+I have, for my expansion project, decided to implement code generation for the AMD64 processor architecture. This chapter is (part of) the result of that decision, and contains all the code that actually generates the AMD64 instructions. It uses the standard register allocator for assigning all the temporaries to registers.
+
+The code here is in it's current state by no means a good assembly generator for the AMD64 platform. It works, but the code produced is rather heavy on move instructions, and does not make use at all of the rich addressing scheme provided by AMD64 processors.
 
 \section{Word size and calling convention}
 
+I have made the decision to use 8 bytes as the universal word size for all objects in the IR. This significantly simplifies dealing with the IR\_UNKNOWN type, and the IR\_UNKNOWN type meant that at the memory level, there was no choice to begin with.
+
+As for the calling convention and binary structure, i have decided to follow the System V AMD64 ABI as published by AMD \cite{amdabi}. With the choice made above regarding the size of objects of the various IR types, all the temporaries passed as function arguments are of class INTEGER as defined in the above document. This means the first 6 arguments are passed through the general purpose registers, and the rest through the stack. For more detail see \cite{amdabi}.
 
 \section{Dealing with temporaries}
 
 Due to the fact that almost all AMD64 instruction use register operands, the assembly generation process will also produce temporaries of itself. These are untyped, but relevant for the register allocation process. This all means we need to pay some attention to associations between the various assembly temporaries and higher level objects. I have decided to use the following convention:
+
 \begin{tabular}{|l|l|}
 \hline
 Assembly temporary & Use\\
@@ -19,7 +25,7 @@ $3$ & \%rdx register.\\
 $4$ & \%rsi register.\\
 $5$ & \%rdi register.\\
 $6-13$ & \%r8 - \%r15 registers.\\
-$14-14+\text{#IRtemps}$ & IR temporaries.\\
+$14-(13+\text{\#IRtemps})$ & IR temporaries.\\
 Onwards & Assembly temporaries.\\
 \hline
 \end{tabular}
