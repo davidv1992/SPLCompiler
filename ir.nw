@@ -843,13 +843,13 @@ Constant values are also allowed as expressions, but can only be of integer or b
 class ir_expression_intconst : public ir_expression_int
 {
 public:
-	int value;
+	long long value;
 	
-	ir_expression_intconst(int v) { value = v; }
+	ir_expression_intconst(long long v) { value = v; }
 	virtual ~ir_expression_intconst() {}
 	virtual void print()
 	{
-		printf("%d", value);
+		printf("%lld", value);
 	}
 	virtual ir_base *copy() { return new ir_expression_intconst(value); }
 };
