@@ -1060,7 +1060,8 @@ for (unsigned int i=0; i<assembly->blocks.size(); i++)
 		}
 		
 		newBlock.push_back(
-			asm_statement(assembly->blocks[i][j].instruction, nfillin, ndef, nuse));
+			asm_statement(assembly->blocks[i][j].instruction, nfillin, ndef, 
+				nuse, assembly->blocks[i][j].isMove));
 		
 		for (auto def : assembly->blocks[i][j].defs)
 		{
