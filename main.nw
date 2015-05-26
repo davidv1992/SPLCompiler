@@ -20,6 +20,7 @@ COMPILER_SETTING(bool, ssmoutput, false, SSMOUTPUT_FLAG)
 #include "ssm.h"
 #include "amd64.h"
 #include "error.h"
+#include "constprop.h"
 #include <cstdio>
 #include <map>
 
@@ -46,6 +47,8 @@ int main(int argc, char **argv)
 	ir_module *module = irgen_translate_program(program);
 	
 	generate_runtime(module);
+	
+	cp_rewrite_module(module);
 	
 	//module->print();
 	

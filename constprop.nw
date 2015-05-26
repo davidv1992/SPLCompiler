@@ -1,0 +1,329 @@
+\part{IR Optimizations}
+\chapter{Constant propagation}
+
+One of the easiest optimizations we can implement on the IR is the simplification of binary and unary operations involving only constants as operands. The following rewrites an IR module using this optimization
+
+\section{Rewriting expressions}
+
+This is were the magic happens, rewrite all binop's and unop's that have only constant arguments.
+
+<<CP rewrite expression>>=
+ir_expression* cp_rewrite_expression(ir_expression *expression)
+{
+	if (typeid(*expression) == typeid(ir_expression_intar_binop))
+	{
+		ir_expression_intar_binop *binop = (ir_expression_intar_binop*)expression;
+		binop->left = (ir_expression_int*)cp_rewrite_expression(binop->left);
+		binop->right = (ir_expression_int*)cp_rewrite_expression(binop->right);
+		<<CP rewrite intar binop>>
+	}
+	else if (typeid(*expression) == typeid(ir_expression_ptrar_binop))
+	{
+		ir_expression_ptrar_binop *binop = (ir_expression_ptrar_binop*)expression;
+		binop->left = (ir_expression_ptr*)cp_rewrite_expression(binop->left);
+		binop->right = (ir_expression_int*)cp_rewrite_expression(binop->right);
+	}
+	else if (typeid(*expression) == typeid(ir_expression_boolar_binop))
+	{
+		ir_expression_boolar_binop *binop = (ir_expression_boolar_binop*)expression;
+		binop->left = (ir_expression_bool*)cp_rewrite_expression(binop->left);
+		binop->right = (ir_expression_bool*)cp_rewrite_expression(binop->right);
+		<<CP rewrite boolar binop>>
+	}
+	else if (typeid(*expression) == typeid(ir_expression_intar_unop))
+	{
+		ir_expression_intar_unop *unop = (ir_expression_intar_unop*)expression;
+		unop->inner = (ir_expression_int*)cp_rewrite_expression(unop->inner);
+		<<CP rewrite intar unop>>
+	}
+	else if (typeid(*expression) == typeid(ir_expression_boolar_unop))
+	{
+		ir_expression_boolar_unop *unop = (ir_expression_boolar_unop*)expression;
+		unop->inner = (ir_expression_bool*)cp_rewrite_expression(unop->inner);
+		<<CP rewrite boolar unop>>
+	}
+	else if (typeid(*expression) == typeid(ir_expression_intcmp))
+	{
+		ir_expression_intcmp *cmp = (ir_expression_intcmp*)expression;
+		cmp->left = (ir_expression_int*)cp_rewrite_expression(cmp->left);
+		cmp->right = (ir_expression_int*)cp_rewrite_expression(cmp->right);
+		<<CP rewrite inctmp>>
+	}
+	else if (typeid(*expression) == typeid(ir_expression_ptrcmp))
+	{
+		ir_expression_ptrcmp *cmp = (ir_expression_ptrcmp*)expression;
+		cmp->left = (ir_expression_ptr*)cp_rewrite_expression(cmp->left);
+		cmp->right = (ir_expression_ptr*)cp_rewrite_expression(cmp->right);
+	}
+	else if (typeid(*expression) == typeid(ir_expression_boolcmp))
+	{
+		ir_expression_boolcmp *cmp = (ir_expression_boolcmp*)expression;
+		cmp->left = (ir_expression_bool*)cp_rewrite_expression(cmp->left);
+		cmp->right = (ir_expression_bool*)cp_rewrite_expression(cmp->right);
+		<<CP rewrite boolcmp>>
+	}
+	else if (typeid(*expression) == typeid(ir_expression_unknowncmp))
+	{
+		ir_expression_unknowncmp *cmp = (ir_expression_unknowncmp*)expression;
+		cmp->left = (ir_expression_unknown*)cp_rewrite_expression(cmp->left);
+		cmp->right = (ir_expression_unknown*)cp_rewrite_expression(cmp->right);
+	}
+	else if (typeid(*expression) == typeid(ir_expression_unknown_to_int))
+	{
+		ir_expression_unknown_to_int *conv = (ir_expression_unknown_to_int*)expression;
+		conv->inner = (ir_expression_unknown*)cp_rewrite_expression(conv->inner);
+	}
+	else if (typeid(*expression) == typeid(ir_expression_unknown_to_ptr))
+	{
+		ir_expression_unknown_to_ptr *conv = (ir_expression_unknown_to_ptr*)expression;
+		conv->inner = (ir_expression_unknown*)cp_rewrite_expression(conv->inner);
+	}
+	else if (typeid(*expression) == typeid(ir_expression_unknown_to_bool))
+	{
+		ir_expression_unknown_to_bool *conv = (ir_expression_unknown_to_bool*)expression;
+		conv->inner = (ir_expression_unknown*)cp_rewrite_expression(conv->inner);
+	}
+	else if (typeid(*expression) == typeid(ir_expression_memory))
+	{
+		ir_expression_memory *memread = (ir_expression_memory*)expression;
+		memread->address = (ir_expression_ptr*)cp_rewrite_expression(memread->address);
+	}
+	return expression;
+}
+@
+
+<<CP rewrite intar binop>>=
+if (typeid(*binop->left) == typeid(ir_expression_intconst)
+	&& typeid(*binop->right) == typeid(ir_expression_intconst))
+{
+	ir_expression_intconst *lic = (ir_expression_intconst*)binop->left;
+	ir_expression_intconst *ric = (ir_expression_intconst*)binop->right;
+	
+	switch(binop->op)
+	{
+	case IR_INT_ADD:
+		expression = new ir_expression_intconst(lic->value + ric->value);
+		break;
+	case IR_INT_SUB:
+		expression = new ir_expression_intconst(lic->value - ric->value);
+		break;
+	case IR_INT_MOD:
+		if (ric->value == 0)
+			ric->value = 1; // using undefinedness of modulo zero
+		expression = new ir_expression_intconst(lic->value % ric->value);
+		break;
+	case IR_INT_DIV:
+		if (ric->value == 0)
+			ric->value = 1; //using undefinedness of divide by zero
+		expression = new ir_expression_intconst(lic->value / ric->value);
+		break;
+	case IR_INT_MUL:
+		expression = new ir_expression_intconst(lic->value * ric->value);
+		break;
+	default:
+		assert(0);
+	}
+	
+	delete binop;
+}
+@
+
+<<CP rewrite boolar binop>>=
+if (typeid(*binop->left) == typeid(ir_expression_boolconst)
+	&& typeid(*binop->right) == typeid(ir_expression_boolconst))
+{
+	ir_expression_boolconst *lic = (ir_expression_boolconst*)binop->left;
+	ir_expression_boolconst *ric = (ir_expression_boolconst*)binop->right;
+	
+	switch(binop->op)
+	{
+	case IR_BOOL_AND:
+		expression = new ir_expression_boolconst(lic->value && ric->value);
+		break;
+	case IR_BOOL_OR:
+		expression = new ir_expression_boolconst(lic->value || ric->value);
+		break;
+	default:
+		assert(0);
+	}
+	
+	delete binop;
+}
+@
+
+<<CP rewrite intar unop>>=
+if (typeid(*unop->inner) == typeid(ir_expression_intconst))
+{
+	ir_expression_intconst *ic = (ir_expression_intconst*)unop->inner;
+	
+	switch(unop->op)
+	{
+	case IR_INT_NEG:
+		expression = new ir_expression_intconst(-ic->value);
+		break;
+	default:
+		assert(0);
+	}
+	
+	delete unop;
+}
+@
+
+<<CP rewrite boolar unop>>=
+if (typeid(*unop->inner) == typeid(ir_expression_boolconst))
+{
+	ir_expression_boolconst *ic = (ir_expression_boolconst*)unop->inner;
+	
+	switch(unop->op)
+	{
+	case IR_BOOL_NOT:
+		expression = new ir_expression_boolconst(!ic->value);
+		break;
+	default:
+		assert(0);
+	}
+	
+	delete unop;
+}
+@
+
+<<CP rewrite inctmp>>=
+if (typeid(*cmp->left) == typeid(ir_expression_intconst)
+	&& typeid(*cmp->right) == typeid(ir_expression_intconst))
+{
+	ir_expression_intconst *lic = (ir_expression_intconst*)cmp->left;
+	ir_expression_intconst *ric = (ir_expression_intconst*)cmp->right;
+	
+	switch(cmp->op)
+	{
+	case IR_INT_EQ:
+		expression = new ir_expression_boolconst(lic->value == ric->value);
+		break;
+	case IR_INT_NE:
+		expression = new ir_expression_boolconst(lic->value != ric->value);
+		break;
+	case IR_INT_LT:
+		expression = new ir_expression_boolconst(lic->value < ric->value);
+		break;
+	case IR_INT_LE:
+		expression = new ir_expression_boolconst(lic->value <= ric->value);
+		break;
+	case IR_INT_GT:
+		expression = new ir_expression_boolconst(lic->value > ric->value);
+		break;
+	case IR_INT_GE:
+		expression = new ir_expression_boolconst(lic->value >= ric->value);
+		break;
+	default:
+		assert(0);
+	}
+	
+	delete cmp;
+}
+@
+
+<<CP rewrite boolcmp>>=
+if (typeid(*cmp->left) == typeid(ir_expression_boolconst)
+	&& typeid(*cmp->right) == typeid(ir_expression_boolconst))
+{
+	ir_expression_boolconst *lic = (ir_expression_boolconst*)cmp->left;
+	ir_expression_boolconst *ric = (ir_expression_boolconst*)cmp->right;
+	
+	switch(cmp->op)
+	{
+	case IR_BOOL_EQ:
+		expression = new ir_expression_boolconst(lic->value == ric->value);
+		break;
+	case IR_BOOL_NE:
+		expression = new ir_expression_boolconst(lic->value != ric->value);
+		break;
+	default:
+		assert(0);
+	}
+	
+	delete cmp;
+}
+@
+
+\section{rewriting functions and modules}
+
+This module really only does something interesting with expressions. The code here just iterates over everything.
+
+<<CP rewrite statement>>=
+if (typeid(*statement) == typeid(ir_statement_assign_temp))
+{
+	ir_statement_assign_temp *assign = (ir_statement_assign_temp*)statement;
+	assign->value = cp_rewrite_expression(assign->value);
+}
+else if (typeid(*statement) == typeid(ir_statement_assign_memory))
+{
+	ir_statement_assign_memory *assign = (ir_statement_assign_memory*)statement;
+	assign->value = cp_rewrite_expression(assign->value);
+	assign->target = (ir_expression_ptr*)cp_rewrite_expression(assign->target);
+}
+else if (typeid(*statement) == typeid(ir_statement_functioncall))
+{
+	ir_statement_functioncall *call = (ir_statement_functioncall*)statement;
+	
+	for (unsigned int k = 0; k < call->arguments.size(); k++)
+	{
+		call->arguments[k] = cp_rewrite_expression(call->arguments[k]);
+	}
+}
+else if (typeid(*statement) == typeid(ir_statement_if))
+{
+	ir_statement_if *ifstat = (ir_statement_if*)statement;
+	ifstat->condition = (ir_expression_bool*)cp_rewrite_expression(ifstat->condition);
+}
+@
+
+<<CP rewrite function>>=
+void cp_rewrite_function (ir_function *function)
+{
+	for (unsigned int i=0; i<function->blocks.size(); i++)
+	{
+		for (unsigned int j=0; j<function->blocks[i].size(); j++)
+		{
+			ir_statement *statement = function->blocks[i][j];
+			<<CP rewrite statement>>
+		}
+	}
+}
+@
+
+<<CP rewrite module header>>=
+void cp_rewrite_module(ir_module *module);
+@
+<<CP rewrite module>>=
+void cp_rewrite_module(ir_module *module)
+{
+	for (auto function : module->functions)
+	{
+		cp_rewrite_function(function.second);
+	}
+}
+@
+
+\section{Source and header}
+
+<<constprop.h>>=
+#ifndef CONSTPROP_H
+#define CONSTPROP_H
+#include "ir.h"
+
+<<CP rewrite module header>>
+#endif
+@
+
+<<constprop.cpp>>=
+#include "ir.h"
+#include "constprop.h"
+#include <cassert>
+#include <typeinfo>
+
+using namespace std;
+
+<<CP rewrite expression>>
+<<CP rewrite function>>
+<<CP rewrite module>>
+@

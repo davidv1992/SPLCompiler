@@ -66,6 +66,12 @@ ast.cpp: ast.nw
 ir.h: ir.nw
 	notangle -L -Rir.h ir.nw | cpif ir.h
 
+constprop.o: constprop.cpp constprop.h ir.h
+constprop.h: constprop.nw
+	notangle -L -Rconstprop.h constprop.nw | cpif constprop.h
+constprop.cpp: constprop.nw
+	notangle -L -Rconstprop.cpp constprop.nw | cpif constprop.cpp
+
 irutil.o: irutil.cpp irutil.h ir.h
 irutil.h: irutils.nw
 	notangle -L -Rirutil.h irutils.nw | cpif irutil.h
@@ -108,12 +114,12 @@ splruntime.h: splruntime.nw
 splruntime.cpp: splruntime.nw
 	notangle -L -Rsplruntime.cpp splruntime.nw | cpif splruntime.cpp
 
-main.o: main.cpp token.h parser.h ast.h position.h typecheck.h ir.h irgeneration.h settings.h splruntime.h ssm.h error.h amd64.h
+main.o: main.cpp token.h parser.h ast.h position.h typecheck.h ir.h irgeneration.h settings.h splruntime.h ssm.h error.h amd64.h constprop.h
 main.cpp: main.nw
 	notangle -L -Rmain.cpp main.nw | cpif main.cpp
 
-compiler: main.o token.o parser.o ast.o error.o typecheck.o irgeneration.o settings.o splruntime.o ssm.o irutil.o assembly.o amd64.o
-	g++ $(CXXFLASGS) -o compiler main.o token.o parser.o ast.o error.o typecheck.o irgeneration.o settings.o splruntime.o ssm.o irutil.o assembly.o amd64.o
+compiler: main.o token.o parser.o ast.o error.o typecheck.o irgeneration.o settings.o splruntime.o ssm.o irutil.o assembly.o amd64.o constprop.o
+	g++ $(CXXFLASGS) -o compiler main.o token.o parser.o ast.o error.o typecheck.o irgeneration.o settings.o splruntime.o ssm.o irutil.o assembly.o amd64.o constprop.o
 
 amd64.o: amd64.cpp amd64.h assembly.h ir.h irutil.h
 amd64.h: amd64.nw
@@ -260,6 +266,7 @@ clean:
 	rm -f splruntime.h splruntime.cpp splruntime.o
 	rm -f assembly.h assembly.cpp assembly.o
 	rm -f irutil.h irutil.cpp irutil.o
+	rm -f constprop.h constprop.cpp constprop.o
 	rm -f settings.h settings.cpp settings.o
 	rm -f position.h version.h ir.h
 	rm -f ssm.h ssm.cpp ssm.o
