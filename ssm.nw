@@ -832,7 +832,7 @@ void ssm_translate_function(FILE *stream, ir_function *function, string fnname)
 		assembly->blocks[0].push_back(asm_statement("stl -1",{},{},{}));
 	}
 	
-	for (unsigned int i=0; i<function->temp_types.size(); i++)
+	for (unsigned int i=0; i<coloring.size(); i++)
 	{
 		ostringstream o;
 		if (coloring[i] < function->num_args)

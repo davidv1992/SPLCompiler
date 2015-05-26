@@ -320,33 +320,54 @@ case OP_GE:
 	auto lhs = irgen_translate_expression(function, trace, binop->left, true);
 	auto rhs = irgen_translate_expression(function, trace, binop->right, true);
 	
-	int comparisonResultTemporary = function->add_temp(IR_TYPE_INT);
+	if (typeid(*binop->left->type) == typeid(ast_int_type) ||
+		typeid(*binop->left->type) == typeid(ast_int_type))
+	{
+		<<translate simple ast comparison>>
+	}
+	else
+	{
+		int comparisonResultTemporary = function->add_temp(IR_TYPE_INT);
 	
-	vector<ir_expression*> cmpargs;
-	cmpargs.push_back(lhs.first);
-	cmpargs.push_back(lhs.second);
-	cmpargs.push_back(rhs.first);
-	cmpargs.push_back(rhs.second);
+		vector<ir_expression*> cmpargs;
+		cmpargs.push_back(lhs.first);
+		cmpargs.push_back(lhs.second);
+		cmpargs.push_back(rhs.first);
+		cmpargs.push_back(rhs.second);
 	
-	vector<int> cmpreturns;
-	cmpreturns.push_back(comparisonResultTemporary);
+		vector<int> cmpreturns;
+		cmpreturns.push_back(comparisonResultTemporary);
 	
-	function->blocks[trace].push_back(
-		new ir_statement_functioncall("_cmp", 
-			cmpargs,
-			cmpreturns));
+		function->blocks[trace].push_back(
+			new ir_statement_functioncall("_cmp", 
+				cmpargs,
+				cmpreturns));
 	
-	result.first = new ir_expression_intcmp(
-		new ir_expression_temp_int(comparisonResultTemporary),
-		new ir_expression_intconst(0),
-		translate_ast_compareop(binop->op));
-	
+		result.first = new ir_expression_intcmp(
+			new ir_expression_temp_int(comparisonResultTemporary),
+			new ir_expression_intconst(0),
+			translate_ast_compareop(binop->op));
+	}
 	if (generate_type)
 	{
 		result.second = new ir_expression_intconst(IRGEN_RUNTIME_BOOL);
 	}
 	break;
 }
+@
+
+Comparison on ints and chars can be done inline, and gives large savings:
+<<translate simple ast comparison>>=
+delete lhs.second;
+delete rhs.second;
+ir_expression_int *lh = dynamic_cast<ir_expression_int*>(lhs.first);
+ir_expression_int *rh = dynamic_cast<ir_expression_int*>(rhs.first);
+assert(lh != NULL);
+assert(rh != NULL);
+result.first = new ir_expression_intcmp(
+	lh,
+	rh,
+	translate_ast_compareop(binop->op));
 @
 
 The colon operator leads to the allocation of a new object, using \_makeList:
