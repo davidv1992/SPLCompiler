@@ -270,6 +270,535 @@ for (int i=0; i<=maxID; i++)
 }
 @
 
+\subsection{Graph coloring mark 2}
+
+We need to keep track of the colorable temps and moves related to them. These datatypes are for keeping track of the status of each of them. The algorithm used here is based on the graph coloring algorithm presented in chapter 11 of \cite{appel}
+
+<<graph coloring types>>=
+enum nodestate {
+	INITIAL,
+	PRECOLORED,
+	SIMPLIFYABLE,
+	FREEZABLE,
+	SPILLABLE,
+	SPILLED,
+	VCOALESCED,
+	SELECTED,
+	COLORED
+};
+enum movestate {
+	MINITIAL,
+	COALESCED,
+	CONSTRAINED,
+	FROZEN,
+	WORKLIST,
+	ACTIVE,
+};
+@
+
+<<do full graph coloring>>=
+vector<nodestate> nodeStatus(maxID+1, INITIAL);
+vector<movestate> moveStatus;
+vector<pair<int, int> > moves;
+vector<set<int> > assocMoves(maxID+1);
+vector<vector<int> > interfereWith(maxID+1);
+vector<int> degree(maxID+1, 0);
+set<pair<int, int> > interferenceGraph;
+vector<int> alias(maxID+1, -1);
+vector<int> uses(maxID+1, 0);
+
+set<int> spillCandidates;
+set<int> freezeCandidates;
+queue<int> simplifyQueue;
+queue<int> moveQueue;
+stack<int> selectStack;
+coloring.clear();
+coloring.resize(maxID+1, -1);
+
+<<build full graph coloring datastructures>>
+<<build initial worklists>>
+while (true)
+{
+	if (!simplifyQueue.empty())
+	{
+		<<process simplify worklist>>
+	}
+	else if (!moveQueue.empty())
+	{
+		<<process move worklist>>
+	}
+	else if (!freezeCandidates.empty())
+	{
+		<<freeze move node>>
+	}
+	else if (!spillCandidates.empty())
+	{
+		<<spill node>>
+	}
+	else
+	{
+		break;
+	}
+}
+<<color nodes>>
+@
+
+<<color nodes>>=
+for (auto kv : preColor)
+{
+	coloring[kv.first] = kv.second;
+}
+
+while (!selectStack.empty())
+{
+	int cur = selectStack.top();
+	selectStack.pop();
+	nodeStatus[cur] = COLORED;
+
+	set<int> seen;
+	seen.insert(-1);
+	
+	for (auto i : interfereWith[cur])
+	{
+		int j = i;
+		while (alias[j] != -1) j = alias[j];
+		seen.insert(coloring[j]);
+	}
+	
+	int color = -1;
+	for (auto it : seen)
+	{
+		if (it == color)
+			color++;
+		else
+			break;
+	}
+	
+	coloring[cur] = color;
+}
+
+for (int i=0; i<maxID+1; i++)
+{
+	if (alias[i] != -1)
+	{
+		int j = i;
+		while (alias[j] != -1) j = alias[j];
+		coloring[i] = coloring[j];
+	}
+}
+@
+
+<<check moverelated>>=
+bool isMoveRelated(int n, vector<set<int> > &assocMoves, vector<movestate> &moveStatus)
+{
+	for (auto mov : assocMoves[n])
+		if (moveStatus[mov] == ACTIVE || moveStatus[mov] == WORKLIST)
+			return true;
+	return false;
+}
+@
+
+<<check is coalescable>>=
+bool isCoalescable(int a, int b, vector<vector<int> > &interfereWith,
+	vector<int> &degree, vector<nodestate> &nodeStatus,
+	set<pair<int, int> > &interferenceGraph, int maxColor)
+{
+	if (nodeStatus[a] == PRECOLORED)
+	{
+		for (auto i : interfereWith[b])
+		{
+			if (nodeStatus[i] == PRECOLORED)
+				continue;
+			if (degree[i] <= maxColor)
+				continue;
+			if (interferenceGraph.count(make_pair(a, i)))
+				continue;
+			return false;
+		}
+		return true;
+	}
+	else
+	{
+		set<int> done;
+		int k = 0;
+		for (auto i : interfereWith[a])
+		{
+			done.insert(i);
+			if (degree[i] > maxColor)
+				k++;
+		}
+		for (auto i : interfereWith[b])
+		{
+			if (done.count(i) != 0)
+				continue;
+			if (degree[i] > maxColor)
+				k++;
+		}
+		return k <= maxColor;
+	}
+}
+@
+
+<<decrement degree of curTar>>=
+if (nodeStatus[curTar] == SPILLABLE || nodeStatus[curTar] == SIMPLIFYABLE ||
+	nodeStatus[curTar] == FREEZABLE)
+{
+	degree[curTar]--;
+	assert(degree[curTar] >= 0);
+	if (degree[curTar] == maxColor)
+	{
+		if (nodeStatus[curTar] == SPILLABLE)
+		{
+			spillCandidates.erase(curTar);
+			if (isMoveRelated(curTar, assocMoves, moveStatus))
+			{
+				nodeStatus[curTar] = FREEZABLE;
+				freezeCandidates.insert(curTar);
+			}
+			else
+			{
+				nodeStatus[curTar] = SIMPLIFYABLE;
+				simplifyQueue.push(curTar);
+			}
+		
+			for (auto mov : assocMoves[curTar])
+			{
+				if (moveStatus[mov] == ACTIVE)
+				{
+					moveStatus[mov] = WORKLIST;
+					moveQueue.push(mov);
+				}
+			}
+			for (unsigned int j=0; j<interfereWith[curTar].size(); j++)
+			{
+				for (auto mov : assocMoves[j])
+				{
+					if (moveStatus[mov] == ACTIVE)
+					{
+						moveStatus[mov] = WORKLIST;
+						moveQueue.push(mov);
+					}
+				}
+			}
+		}
+	}
+}
+@
+
+<<freeze move node>>=
+int cur = *freezeCandidates.begin();
+freezeCandidates.erase(cur);
+nodeStatus[cur] = SIMPLIFYABLE;
+simplifyQueue.push(cur);
+for (auto mov : assocMoves[cur])
+{
+	if (moveStatus[mov] != ACTIVE)
+		continue;
+	
+	int a = moves[mov].first;
+	while (alias[a] != -1) a = alias[a];
+	int b = moves[mov].second;
+	while (alias[b] != -1) b = alias[b];
+	int c = cur;
+	while (alias[c] != -1) c = alias[c];
+	if (b == c)
+	{
+		swap(a,b);
+	}
+	
+	moveStatus[mov] = FROZEN;
+	
+	if (!isMoveRelated(b, assocMoves, moveStatus) &&
+		nodeStatus[b] == FREEZABLE)
+	{
+		freezeCandidates.erase(b);
+		nodeStatus[b] = SIMPLIFYABLE;
+		simplifyQueue.push(b);
+	}
+}
+@
+
+<<spill node>>=
+int bestSpill = -1;
+double bestSpillScore = -1.0;
+for (auto n : spillCandidates)
+{
+	double curScore = degree[n];
+	if (uses[n] != 0)
+		curScore = curScore / double(uses[n]);
+	
+	if (curScore > bestSpillScore)
+	{
+		bestSpillScore = curScore;
+		bestSpill = n;
+	}
+}
+
+int cur = bestSpill;
+
+for (auto mov : assocMoves[cur])
+{
+	if (moveStatus[mov] != ACTIVE)
+		continue;
+	
+	int a = moves[mov].first;
+	while (alias[a] != -1) a = alias[a];
+	int b = moves[mov].second;
+	while (alias[b] != -1) b = alias[b];
+	int c = cur;
+	while (alias[c] != -1) c = alias[c];
+	if (b == c)
+	{
+		swap(a,b);
+	}
+	
+	moveStatus[mov] = FROZEN;
+	
+	if (!isMoveRelated(b, assocMoves, moveStatus) &&
+		nodeStatus[b] == FREEZABLE)
+	{
+		freezeCandidates.erase(b);
+		nodeStatus[b] = SIMPLIFYABLE;
+		simplifyQueue.push(b);
+	}
+}
+
+spillCandidates.erase(bestSpill);
+nodeStatus[bestSpill] = SIMPLIFYABLE;
+simplifyQueue.push(bestSpill);
+@
+
+<<process simplify worklist>>=
+{
+	int cur = simplifyQueue.front();
+	simplifyQueue.pop();
+	selectStack.push(cur);
+	nodeStatus[cur] = SELECTED;
+	for (unsigned int i=0; i<interfereWith[cur].size(); i++)
+	{
+		int curTar = interfereWith[cur][i];
+		<<decrement degree of curTar>>
+	}
+}
+@
+
+<<process move worklist>>=
+{
+	int m = moveQueue.front();
+	moveQueue.pop();
+	
+	int a = moves[m].first;
+	while (alias[a] != -1) a = alias[a];
+	int b = moves[m].second;
+	while (alias[b] != -1) b = alias[b];
+	
+	if (nodeStatus[b] == PRECOLORED)
+		swap(a,b);
+	
+	if (a == b)
+	{
+		moveStatus[m] = COALESCED;
+		if (!isMoveRelated(a, assocMoves, moveStatus) && 
+			nodeStatus[a] == FREEZABLE)
+		{
+			freezeCandidates.erase(a);
+			nodeStatus[a] = SIMPLIFYABLE;
+			simplifyQueue.push(a);
+		}
+	}
+	else if (nodeStatus[b] == PRECOLORED || interferenceGraph.count(make_pair(a,b)) != 0)
+	{
+		moveStatus[m] = CONSTRAINED;
+		if (!isMoveRelated(a, assocMoves, moveStatus) &&
+			nodeStatus[a] == FREEZABLE)
+		{
+			freezeCandidates.erase(a);
+			nodeStatus[a] = SIMPLIFYABLE;
+			simplifyQueue.push(a);
+		}
+		if (!isMoveRelated(b, assocMoves, moveStatus) &&
+			nodeStatus[b] == FREEZABLE)
+		{
+			freezeCandidates.erase(b);
+			nodeStatus[b] = SIMPLIFYABLE;
+			simplifyQueue.push(b);
+		}
+	}
+	else if (isCoalescable(a, b, interfereWith, degree, nodeStatus, interferenceGraph, maxColor))
+	{
+		moveStatus[m] = COALESCED;
+		if (nodeStatus[b] == FREEZABLE)
+		{
+			freezeCandidates.erase(b);
+		}
+		else
+		{
+			spillCandidates.erase(b);
+		}
+		nodeStatus[b] = VCOALESCED;
+		alias[b] = a;
+		for (auto mov : assocMoves[b])
+			assocMoves[a].insert(mov);
+		for (auto i : interfereWith[b])
+		{
+			if (interferenceGraph.count(make_pair(a,i)) == 1)
+			{
+				int curTar = i;
+				<<decrement degree of curTar>>
+			}
+			else
+			{
+				interferenceGraph.insert(make_pair(a,i));
+				interferenceGraph.insert(make_pair(i,a));
+				interfereWith[a].push_back(i);
+				interfereWith[i].push_back(a);
+				degree[a]++;
+			}
+		}
+		
+		if (degree[a] > maxColor && nodeStatus[a] == FREEZABLE)
+		{
+			freezeCandidates.erase(a);
+			nodeStatus[a] = SPILLABLE;
+			spillCandidates.insert(a);
+		}
+		if (!isMoveRelated(a, assocMoves, moveStatus) &&
+			nodeStatus[a] == FREEZABLE)
+		{
+			freezeCandidates.erase(a);
+			nodeStatus[a] = SIMPLIFYABLE;
+			simplifyQueue.push(a);
+		}
+	}
+	else
+	{
+		moveStatus[m] = ACTIVE;
+	}
+}
+@
+
+<<build initial worklists>>=
+for (unsigned int i=0; i<moves.size(); i++)
+{
+	moveStatus[i] = WORKLIST;
+	moveQueue.push(i);
+}
+for (int i=0; i<maxID+1; i++)
+{
+	if (preColor.count(i) != 1)
+		continue;
+	nodeStatus[i] = PRECOLORED;
+	for (unsigned int j=0; j<interfereWith[i].size(); j++)
+	{
+		int curTar = interfereWith[i][j];
+		<<decrement degree of curTar>>
+	}
+}
+for (int i=0; i<maxID+1; i++)
+{
+	if (nodeStatus[i] == PRECOLORED)
+		continue;
+	if (degree[i] > maxColor)
+	{
+		nodeStatus[i] = SPILLABLE;
+		spillCandidates.insert(i);
+	}
+	else if (isMoveRelated(i, assocMoves, moveStatus))
+	{
+		nodeStatus[i] = FREEZABLE;
+		freezeCandidates.insert(i);
+	}
+	else
+	{
+		nodeStatus[i] = SIMPLIFYABLE;
+		simplifyQueue.push(i);
+	}
+}
+@
+
+<<build full graph coloring datastructures>>=
+for (unsigned int i = 0; i<func->blocks.size(); i++)
+{
+	for (unsigned int j = 0; j<func->blocks[i].size(); j++)
+	{
+		for (auto use : func->blocks[i][j].uses)
+		{
+			uses[use]++;
+		}
+		
+		if (func->blocks[i][j].isMove)
+		{
+			int a = func->blocks[i][j].fillin[0];
+			int b = func->blocks[i][j].fillin[1];
+			
+			int index = moves.size();
+			moves.push_back(make_pair(a,b));
+			moveStatus.push_back(MINITIAL);
+			
+			assocMoves[a].insert(index);
+			assocMoves[b].insert(index);
+		}
+		for (auto it = livein[i][j].begin(); it != livein[i][j].end(); it++)
+		{
+			auto jt = it;
+			jt++;
+			for (; jt != livein[i][j].end(); jt++)
+			{
+				if (*it == *jt)
+					continue;
+				pair<int, int> curEdge = make_pair(*it, *jt);
+				if (interferenceGraph.count(curEdge) != 0)
+					continue;
+				
+				interferenceGraph.insert(curEdge);
+				curEdge = make_pair(*jt, *it);
+				interferenceGraph.insert(curEdge);
+				interfereWith[*it].push_back(*jt);
+				interfereWith[*jt].push_back(*it);
+			}
+		}
+		for (auto it = liveout[i][j].begin(); it != liveout[i][j].end(); it++)
+		{
+			auto jt = it;
+			jt++;
+			for (; jt != liveout[i][j].end(); jt++)
+			{
+				if (*it == *jt)
+					continue;
+				pair<int, int> curEdge = make_pair(*it, *jt);
+				if (interferenceGraph.count(curEdge) != 0)
+					continue;
+				
+				interferenceGraph.insert(curEdge);
+				curEdge = make_pair(*jt, *it);
+				interferenceGraph.insert(curEdge);
+				interfereWith[*it].push_back(*jt);
+				interfereWith[*jt].push_back(*it);
+			}
+			for (auto jt = func->blocks[i][j].defs.begin(); jt != func->blocks[i][j].defs.end(); jt++)
+			{
+				if (*it == *jt)
+					continue;
+				pair<int, int> curEdge = make_pair(*it, *jt);
+				if (interferenceGraph.count(curEdge) != 0)
+					continue;
+				
+				interferenceGraph.insert(curEdge);
+				curEdge = make_pair(*jt, *it);
+				interferenceGraph.insert(curEdge);
+				interfereWith[*it].push_back(*jt);
+				interfereWith[*jt].push_back(*it);
+			}
+		}
+	}
+}
+
+for (int i=0; i<maxID+1; i++)
+{
+	degree[i] = interfereWith[i].size();
+}
+@
+
 \subsection{Graph coloring}
 
 The current graph colorer is very primitive, trying to simplify and using the least number of colors, but it does not handle spilling nor precolored temps. It just simply increases the number of colors it allows every time it needs it.
@@ -311,7 +840,9 @@ for (int numCol = 1; nSimp < maxID+1; numCol++)
 				continue;
 			
 			if (interference[i][cur])
+			{
 				degree[i]--;
+			}
 			
 			if (degree[i] < numCol)
 			{
@@ -388,7 +919,9 @@ while (nSimp < maxID+1)
 				continue;
 			
 			if (interference[i][cur])
+			{
 				degree[i]--;
+			}
 			
 			if (degree[i] < maxColor)
 			{
@@ -540,7 +1073,7 @@ vector<int> registerAlloc(asm_function *func, map<int, int> preColor, int maxCol
 	}
 	else
 	{
-		<<do advanced graph coloring>>
+		<<do full graph coloring>>
 	}
 	
 	/*<<print coloring>>*/
@@ -576,6 +1109,11 @@ vector<int> registerAlloc(asm_function *func, map<int, int> preColor, int maxCol
 #include<iostream>
 
 using namespace std;
+
+<<graph coloring types>>
+
+<<check is coalescable>>
+<<check moverelated>>
 
 <<register allocation>>
 @
