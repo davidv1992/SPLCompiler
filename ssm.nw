@@ -805,7 +805,7 @@ void ssm_translate_function(FILE *stream, ir_function *function, string fnname)
 	for (int i=0; i<function->num_args+function->num_returns; i++)
 		preColor[i] = i;
 	
-	vector<int> coloring = registerAlloc(assembly, preColor, 2);
+	vector<int> coloring = registerAlloc(assembly, preColor, -1);
 	
 	assembly->blocks[0].pop_back();
 	
