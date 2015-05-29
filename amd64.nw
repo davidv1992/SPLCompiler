@@ -98,7 +98,7 @@ else
 
 \subsection{Load temporary}
 
-The result of a translated expression is a piece of code that leaves the desired value in some temp. In this case, that temp will already exist, so unless we have an explicit target temp, we don't actually need to do anything except translate the temp number.
+The result of a translated expression is a piece of code that leaves the desired value in some temp. In this case, that temp will already exist, so unless we have an explicit target temp (used when a later step wants to modify the value), we don't actually need to do anything except translate the temp number.
 
 <<AMD64 translate temp int>>=
 ir_expression_temp_int *temp = (ir_expression_temp_int*)expression;
@@ -174,7 +174,7 @@ assembly->blocks[trace].push_back(
 
 \subsection{Type conversion}
 
-Like the SSM platform, AMD64 also has no need for making these conversions explicit.
+Like the SSM platform, AMD64 also has no need for making these conversions explicit. Hence, these are just passthroughs to the inner expression.
 
 <<AMD64 translate unknown to int>>=
 ir_expression_unknown_to_int *conv = (ir_expression_unknown_to_int*)expression;
@@ -196,7 +196,7 @@ restemp = amd64_translate_expression(function, assembly, trace,
 
 \subsection{Translate comparison}
 
-Comparisons are a bit more tricky on AMD64, since we do not have a direct instruction for comparing and assigning the result. Hence i use a sequence of three instructions, assigning false, doing the comparison, and then conditionally moving true.
+Comparisons are a bit more tricky on AMD64, since we do not have a direct instruction for comparing and assigning the result. Hence we use a sequence of three instructions, assigning false, doing the comparison, and then conditionally moving true when the condition is satisfied.
 
 <<AMD64 translate intcmp>>=
 ir_expression_intcmp *cmp = (ir_expression_intcmp*)expression;
@@ -340,7 +340,7 @@ default:
 
 \subsection{Translating unary operators}
 
-The AMD64 processor architecture has the property that for the math operations, it usually has one of the source operands overlapping the destination operand. We deal with this by moving the first operand into the result register beforehand.
+The AMD64 processor architecture has the property that for the math operations, it usually has one of the source operands overlapping the destination operand. We deal with this by moving the first operand into the result register beforehand. With these measures, the unary operators are simple one-instruction sequences.
 
 <<AMD64 translate int unop>>=
 ir_expression_intar_unop *unop = (ir_expression_intar_unop *)expression;
@@ -378,7 +378,7 @@ default:
 
 \subsection{Translating binary operators}
 
-The binary operators vary in the registers they can use, so we handle them seperately
+The binary operators vary in the registers they can use, so we handle them seperately.
 
 <<AMD64 translate int binop>>=
 ir_expression_intar_binop *binop = (ir_expression_intar_binop*)expression;
@@ -420,7 +420,7 @@ case IR_INT_SUB:
 }
 @
 
-The multiply instruction always takes one input from the rax register, and produces output (which we don't use) in the rdx register.
+Since we are on AMD64, we have the more powerfull forms of imul available, hence mul is similar to add and sub
 
 <<AMD64 translate int mul>>=
 case IR_INT_MUL:
@@ -436,6 +436,8 @@ case IR_INT_MUL:
 	break;
 }
 @
+
+Division is more tricky. The processor actually only has an instruction for signed division on a 128 bit dividand stored in 2 specific registers, only the 64 divisor is in an arbitrary register. Hence we first sign-extend the 
 
 <<AMD64 translate int div and mod>>=
 case IR_INT_DIV:
@@ -465,7 +467,7 @@ case IR_INT_MOD:
 }
 @
 
-The AMD64 uses byte addressing, but the word size my implemenation uses on this platform is 8 bytes, hence we need to do multiplication before the pointer additions/substractions.
+The AMD64 uses byte addressing, but the word size my implemenation uses on this platform is 8 bytes, hence we need to do multiplication before the pointer additions/substractions. Fortunately, the lea instruction can do both the addition and multiplication for us at the same time.
 
 <<AMD64 translate ptr binop>>=
 ir_expression_ptrar_binop *binop = (ir_expression_ptrar_binop*)expression;
@@ -487,6 +489,8 @@ assembly->blocks[trace].push_back(
 	asm_statement("lea %#%, [%#%+%#%*8]", {restemp, ptrArg, offArg}, {restemp},
 		{ptrArg, offArg}));
 @
+
+The instructions available for the boolean operations are of the same form as add and sub, and thus relatively straightforward.
 
 <<AMD64 translate bool binop>>=
 ir_expression_boolar_binop *binop = (ir_expression_boolar_binop*)expression;
@@ -612,11 +616,15 @@ int amd64_translate_expression(ir_function *function, asm_function *assembly, in
 
 \subsection{Translating assign}
 
+For assignment to temp, we try to get the translate expression stage to do the operations directly on the target temp
+
 <<AMD64 translate assign temp>>=
 ir_statement_assign_temp *assign = (ir_statement_assign_temp*)statement;
 amd64_translate_expression(function, assembly, trace, 
 	assign->value, assign->target_temp_id+14);
 @
+
+To memory, we just use a mov at the end of the expression calculating sequence.
 
 <<AMD64 translate assign memory>>=
 ir_statement_assign_memory *assign = (ir_statement_assign_memory*)statement;
@@ -629,6 +637,8 @@ assembly->blocks[trace].push_back(
 @
 
 \subsection{Translating functioncall}
+
+Functioncalls are done as described by the ABI, first moving everything to the required locations, then calling the function, and then storing results in the correct places. Stack is used when more than 6 arguments need to be passed.
 
 <<AMD64 translate functioncall>>=
 ir_statement_functioncall *call = (ir_statement_functioncall*)statement;
@@ -738,6 +748,9 @@ assembly->blocks[trace].push_back(
 @
 
 \subsection{Translating statements}
+
+Putting it all together:
+
 <<AMD64 translate statement>>=
 if (typeid(*statement) == typeid(ir_statement_assign_temp))
 {
@@ -904,6 +917,8 @@ bool amd64_has_spill(vector<int> coloring)
 	return false;
 }
 @
+
+Translating a function, we first generate assembly assuming everything is in a register, and then, as long as we still have spilling in the register allocator, modify the assembly to deal with this, and redo registerallocation.
 
 <<AMD64 translate function>>=
 void amd64_translate_function(FILE *stream, ir_function *function, string fnname)

@@ -185,11 +185,11 @@ while (!work.empty())
 }
 @
 
-\subsection{Building interference graph}
+\subsection{Detecting number of temporaries}
 
-The liveness data can now be used to build an interference graph and use counts. I represent the graph using a matrix, keeping the degree of each node in a seperate array.
+A lot of code needs to know the highest ID of a temporary that is in use, this code determines that.
 
-<<build interference graph>>=
+<<determine number of temporaries>>=
 int maxID = -1;
 for (unsigned int i=0; i<func->blocks.size(); i++)
 {
@@ -210,67 +210,14 @@ for (auto kv : preColor)
 {
 	maxID = max(maxID, kv.first);
 }
-
-vector<vector<bool>> interference(maxID+1, vector<bool>(maxID+1,false));
-vector<int> uses(maxID+1,0);
-
-for (unsigned int i=0; i<func->blocks.size(); i++)
-{
-	for (unsigned int j = 0; j<func->blocks[i].size(); j++)
-	{
-		for (auto use : func->blocks[i][j].uses)
-		{
-			uses[use]++;
-		}
-		for (auto it = livein[i][j].begin(); it != livein[i][j].end(); it++)
-		{
-			auto jt = it;
-			jt++;
-			for (; jt != livein[i][j].end(); jt++)
-			{
-				if (*it == *jt)
-					continue;
-				interference[*it][*jt] = true;
-				interference[*jt][*it] = true;
-			}
-		}
-		for (auto it = liveout[i][j].begin(); it != liveout[i][j].end(); it++)
-		{
-			auto jt = it;
-			jt++;
-			for (; jt != liveout[i][j].end(); jt++)
-			{
-				if (*it == *jt)
-					continue;
-				interference[*it][*jt] = true;
-				interference[*jt][*it] = true;
-			}
-			for (auto jt = func->blocks[i][j].defs.begin(); jt != func->blocks[i][j].defs.end(); jt++)
-			{
-				if (*it == *jt)
-					continue;
-				interference[*it][*jt] = true;
-				interference[*jt][*it] = true;
-			}
-		}
-	}
-}
-
-vector<int> degree(maxID+1);
-	
-for (int i=0; i<=maxID; i++)
-{
-	int count = 0;
-	for (int j=0; j<=maxID; j++)
-	{
-		if (interference[i][j])	
-			count++;
-	}
-	degree[i] = count;
-}
 @
 
+
 \subsection{Graph coloring mark 2}
+
+For the AMD64 backend, there is a need for a register allocator that can also deal well with move instructions, trying to eliminate these. This graph colorer provides this capabality, at the cost of a significant increase in complexity of the code when compared to the simple graph colorer presented later in this chapter.
+
+\subsubsection{Graph coloring data types}
 
 We need to keep track of the colorable temps and moves related to them. These datatypes are for keeping track of the status of each of them. The algorithm used here is based on the graph coloring algorithm presented in chapter 11 of \cite{appel}
 
@@ -296,97 +243,9 @@ enum movestate {
 };
 @
 
-<<do full graph coloring>>=
-vector<nodestate> nodeStatus(maxID+1, INITIAL);
-vector<movestate> moveStatus;
-vector<pair<int, int> > moves;
-vector<set<int> > assocMoves(maxID+1);
-vector<vector<int> > interfereWith(maxID+1);
-vector<int> degree(maxID+1, 0);
-set<pair<int, int> > interferenceGraph;
-vector<int> alias(maxID+1, -1);
-vector<int> uses(maxID+1, 0);
+\subsubsection{Graph coloring utility functions}
 
-set<int> spillCandidates;
-set<int> freezeCandidates;
-queue<int> simplifyQueue;
-queue<int> moveQueue;
-stack<int> selectStack;
-coloring.clear();
-coloring.resize(maxID+1, -1);
-
-<<build full graph coloring datastructures>>
-<<build initial worklists>>
-while (true)
-{
-	if (!simplifyQueue.empty())
-	{
-		<<process simplify worklist>>
-	}
-	else if (!moveQueue.empty())
-	{
-		<<process move worklist>>
-	}
-	else if (!freezeCandidates.empty())
-	{
-		<<freeze move node>>
-	}
-	else if (!spillCandidates.empty())
-	{
-		<<spill node>>
-	}
-	else
-	{
-		break;
-	}
-}
-<<color nodes>>
-@
-
-<<color nodes>>=
-for (auto kv : preColor)
-{
-	coloring[kv.first] = kv.second;
-}
-
-while (!selectStack.empty())
-{
-	int cur = selectStack.top();
-	selectStack.pop();
-	nodeStatus[cur] = COLORED;
-
-	set<int> seen;
-	seen.insert(-1);
-	
-	for (auto i : interfereWith[cur])
-	{
-		int j = i;
-		while (alias[j] != -1) j = alias[j];
-		seen.insert(coloring[j]);
-	}
-	
-	int color = -1;
-	for (auto it : seen)
-	{
-		if (it == color)
-			color++;
-		else
-			break;
-	}
-	
-	coloring[cur] = color;
-}
-
-for (int i=0; i<maxID+1; i++)
-{
-	if (alias[i] != -1)
-	{
-		int j = i;
-		while (alias[j] != -1) j = alias[j];
-		coloring[i] = coloring[j];
-	}
-}
-@
+During the graph coloring process, it is usefull to be able to check whether a given node is related to a move, and whether we can coalesce a given node. However, these checks are non-trivial, so these functions calculate that information when required.
 
 <<check moverelated>>=
 bool isMoveRelated(int n, vector<set<int> > &assocMoves, vector<movestate> &moveStatus)
@@ -439,6 +298,8 @@ bool isCoalescable(int a, int b, vector<vector<int> > &interfereWith,
 }
 @
 
+Decrementing the degree of a node is a rather complex process, and there are a few places where we need to do this. Hence it is usefull to split it out into it's own piece.
+
 <<decrement degree of curTar>>=
 if (nodeStatus[curTar] == SPILLABLE || nodeStatus[curTar] == SIMPLIFYABLE ||
 	nodeStatus[curTar] == FREEZABLE)
@@ -485,88 +346,99 @@ if (nodeStatus[curTar] == SPILLABLE || nodeStatus[curTar] == SIMPLIFYABLE ||
 }
 @
 
-<<freeze move node>>=
-int cur = *freezeCandidates.begin();
-freezeCandidates.erase(cur);
-nodeStatus[cur] = SIMPLIFYABLE;
-simplifyQueue.push(cur);
-for (auto mov : assocMoves[cur])
+\subsubsection{Graph coloring proper}
+
+This is the graph coloring main loop. The main loop runs until all work collections are empty. The invariants enforced in each step guarantee that this only happens when every temporary is either on the coloring stack, or is coalesced with another temporary. For good measure, all the data structures are defined here too.
+
+<<do full graph coloring>>=
+vector<nodestate> nodeStatus(maxID+1, INITIAL);
+vector<movestate> moveStatus;
+vector<pair<int, int> > moves;
+vector<set<int> > assocMoves(maxID+1);
+vector<vector<int> > interfereWith(maxID+1);
+vector<int> degree(maxID+1, 0);
+set<pair<int, int> > interferenceGraph;
+vector<int> alias(maxID+1, -1);
+vector<int> uses(maxID+1, 0);
+
+set<int> spillCandidates;
+set<int> freezeCandidates;
+queue<int> simplifyQueue;
+queue<int> moveQueue;
+stack<int> selectStack;
+coloring.clear();
+coloring.resize(maxID+1, -1);
+
+<<build full graph coloring datastructures>>
+<<build initial worklists>>
+while (true)
 {
-	if (moveStatus[mov] != ACTIVE)
-		continue;
-	
-	int a = moves[mov].first;
-	while (alias[a] != -1) a = alias[a];
-	int b = moves[mov].second;
-	while (alias[b] != -1) b = alias[b];
-	int c = cur;
-	while (alias[c] != -1) c = alias[c];
-	if (b == c)
+	if (!simplifyQueue.empty())
 	{
-		swap(a,b);
+		<<process simplify worklist>>
 	}
-	
-	moveStatus[mov] = FROZEN;
-	
-	if (!isMoveRelated(b, assocMoves, moveStatus) &&
-		nodeStatus[b] == FREEZABLE)
+	else if (!moveQueue.empty())
 	{
-		freezeCandidates.erase(b);
-		nodeStatus[b] = SIMPLIFYABLE;
-		simplifyQueue.push(b);
+		<<process move worklist>>
+	}
+	else if (!freezeCandidates.empty())
+	{
+		<<freeze move node>>
+	}
+	else if (!spillCandidates.empty())
+	{
+		<<spill node>>
+	}
+	else
+	{
+		break;
+	}
+}
+<<color nodes>>
+@
+
+Before we start the actual graph coloring process, we need to initialize all the worklists.
+
+<<build initial worklists>>=
+for (unsigned int i=0; i<moves.size(); i++)
+{
+	moveStatus[i] = WORKLIST;
+	moveQueue.push(i);
+}
+for (int i=0; i<maxID+1; i++)
+{
+	if (preColor.count(i) != 1)
+		continue;
+	nodeStatus[i] = PRECOLORED;
+	for (unsigned int j=0; j<interfereWith[i].size(); j++)
+	{
+		int curTar = interfereWith[i][j];
+		<<decrement degree of curTar>>
+	}
+}
+for (int i=0; i<maxID+1; i++)
+{
+	if (nodeStatus[i] == PRECOLORED)
+		continue;
+	if (degree[i] > maxColor)
+	{
+		nodeStatus[i] = SPILLABLE;
+		spillCandidates.insert(i);
+	}
+	else if (isMoveRelated(i, assocMoves, moveStatus))
+	{
+		nodeStatus[i] = FREEZABLE;
+		freezeCandidates.insert(i);
+	}
+	else
+	{
+		nodeStatus[i] = SIMPLIFYABLE;
+		simplifyQueue.push(i);
 	}
 }
 @
 
-<<spill node>>=
-int bestSpill = -1;
-double bestSpillScore = -1.0;
-for (auto n : spillCandidates)
-{
-	double curScore = degree[n];
-	if (uses[n] != 0)
-		curScore = curScore / double(uses[n]);
-	
-	if (curScore > bestSpillScore)
-	{
-		bestSpillScore = curScore;
-		bestSpill = n;
-	}
-}
-
-int cur = bestSpill;
-
-for (auto mov : assocMoves[cur])
-{
-	if (moveStatus[mov] != ACTIVE)
-		continue;
-	
-	int a = moves[mov].first;
-	while (alias[a] != -1) a = alias[a];
-	int b = moves[mov].second;
-	while (alias[b] != -1) b = alias[b];
-	int c = cur;
-	while (alias[c] != -1) c = alias[c];
-	if (b == c)
-	{
-		swap(a,b);
-	}
-	
-	moveStatus[mov] = FROZEN;
-	
-	if (!isMoveRelated(b, assocMoves, moveStatus) &&
-		nodeStatus[b] == FREEZABLE)
-	{
-		freezeCandidates.erase(b);
-		nodeStatus[b] = SIMPLIFYABLE;
-		simplifyQueue.push(b);
-	}
-}
-
-spillCandidates.erase(bestSpill);
-nodeStatus[bestSpill] = SIMPLIFYABLE;
-simplifyQueue.push(bestSpill);
-@
+Whenever possible, we focus our efforts on simplifying the graph. This makes the graph smaller, and hence also increases chances for move coalescing. Since the steps taken here are not influenced by the other steps (with the exceptions that they might add extra nodes which we can simplify), it is preferable to do this first.
 
 <<process simplify worklist>>=
 {
@@ -581,6 +453,8 @@ simplifyQueue.push(bestSpill);
 	}
 }
 @
+
+The second thing we can do is check whether any of the moves is available for coalescing. The moveQueue allows us to only check those moves that have a chance of actually being available, reducing the ammount of checks we do on moves.
 
 <<process move worklist>>=
 {
@@ -677,44 +551,145 @@ simplifyQueue.push(bestSpill);
 }
 @
 
-<<build initial worklists>>=
-for (unsigned int i=0; i<moves.size(); i++)
+When the two above steps fails, we cannot coalesce all moves and/or simplify temps away. This means that we need to either give up on coalescing a move, or give up on coloring a temporary with one of the register colors. Since not coalescing is a lot cheaper than spilling a temporary to memory, we first try giving up hope on coalescing all the moves related to a low degree node, so we can then simplify that node away.
+
+<<freeze move node>>=
+int cur = *freezeCandidates.begin();
+freezeCandidates.erase(cur);
+nodeStatus[cur] = SIMPLIFYABLE;
+simplifyQueue.push(cur);
+for (auto mov : assocMoves[cur])
 {
-	moveStatus[i] = WORKLIST;
-	moveQueue.push(i);
-}
-for (int i=0; i<maxID+1; i++)
-{
-	if (preColor.count(i) != 1)
+	if (moveStatus[mov] != ACTIVE)
 		continue;
-	nodeStatus[i] = PRECOLORED;
-	for (unsigned int j=0; j<interfereWith[i].size(); j++)
+	
+	int a = moves[mov].first;
+	while (alias[a] != -1) a = alias[a];
+	int b = moves[mov].second;
+	while (alias[b] != -1) b = alias[b];
+	int c = cur;
+	while (alias[c] != -1) c = alias[c];
+	if (b == c)
 	{
-		int curTar = interfereWith[i][j];
-		<<decrement degree of curTar>>
+		swap(a,b);
 	}
-}
-for (int i=0; i<maxID+1; i++)
-{
-	if (nodeStatus[i] == PRECOLORED)
-		continue;
-	if (degree[i] > maxColor)
+	
+	moveStatus[mov] = FROZEN;
+	
+	if (!isMoveRelated(b, assocMoves, moveStatus) &&
+		nodeStatus[b] == FREEZABLE)
 	{
-		nodeStatus[i] = SPILLABLE;
-		spillCandidates.insert(i);
-	}
-	else if (isMoveRelated(i, assocMoves, moveStatus))
-	{
-		nodeStatus[i] = FREEZABLE;
-		freezeCandidates.insert(i);
-	}
-	else
-	{
-		nodeStatus[i] = SIMPLIFYABLE;
-		simplifyQueue.push(i);
+		freezeCandidates.erase(b);
+		nodeStatus[b] = SIMPLIFYABLE;
+		simplifyQueue.push(b);
 	}
 }
 @
+
+When we have no further options for giving up moves that give simplification options, we have no other choice but to (potentially) spill a temporary to memory.
+
+<<spill node>>=
+int bestSpill = -1;
+double bestSpillScore = -1.0;
+for (auto n : spillCandidates)
+{
+	double curScore = degree[n];
+	if (uses[n] != 0)
+		curScore = curScore / double(uses[n]);
+	
+	if (curScore > bestSpillScore)
+	{
+		bestSpillScore = curScore;
+		bestSpill = n;
+	}
+}
+
+int cur = bestSpill;
+
+for (auto mov : assocMoves[cur])
+{
+	if (moveStatus[mov] != ACTIVE)
+		continue;
+	
+	int a = moves[mov].first;
+	while (alias[a] != -1) a = alias[a];
+	int b = moves[mov].second;
+	while (alias[b] != -1) b = alias[b];
+	int c = cur;
+	while (alias[c] != -1) c = alias[c];
+	if (b == c)
+	{
+		swap(a,b);
+	}
+	
+	moveStatus[mov] = FROZEN;
+	
+	if (!isMoveRelated(b, assocMoves, moveStatus) &&
+		nodeStatus[b] == FREEZABLE)
+	{
+		freezeCandidates.erase(b);
+		nodeStatus[b] = SIMPLIFYABLE;
+		simplifyQueue.push(b);
+	}
+}
+
+spillCandidates.erase(bestSpill);
+nodeStatus[bestSpill] = SIMPLIFYABLE;
+simplifyQueue.push(bestSpill);
+@
+
+\subsection{Handle final coloring}
+
+Finally, after the above steps have dealt with the entire graph, we need to actually assign colors to each of the nodes. We just choose the first available color to a particular node.
+
+<<color nodes>>=
+for (auto kv : preColor)
+{
+	coloring[kv.first] = kv.second;
+}
+
+while (!selectStack.empty())
+{
+	int cur = selectStack.top();
+	selectStack.pop();
+	nodeStatus[cur] = COLORED;
+
+	set<int> seen;
+	seen.insert(-1);
+	
+	for (auto i : interfereWith[cur])
+	{
+		int j = i;
+		while (alias[j] != -1) j = alias[j];
+		seen.insert(coloring[j]);
+	}
+	
+	int color = -1;
+	for (auto it : seen)
+	{
+		if (it == color)
+			color++;
+		else
+			break;
+	}
+	
+	coloring[cur] = color;
+}
+
+for (int i=0; i<maxID+1; i++)
+{
+	if (alias[i] != -1)
+	{
+		int j = i;
+		while (alias[j] != -1) j = alias[j];
+		coloring[i] = coloring[j];
+	}
+}
+@
+
+\subsubsection{Building interference graph}
+
+Of course, before any of the above graph coloring algorithms can work. For this we first need to construct the interference graph and list the moves.
 
 <<build full graph coloring datastructures>>=
 for (unsigned int i = 0; i<func->blocks.size(); i++)
@@ -799,9 +774,9 @@ for (int i=0; i<maxID+1; i++)
 }
 @
 
-\subsection{Graph coloring}
+\subsection{Simple graph coloring}
 
-The current graph colorer is very primitive, trying to simplify and using the least number of colors, but it does not handle spilling nor precolored temps. It just simply increases the number of colors it allows every time it needs it.
+The simple graph colorer is very primitive, trying to simplify and using the least number of colors, but it does not handle spilling nor precolored temps. It just simply increases the number of colors it allows every time it needs it. It is used currently for those graph coloring situations where there is no need for spilling, such as allocating locations for the SSM backend.
 
 <<do simple graph coloring>>=
 stack<int> simplifyStack;
@@ -884,107 +859,67 @@ while (!simplifyStack.empty())
 }
 @
 
-The following is a more advanced graph coloring routine, allowing precolored nodes, a fixed number of colors, and spills
-<<do advanced graph coloring>>=
-stack<int> simplifyStack;
-vector<bool> done(maxID+1,false);
-int nSimp = preColor.size();
+\subsubsection{Building interference graph}
 
-for (auto kv : preColor)
-	done[kv.first] = true;
+The simple graph colorer also needs an interference graph, but uses a simple matrix format to represent it. This code generates that graph.
 
-queue<int> simplifyQueue;
+<<build interference graph>>=
+vector<vector<bool>> interference(maxID+1, vector<bool>(maxID+1,false));
+vector<int> uses(maxID+1,0);
 
-while (nSimp < maxID+1)
+for (unsigned int i=0; i<func->blocks.size(); i++)
 {
-	for (int i=0; i<=maxID; i++)
+	for (unsigned int j = 0; j<func->blocks[i].size(); j++)
 	{
-		if (!done[i] && degree[i] < maxColor)
+		for (auto use : func->blocks[i][j].uses)
 		{
-			done[i] = true;
-			simplifyQueue.push(i);
+			uses[use]++;
 		}
-	}
-	
-	while (!simplifyQueue.empty())
-	{
-		int cur = simplifyQueue.front();
-		simplifyQueue.pop();
-		simplifyStack.push(cur);
-		nSimp++;
-		
-		for (int i=0; i<=maxID; i++)
+		for (auto it = livein[i][j].begin(); it != livein[i][j].end(); it++)
 		{
-			if (done[i])
-				continue;
-			
-			if (interference[i][cur])
+			auto jt = it;
+			jt++;
+			for (; jt != livein[i][j].end(); jt++)
 			{
-				degree[i]--;
-			}
-			
-			if (degree[i] < maxColor)
-			{
-				done[i] = true;
-				simplifyQueue.push(i);
+				if (*it == *jt)
+					continue;
+				interference[*it][*jt] = true;
+				interference[*jt][*it] = true;
 			}
 		}
-	}
-	
-	if (nSimp == maxID+1)
-		break;
-	
-	int bestSpill = -1;
-	double bestSpillScore = 0.0;
-	for (int i=0; i<=maxID; i++)
-	{
-		if (done[i])
-			continue;
-		
-		double curScore = degree[i];
-		if (uses[i] != 0)
-			curScore = double(degree[i])/double(uses[i]);
-		
-		if (curScore > bestSpillScore)
+		for (auto it = liveout[i][j].begin(); it != liveout[i][j].end(); it++)
 		{
-			bestSpillScore = curScore;
-			bestSpill = i;
+			auto jt = it;
+			jt++;
+			for (; jt != liveout[i][j].end(); jt++)
+			{
+				if (*it == *jt)
+					continue;
+				interference[*it][*jt] = true;
+				interference[*jt][*it] = true;
+			}
+			for (auto jt = func->blocks[i][j].defs.begin(); jt != func->blocks[i][j].defs.end(); jt++)
+			{
+				if (*it == *jt)
+					continue;
+				interference[*it][*jt] = true;
+				interference[*jt][*it] = true;
+			}
 		}
 	}
-	
-	done[bestSpill] = true;
-	simplifyStack.push(bestSpill);
-	nSimp++;
 }
 
-coloring.clear();
-coloring.resize(maxID+1,-1);
-
-for (auto kv : preColor)
-	coloring[kv.first] = kv.second;
-
-while (!simplifyStack.empty())
+vector<int> degree(maxID+1);
+	
+for (int i=0; i<=maxID; i++)
 {
-	int cur = simplifyStack.top();
-	simplifyStack.pop();
-	set<int> colorsUsed;
-	
-	for (int i=0; i<=maxID; i++)
+	int count = 0;
+	for (int j=0; j<=maxID; j++)
 	{
-		if (interference[i][cur])
-			colorsUsed.insert(coloring[i]);
+		if (interference[i][j])	
+			count++;
 	}
-	
-	int color = 0;
-	for (auto it : colorsUsed)
-	{
-		if (it == color)
-			color++;
-		else if (it > color)
-			break;
-	}
-	
-	coloring[cur] = color;
+	degree[i] = count;
 }
 @
 
@@ -1063,12 +998,13 @@ vector<int> registerAlloc(asm_function *func, map<int, int> preColor, int maxCol
 	
 	/*<<print analysis results>>*/
 	
-	<<build interference graph>>
+	<<determine number of temporaries>>
 	
 	vector<int> coloring;
 	
 	if (maxColor == -1)
 	{
+		<<build interference graph>>
 		<<do simple graph coloring>>
 	}
 	else
