@@ -158,7 +158,92 @@ else
 
 \subsection{Memory access}
 
-Again a job for the versatile mov.
+AMD64 has a rather flexible addressing mode that allows us to combine the memory access with the neccesary indexing calculations. It takes a base register, together with an index register and a fixed offset to generate an address. I will use that here to calculate various combinations of ptr additions and constants.
+
+<<AMD64 memory read tiles>>=
+ir_expression *amd64_memread_addoffset = 
+	new ir_expression_memory(
+		new ir_expression_ptrar_binop(
+			NULL,
+			NULL,
+			IR_PTR_ADD));
+ir_expression *amd64_memread_addconstoffset = 
+	new ir_expression_memory(
+		new ir_expression_ptrar_binop(
+			NULL,
+			new ir_expression_intconst(0),
+			IR_PTR_ADD));
+ir_expression *amd64_memread_label =
+	new ir_expression_memory(
+		new ir_expression_label(""));
+@
+
+<<AMD64 translate memory read add offset>>=
+ir_expression_memory *mem = (ir_expression_memory*)expression;
+ir_expression_ptrar_binop *binop = (ir_expression_ptrar_binop*)mem->address;
+
+if (restemp == -1)
+	restemp = amd64_gettemp();
+
+int lhstemp = amd64_translate_expression(function, assembly, trace,
+	binop->left, -1);
+int rhstemp = -1;
+if (binop->op == IR_PTR_SUB)
+	rhstemp = amd64_gettemp();
+rhstemp = amd64_translate_expression(function, assembly, trace,
+	binop->right, rhstemp);
+
+if (binop->op == IR_PTR_SUB)
+	assembly->blocks[trace].push_back(
+		asm_statement("neg %#%", {rhstemp}, {rhstemp}, {rhstemp}));
+
+assembly->blocks[trace].push_back(
+	asm_statement("mov %#%, [%#%+8*%#%]", {restemp, lhstemp, rhstemp}, {restemp},
+		{lhstemp, rhstemp}));
+@
+
+<<AMD64 translate memory read add constant offset>>=
+ir_expression_memory *mem = (ir_expression_memory*)expression;
+ir_expression_ptrar_binop *binop = (ir_expression_ptrar_binop*)mem->address;
+ir_expression_intconst *ic = (ir_expression_intconst*)binop->right;
+int value = ic->value;
+
+if (restemp == -1)	
+	restemp = amd64_gettemp();
+
+int lhstemp = amd64_translate_expression(function, assembly, trace,
+	binop->left, -1);
+
+if (binop->op == IR_PTR_SUB)
+	value = -value;
+
+ostringstream o;
+if (value < 0)
+{
+	o << "mov %#%, [%#%-" << 8*-value << "]";
+}
+else
+{
+	o << "mov %#%, [%#%+" << 8*value << "]";
+}
+assembly->blocks[trace].push_back(
+	asm_statement(o.str(), {restemp, lhstemp}, {restemp}, {lhstemp}));
+@
+
+<<AMD64 translate memory read label>>=
+ir_expression_memory *mem = (ir_expression_memory*)expression;
+ir_expression_label *label = (ir_expression_label*)mem->address;
+
+if (restemp == -1)
+	restemp = amd64_gettemp();
+
+ostringstream o;
+o << "mov %#%, " << label->label;
+assembly->blocks[trace].push_back(
+	asm_statement(o.str(), {restemp}, {restemp}, {}));
+@
+
+The standard case is again a job for the versatile mov.
 
 <<AMD64 translate memory read>>=
 ir_expression_memory *mem = (ir_expression_memory*)expression;
@@ -522,8 +607,20 @@ default:
 <<AMD64 translate expression>>=
 int amd64_translate_expression(ir_function *function, asm_function *assembly, int trace, 
 								ir_expression *expression, int restemp)
-{	
-	if (typeid(*expression) == typeid(ir_expression_intconst))
+{
+	if (isMatch(expression, amd64_memread_addconstoffset, false))
+	{
+		<<AMD64 translate memory read add constant offset>>
+	}
+	else if (isMatch(expression, amd64_memread_addoffset, false))
+	{
+		<<AMD64 translate memory read add offset>>
+	}
+	else if (isMatch(expression, amd64_memread_label, false))
+	{
+		<<AMD64 translate memory read label>>
+	}
+	else if (typeid(*expression) == typeid(ir_expression_intconst))
 	{
 		<<AMD64 translate intconst>>
 	}
@@ -622,6 +719,92 @@ For assignment to temp, we try to get the translate expression stage to do the o
 ir_statement_assign_temp *assign = (ir_statement_assign_temp*)statement;
 amd64_translate_expression(function, assembly, trace, 
 	assign->value, assign->target_temp_id+14);
+@
+
+For assignments to memory we also can make good use of the addressing modes of the AMD64 platform
+<<AMD64 translate assign memory tiles>>=
+ir_statement *amd64_memassign_addoffset = 
+	new ir_statement_assign_memory(
+		new ir_expression_ptrar_binop(
+			NULL,
+			NULL,
+			IR_PTR_ADD),
+		NULL);
+ir_statement *amd64_memassign_addconstoffset =
+	new ir_statement_assign_memory(
+		new ir_expression_ptrar_binop(
+			NULL,
+			new ir_expression_intconst(0),
+			IR_PTR_ADD),
+		NULL);
+ir_statement *amd64_memassign_label =
+	new ir_statement_assign_memory(
+		new ir_expression_label(""),
+		NULL);
+@
+
+<<AMD64 translate assign memory add offset>>=
+ir_statement_assign_memory *assign = (ir_statement_assign_memory*)statement;
+ir_expression_ptrar_binop *binop = (ir_expression_ptrar_binop*)assign->target;
+
+int lhstemp = amd64_translate_expression(function, assembly, trace,
+	binop->left, -1);
+int rhstemp = -1;
+if (binop->op == IR_PTR_SUB)
+	rhstemp = amd64_gettemp();
+rhstemp = amd64_translate_expression(function, assembly, trace,
+	binop->right, rhstemp);
+int valuetemp = amd64_translate_expression(function, assembly, trace,
+	assign->value, -1);
+
+if (binop->op == IR_PTR_SUB)
+	assembly->blocks[trace].push_back(
+		asm_statement("neg %#%", {rhstemp}, {rhstemp}, {rhstemp}));
+
+assembly->blocks[trace].push_back(
+	asm_statement("mov [%#%+8*%#%], %#%", {lhstemp, rhstemp, valuetemp}, {},
+		{lhstemp, rhstemp, valuetemp}));
+@
+
+<<AMD64 translate assign memory add constant offset>>=
+ir_statement_assign_memory *assign = (ir_statement_assign_memory*)statement;
+ir_expression_ptrar_binop *binop = (ir_expression_ptrar_binop*)assign->target;
+ir_expression_intconst *ic = (ir_expression_intconst*)binop->right;
+int constoffset = ic->value;
+
+int lhstemp = amd64_translate_expression(function, assembly, trace,
+	binop->left, -1);
+int valuetemp = amd64_translate_expression(function, assembly, trace,
+	assign->value, -1);
+
+if (binop->op == IR_PTR_SUB)
+	constoffset = -constoffset;
+	
+ostringstream o;
+if (constoffset > 0)
+{
+	o << "mov [%#%+" << 8*constoffset << "], %#%";
+}
+else
+{
+	o << "mov [%#%-" << 8*-constoffset << "], %#%";
+}
+
+assembly->blocks[trace].push_back(
+	asm_statement(o.str(), {lhstemp, valuetemp}, {}, {lhstemp,valuetemp}));
+@
+
+<<AMD64 translate assign memory label>>=
+ir_statement_assign_memory *assign = (ir_statement_assign_memory*)statement;
+ir_expression_label *label = (ir_expression_label*)assign->target;
+
+int valuetemp = amd64_translate_expression(function, assembly, trace,
+	assign->value, -1);
+
+ostringstream o;
+o << "mov " << label->label << ", %#%";
+assembly->blocks[trace].push_back(
+	asm_statement(o.str(), {valuetemp}, {}, {valuetemp}));
 @
 
 To memory, we just use a mov at the end of the expression calculating sequence.
@@ -752,7 +935,19 @@ assembly->blocks[trace].push_back(
 Putting it all together:
 
 <<AMD64 translate statement>>=
-if (typeid(*statement) == typeid(ir_statement_assign_temp))
+if (isMatch(statement, amd64_memassign_addconstoffset, false))
+{
+	<<AMD64 translate assign memory add constant offset>>
+}
+else if (isMatch(statement, amd64_memassign_addoffset, false))
+{
+	<<AMD64 translate assign memory add offset>>
+}
+else if (isMatch(statement, amd64_memassign_label, false))
+{
+	<<AMD64 translate assign memory label>>
+}
+else if (typeid(*statement) == typeid(ir_statement_assign_temp))
 {
 	<<AMD64 translate assign temp>>
 }
@@ -1178,6 +1373,9 @@ int main()
 #include <typeinfo>
 
 using namespace std;
+
+<<AMD64 memory read tiles>>
+<<AMD64 translate assign memory tiles>>
 
 <<AMD64 manage temporaries>>
 
