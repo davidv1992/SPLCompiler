@@ -631,7 +631,7 @@ We have two modes regarding variable declarations, strict and non-strict. In str
 <<compiler settings>>=
 #define VARDECL_SETTING_FLAG {"","strict-vardecl", \
 	"Allow variable declarations only at start of function."}
-COMPILER_SETTING(bool, strict_vardecl, false, VARDECL_SETTING_FLAG)
+COMPILER_SETTING(bool, strict_vardecl, false, VARDECL_SETTING_FLAG, {})
 #undef VARDECL_SETTING_FLAG
 @
 <<parse vardecl>>=

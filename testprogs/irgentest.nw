@@ -64,7 +64,7 @@ do
 	rm -f testTmp.txt
 done
 
-echo Results for irgeneration/correct suite:
+echo Results for codegen \(irgeneration\) suite:
 if [ $FAILS -eq 0 ]
 then
 	echo -ne '\E[32m'

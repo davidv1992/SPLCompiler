@@ -32,14 +32,14 @@ struct config_flag
 
 Variables are needed in two places. First of all, we need them in the header so the other parts of the compiler can read them.
 <<config variable declarations>>=
-#define COMPILER_SETTING(type, variable, default_value, flag) extern type variable;
+#define COMPILER_SETTING(type, variable, default_value, flag, opts) extern type variable;
 <<compiler settings>>
 #undef COMPILER_SETTING
 @
 
 Furthermore we need them in the source, where we use every bit of information.
 <<config variable definitions>>=
-#define COMPILER_SETTING(type, variable, default_value, flag) \
+#define COMPILER_SETTING(type, variable, default_value, flag, opts) \
 	type variable = default_value;
 <<compiler settings>>
 #undef COMPILER_SETTING
@@ -55,12 +55,13 @@ struct config_flag_full
 	void *variable;
 	string type;
 	config_flag flag;
+	vector<string> opts;
 };
 @
 
 <<generate config flag table>>=
-#define COMPILER_SETTING(type, variable, default_value, flag) \
-	{&variable, #type, flag},
+#define COMPILER_SETTING(type, variable, default_value, flag, opts) \
+	{&variable, #type, flag, opts},
 config_flag_full flag_table[] = {
 <<compiler settings>>
 };
@@ -96,6 +97,12 @@ vector<string> parse_commandline(int argc, char **argv)
 			exit(0);
 		}
 		
+		if (arg == "-version")
+		{
+			print_versiontext(argc, argv);
+			exit(0);
+		}
+		
 		if (arg[0] != '-')
 		{
 			inputfiles.push_back(arg);
@@ -114,12 +121,39 @@ vector<string> parse_commandline(int argc, char **argv)
 				recognized = true;
 				
 				if (flag_table[i].type == "bool")
+				{
 					*(bool*)flag_table[i].variable = true;
+				}
 				else if (flag_table[i].type == "int")
+				{
 					*(int*)flag_table[i].variable = parse_int_extra(argc, argv, 
 																	index, arg);
+				}
+				else if (flag_table[i].type == "std::string")
+				{
+					*(string*)flag_table[i].variable = parse_string_extra(argc,
+															argv, index, arg);
+				}
+				else if (flag_table[i].type == "opt_enum")
+				{
+					string curRep = parse_string_extra(argc, argv, index, arg);
+					
+					bool found = false;
+					for (unsigned int j = 0; j<flag_table[i].opts.size(); j++)
+					{
+						if (curRep == flag_table[i].opts[j])
+							found = true;
+					}
+					
+					if (found)
+						*(string*)flag_table[i].variable = curRep;
+					else
+						fprintf(stderr, "Unrecognized argument %s for %s.\n", curRep.c_str(), arg.c_str());
+				}
 				else
+				{
 					assert(0);
+				}
 					
 				break;
 			}
@@ -156,24 +190,71 @@ vector<string> parse_commandline(int argc, char **argv)
 
 There are several usefull utilities for this
 <<process commandline utilities>>=
+void print_versiontext(int argc, char **argv)
+{
+	fprintf(stderr, "SPL Compiler version " VERSION " (running as %s)\n", argv[0]);
+}
 void print_helptext(int argc, char **argv)
 {
 	fprintf(stderr, "SPL Compiler version " VERSION "\n");
-	fprintf(stderr, "usage: %s inputfiles+ [options]\n", argv[0]);
+	fprintf(stderr, "usage: %s inputfile [options]\n", argv[0]);
 	
 	fprintf(stderr, "\nOptions:\n");
+	fprintf(stderr, "\t-help: Display this text.\n");
+	fprintf(stderr, "\t-version: Display compiler version.\n");
 	
 	for (int i=0; i<flag_table_length; i++)
 	{
 		if (flag_table[i].type == "bool")
+		{
 			fprintf(stderr, "\t-%s%s: %s\n", flag_table[i].flag.prefix.c_str(),
 				flag_table[i].flag.flag.c_str(), 
 				flag_table[i].flag.description.c_str());
+		}
 		else if (flag_table[i].type == "int")
+		{
 			fprintf(stderr, "\t-%s%s <INT>: %s\n", flag_table[i].flag.prefix.c_str(),
 				flag_table[i].flag.flag.c_str(), 
 				flag_table[i].flag.description.c_str());
+		}
+		else if (flag_table[i].type == "std::string")
+		{
+			fprintf(stderr, "\t-%s%s <STRING>: %s\n", flag_table[i].flag.prefix.c_str(),
+				flag_table[i].flag.flag.c_str(),
+				flag_table[i].flag.description.c_str());
+		}
+		else if (flag_table[i].type == "opt_enum")
+		{
+			fprintf(stderr, "\t-%s%s <ENUM>: %s\n\t\tchoices:", 
+				flag_table[i].flag.prefix.c_str(),
+				flag_table[i].flag.flag.c_str(),
+				flag_table[i].flag.description.c_str());
+			
+			for (unsigned int j=0; j<flag_table[i].opts.size(); j++)
+			{
+				fprintf(stderr, " %s", flag_table[i].opts[j].c_str());
+			}
+			fprintf(stderr, "\n");
+		}
 	}
+}
+string parse_string_extra(int argc, char **argv, int &index, string flag)
+{
+	if (argc <= index)
+	{
+		fprintf(stderr, "Missing argument for %s.", flag.c_str());
+		exit(1);
+	}
+	
+	string result = argv[index];
+	index++;
+	
+	if (result.length() < 1)
+	{
+		fprintf(stderr, "Missing argument for %s.", flag.c_str());
+	}
+	
+	return result;
 }
 int parse_int_extra(int argc, char **argv, int &index, string flag)
 {
@@ -238,6 +319,9 @@ Generating the actual code:
 #define SETTINGS_H
 #include <vector>
 #include <string>
+
+typedef std::string opt_enum;
+
 <<config variable declarations>>
 <<process commandline header>>
 #endif

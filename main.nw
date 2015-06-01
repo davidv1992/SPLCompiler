@@ -4,15 +4,31 @@
 This file does all the chaining of the various parts of the compiler. It is responsible for calling the different parts of the compiler in the right order.
 
 <<compiler settings>>=
-#define SSMOUTPUT_FLAG {"", "ssm", \
-	"Produce output for SSM virtual machine"}
-COMPILER_SETTING(bool, ssmoutput, false, SSMOUTPUT_FLAG)
+#define ARCH_FLAG {"", "arch", \
+	"Target specified processor architecture."}
+#define ARCH_OPTS {"amd64", "ssm"}
+COMPILER_SETTING(opt_enum, targetArch, "amd64", ARCH_FLAG, ARCH_OPTS)
+#undef ARCH_FLAG
+#undef ARHC_OPTS
+
+#define OPTIMIZE_FLAG {"", "optimize", "Enable optimizations."}
+COMPILER_SETTING(bool, enableOptimize, false, OPTIMIZE_FLAG, {})
+#undef OPTIMIZE_FLAG
+
+#define ASSEMBLY_FLAG {"", "S", "Generate assembly code."}
+COMPILER_SETTING(bool, assemblyOnly, false, ASSEMBLY_FLAG, {})
+#undef ASSEMLBY_FLAG
+
+#define OUTPUTFILE_FLAG {"", "o", "Target output file."}
+COMPILER_SETTING(std::string, outputFile, "", OUTPUTFILE_FLAG, {})
+#undef OUTPUTFILE_FLAG
 @
 
 <<main.cpp>>=
 #include "token.h"
 #include "parser.h"
 #include "typecheck.h"
+#include "position.h"
 #include "ir.h"
 #include "irgeneration.h"
 #include "splruntime.h"
@@ -23,11 +39,40 @@ COMPILER_SETTING(bool, ssmoutput, false, SSMOUTPUT_FLAG)
 #include "constprop.h"
 #include <cstdio>
 #include <map>
+#include <cstdarg>
+#include <sstream>
+#include <cassert>
 
 using namespace std;
 
 void initialize_tables();
 void cleanup_tables();
+
+void main_info(const char *message, ...)
+{
+	va_list args;
+	va_start(args, message);
+	
+	eh_info(message, args);
+	
+	va_end(args);
+}
+
+void main_fatal(const char *message, ...)
+{
+	va_list args;
+	va_start(args, message);
+	
+	source_position pos;
+	pos.filename="";
+	pos.lineno = pos.offset = 0;
+	
+	eh_error(pos, message, args);
+	
+	va_end(args);
+	
+	exit(1);
+}
 
 int main(int argc, char **argv)
 {
@@ -36,32 +81,89 @@ int main(int argc, char **argv)
 	if (inputfiles.size() != 1)
 		exit(1);
 	
+	if (outputFile == "")
+	{
+		if (targetArch == "ssm")
+			outputFile = "out.ssm";
+		else if (!assemblyOnly)
+			outputFile = "a.out";
+		else
+			outputFile = "out.s";
+	}
+	
 	tok_setinput(inputfiles[0]);
 	
+	main_info("Parsing input.");
 	ast_program *program = parse_program();
+	
+	main_info("Typechecking program.");
 	typecheck_program(program);
 	
 	if (eh_haveerror())
 		return 1;
 	
+	main_info("Generating intermediate code.");
 	ir_module *module = irgen_translate_program(program);
 	
+	main_info("Generating runtime.");
 	generate_runtime(module);
-	
-	cp_rewrite_module(module);
 	
 	//module->print();
 	
+	main_info("Post-frontend cleanup");
 	typecheck_cleanup();
 	delete program;
 	
-	if (ssmoutput)
+	if (enableOptimize)
 	{
-		ssm_translate_module(module, stdout);
+		main_info("Optimizing.");
+		main_info("Opitimization: Constant propagation.");
+		cp_rewrite_module(module);
+	}
+	
+	if (targetArch == "ssm")
+	{
+		FILE *outputF = fopen(outputFile.c_str(), "w");
+		if (outputF == NULL)
+			main_fatal("Cannot open assembly file %s", outputFile.c_str());
+		
+		main_info("Generating ssm assembly.");
+		ssm_translate_module(module, outputF);
+		fclose(outputF);
+	}
+	else if (targetArch == "amd64")
+	{
+		main_info("Generating AMD64 assembly.");
+		string assemblyFileName;
+
+		if (assemblyOnly)
+			assemblyFileName = outputFile;
+		else
+			assemblyFileName = tmpnam(NULL);
+		
+		main_info("Assembly intermediate file: %s", assemblyFileName.c_str());
+		
+		FILE *assemblyFile = fopen(assemblyFileName.c_str(), "w");
+		
+		if (assemblyFile == NULL)
+			main_fatal("Cannot open assembly file %s", assemblyFileName.c_str());
+		
+		amd64_translate_module(module, assemblyFile);
+		
+		fclose(assemblyFile);
+		
+		if (!assemblyOnly)
+		{
+			main_info("Compiling final program.");
+			ostringstream compileCommand;
+			compileCommand << "gcc -x assembler " << assemblyFileName << " -x c cplatform.c -o " << outputFile;
+			main_info("Compile command: %s", compileCommand.str().c_str());
+			system(compileCommand.str().c_str());
+		}
 	}
 	else
 	{
-		amd64_translate_module(module, stdout);
+		assert(0);
 	}
 	
 	delete module;

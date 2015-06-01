@@ -16,7 +16,7 @@ IR generation, and possibly also it's translation to assembly, gives rise to a m
 Some of theoperations in the SPL language have undefined results in some conditions. However, we also want to provide a safe mode that checks that these conditions do not occur.
 <<compiler settings>>=
 #define CHECKSAFE_FLAG {"", "safe", "Enable safe mode"}
-COMPILER_SETTING(bool, checksafe, false, CHECKSAFE_FLAG)
+COMPILER_SETTING(bool, checksafe, false, CHECKSAFE_FLAG, {})
 #undef CHECKSAFE_FLAG
 @
 
