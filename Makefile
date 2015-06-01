@@ -121,7 +121,7 @@ main.cpp: main.nw
 compiler: main.o token.o parser.o ast.o error.o typecheck.o irgeneration.o settings.o splruntime.o ssm.o irutil.o assembly.o amd64.o constprop.o
 	g++ $(CXXFLASGS) -o compiler main.o token.o parser.o ast.o error.o typecheck.o irgeneration.o settings.o splruntime.o ssm.o irutil.o assembly.o amd64.o constprop.o
 
-amd64.o: amd64.cpp amd64.h assembly.h ir.h irutil.h
+amd64.o: amd64.cpp amd64.h assembly.h ir.h irutil.h settings.h
 amd64.h: amd64.nw
 	notangle -L -Ramd64.h amd64.nw | cpif amd64.h
 amd64.cpp: amd64.nw

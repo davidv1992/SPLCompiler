@@ -930,6 +930,23 @@ assembly->blocks[trace].push_back(
 }
 @
 
+\subsection{Translate assert}
+
+In non-safe mode, we need to check all the conditions specified this way.
+
+<<AMD64 translate assert>>=
+if (checksafe)
+{
+	ir_statement_assert *assertstat = (ir_statement_assert*)statement;
+	int condTemp = amd64_translate_expression(function, assembly, trace,
+		ifstat->condition, -1);
+	assembly->blocks[trace].push_back(
+		asm_statement("cmp %#%, 0", {condTemp}, {}, {condTemp}));
+	assembly->blocks[trace].push_back(
+		asm_statement("je ABORT_LAUNCHER", {}, {}, {}));
+}
+@
+
 \subsection{Translating statements}
 
 Putting it all together:
@@ -1291,6 +1308,8 @@ for (unsigned int i=0; i<assembly->blocks.size(); i++)
 
 \section{Translate ir module}
 
+The code here is responsible for making sure all functions get translated, and for the overall structure of the assembly file produced. Reserving space for globals is also handled here, and it emits the jump pad for safe mode when that is enabled.
+
 <<AMD64 translate module header>>=
 void amd64_translate_module(ir_module *module, FILE *stream);
 @
@@ -1303,6 +1322,12 @@ void amd64_translate_module(ir_module *module, FILE *stream)
 	for (auto function : module->functions)
 	{
 		amd64_translate_function(stream, function.second, function.first);
+	}
+	
+	if (checksafe)
+	{
+		fprintf(stream, "ABORT_LAUNCHER:\n");
+		fprintf(stream, "\tcall assertFailed\n");
 	}
 	
 	fprintf(stream, "\t.bss\n");
@@ -1323,6 +1348,12 @@ The easiest solution for the platform library is to use the c standard library.
 <<cplatform.c>>=
 #include <stdlib.h>
 #include <stdio.h>
+
+void assertFailed()
+{
+	puts("ABORTED");
+	exit(1);
+}
 
 void _splinit();
 long long __main();
@@ -1346,9 +1377,13 @@ int main()
 {
 	_splinit();
 	long long result = __main();
+#ifdef _SPLTEST
 	printf("%lld\n", result);
 	printf("machine halted\n");
 	return 0;
+#else
+	return (int)result;
+#endif
 }
 @
 
@@ -1367,6 +1402,7 @@ int main()
 #include "assembly.h"
 #include "ir.h"
 #include "irutil.h"
+#include "settings.h"
 #include "amd64.h"
 #include <sstream>
 #include <cstdio>
