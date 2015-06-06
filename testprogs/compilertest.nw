@@ -61,7 +61,7 @@ do
 		echo Failure in testcase $SPL_FILE
 		FAILS=$((FAILS+1))
 	else
-		gcc out.s cplatform.c
+		gcc out.s -D_SPLTEST cplatform.c
 		./a.out > testTmp.txt
 		diff -q testTmp.txt $SPL_FILE.exp
 		if [ $? -ne 0 ]

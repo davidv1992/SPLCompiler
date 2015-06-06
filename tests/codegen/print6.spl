@@ -1,10 +1,8 @@
 Int main()
 {
 	print(True);
-	print('
-');
+	print('\n');
 	print(False);
-	print('
-');
+	print('\n');
 	return 1;
 }

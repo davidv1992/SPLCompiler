@@ -322,6 +322,37 @@ default:
 case '\'':
 	value = tok_getchar();
 	next_char = tok_getchar();
+	
+	if (value == '\n')
+	{
+		tok_error("Open character constant at end of line.");
+		tok_ungetchar(next_char);
+		next_char = '\'';
+	}
+	
+	if (value == '\\')
+	{
+		switch(next_char)
+		{
+		case '\'':
+			value = '\'';
+			break;
+		case '\\':
+			value = '\\';
+			break;
+		case 'n':
+			value = '\n';
+			break;
+		case 't':
+			value = '\t';
+			break;
+		default:
+			tok_error("Escaped %c has no meaning.", next_char);
+		}
+		
+		next_char = tok_getchar();
+	}
+	
 	if (next_char != '\'' && value == '\'')
 	{
 		// Likely empty char constant given, interpret it as such

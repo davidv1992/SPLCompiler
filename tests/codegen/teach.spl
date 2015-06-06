@@ -33,8 +33,7 @@ Int main () {
 		n = n + 1;
 	}
 	print ( ok );
-	print ('
-');
+	print ('\n');
 	return 0;
 }
 
