@@ -930,6 +930,212 @@ assembly->blocks[trace].push_back(
 }
 @
 
+For an if whose condition is a IR comparison, we can optimize the sequence by using the jump cmp for the actual comparison.
+
+<<AMD64 if tiles>>=
+ir_statement *amd64_if_intcmp =
+	new ir_statement_if(
+		new ir_expression_intcmp(
+			NULL,
+			NULL,
+			IR_INT_EQ),
+		0,
+		0);
+ir_statement *amd64_if_ptrcmp =
+	new ir_statement_if(
+		new ir_expression_ptrcmp(
+			NULL,
+			NULL,
+			IR_PTR_EQ),
+		0,
+		0);
+ir_statement *amd64_if_boolcmp =
+	new ir_statement_if(
+		new ir_expression_boolcmp(
+			NULL,
+			NULL,
+			IR_BOOL_EQ),
+		0,
+		0);
+ir_statement *amd64_if_unknowncmp =
+	new ir_statement_if(
+		new ir_expression_unknowncmp(	
+			NULL,
+			NULL,
+			IR_UNKNOWN_EQ),
+		0,
+		0);
+@
+
+<<AMD64 translate if intcmp>>=
+ir_statement_if *ifstat = (ir_statement_if*)statement;
+ir_expression_intcmp *cmp = (ir_expression_intcmp*)ifstat->condition;
+int lhsTemp = amd64_translate_expression(function, assembly, trace,
+	cmp->left, -1);
+int rhsTemp = amd64_translate_expression(function, assembly, trace,
+	cmp->right, -1);
+assembly->blocks[trace].push_back(
+	asm_statement("cmp %#%, %#%", {lhsTemp, rhsTemp}, {}, {lhsTemp, rhsTemp}));
+
+string instr;
+switch(cmp->op)
+{
+case IR_INT_EQ:
+	instr = "je ";
+	break;
+case IR_INT_NE:
+	instr = "jne ";
+	break;
+case IR_INT_LT:
+	instr = "jl ";
+	break;
+case IR_INT_LE:
+	instr = "jle ";
+	break;
+case IR_INT_GT:
+	instr = "jg ";
+	break;
+case IR_INT_GE:
+	instr = "jge ";
+	break;
+default:
+	assert(0);
+}
+
+{
+	ostringstream o;
+	o << fnname.substr(1) << "_L" << ifstat->target_true;
+	assembly->blocks[trace].push_back(
+		asm_statement(instr + o.str(), {}, {}, {}));
+	assembly->blockFollows[trace].push_back(o.str());
+}
+{
+	ostringstream o;
+	o << fnname.substr(1) << "_L" << ifstat->target_false;
+	assembly->blocks[trace].push_back(
+		asm_statement("jmp " + o.str(), {}, {}, {}));
+	assembly->blockFollows[trace].push_back(o.str());
+}
+@
+
+<<AMD64 translate if ptrcmp>>=
+ir_statement_if *ifstat = (ir_statement_if*)statement;
+ir_expression_ptrcmp *cmp = (ir_expression_ptrcmp*)ifstat->condition;
+int lhsTemp = amd64_translate_expression(function, assembly, trace,
+	cmp->left, -1);
+int rhsTemp = amd64_translate_expression(function, assembly, trace,
+	cmp->right, -1);
+assembly->blocks[trace].push_back(
+	asm_statement("cmp %#%, %#%", {lhsTemp, rhsTemp}, {}, {lhsTemp, rhsTemp}));
+
+string instr;
+switch(cmp->op)
+{
+case IR_PTR_EQ:
+	instr = "je ";
+	break;
+case IR_PTR_NE:
+	instr = "jne ";
+	break;
+default:
+	assert(0);
+}
+
+{
+	ostringstream o;
+	o << fnname.substr(1) << "_L" << ifstat->target_true;
+	assembly->blocks[trace].push_back(
+		asm_statement(instr + o.str(), {}, {}, {}));
+	assembly->blockFollows[trace].push_back(o.str());
+}
+{
+	ostringstream o;
+	o << fnname.substr(1) << "_L" << ifstat->target_false;
+	assembly->blocks[trace].push_back(
+		asm_statement("jmp " + o.str(), {}, {}, {}));
+	assembly->blockFollows[trace].push_back(o.str());
+}
+
+@
+<<AMD64 translate if boolcmp>>=
+ir_statement_if *ifstat = (ir_statement_if*)statement;
+ir_expression_boolcmp *cmp = (ir_expression_boolcmp*)ifstat->condition;
+int lhsTemp = amd64_translate_expression(function, assembly, trace,
+	cmp->left, -1);
+int rhsTemp = amd64_translate_expression(function, assembly, trace,
+	cmp->right, -1);
+assembly->blocks[trace].push_back(
+	asm_statement("cmp %#%, %#%", {lhsTemp, rhsTemp}, {}, {lhsTemp, rhsTemp}));
+
+string instr;
+switch(cmp->op)
+{
+case IR_BOOL_EQ:
+	instr = "je ";
+	break;
+case IR_BOOL_NE:
+	instr = "jne ";
+	break;
+default:
+	assert(0);
+}
+
+{
+	ostringstream o;
+	o << fnname.substr(1) << "_L" << ifstat->target_true;
+	assembly->blocks[trace].push_back(
+		asm_statement(instr + o.str(), {}, {}, {}));
+	assembly->blockFollows[trace].push_back(o.str());
+}
+{
+	ostringstream o;
+	o << fnname.substr(1) << "_L" << ifstat->target_false;
+	assembly->blocks[trace].push_back(
+		asm_statement("jmp " + o.str(), {}, {}, {}));
+	assembly->blockFollows[trace].push_back(o.str());
+}
+@
+
+<<AMD64 translate if unknowncmp>>=
+ir_statement_if *ifstat = (ir_statement_if*)statement;
+ir_expression_unknowncmp *cmp = (ir_expression_unknowncmp*)ifstat->condition;
+int lhsTemp = amd64_translate_expression(function, assembly, trace,
+	cmp->left, -1);
+int rhsTemp = amd64_translate_expression(function, assembly, trace,
+	cmp->right, -1);
+assembly->blocks[trace].push_back(
+	asm_statement("cmp %#%, %#%", {lhsTemp, rhsTemp}, {}, {lhsTemp, rhsTemp}));
+
+string instr;
+switch(cmp->op)
+{
+case IR_UNKNOWN_EQ:
+	instr = "je ";
+	break;
+case IR_UNKNOWN_NE:
+	instr = "jne ";
+	break;
+default:
+	assert(0);
+}
+
+{
+	ostringstream o;
+	o << fnname.substr(1) << "_L" << ifstat->target_true;
+	assembly->blocks[trace].push_back(
+		asm_statement(instr + o.str(), {}, {}, {}));
+	assembly->blockFollows[trace].push_back(o.str());
+}
+{
+	ostringstream o;
+	o << fnname.substr(1) << "_L" << ifstat->target_false;
+	assembly->blocks[trace].push_back(
+		asm_statement("jmp " + o.str(), {}, {}, {}));
+	assembly->blockFollows[trace].push_back(o.str());
+}
+@
+
+
 \subsection{Translate assert}
 
 In non-safe mode, we need to check all the conditions specified this way.
@@ -952,7 +1158,23 @@ if (checksafe)
 Putting it all together:
 
 <<AMD64 translate statement>>=
-if (isMatch(statement, amd64_memassign_addconstoffset, false))
+if (isMatch(statement, amd64_if_intcmp, false))
+{
+	<<AMD64 translate if intcmp>>
+}
+else if (isMatch(statement, amd64_if_ptrcmp, false))
+{
+	<<AMD64 translate if ptrcmp>>
+}
+else if (isMatch(statement, amd64_if_boolcmp, false))
+{
+	<<AMD64 translate if boolcmp>>
+}
+else if (isMatch(statement, amd64_if_unknowncmp, false))
+{
+	<<AMD64 translate if unknowncmp>>
+}
+else if (isMatch(statement, amd64_memassign_addconstoffset, false))
 {
 	<<AMD64 translate assign memory add constant offset>>
 }
@@ -1412,6 +1634,7 @@ using namespace std;
 
 <<AMD64 memory read tiles>>
 <<AMD64 translate assign memory tiles>>
+<<AMD64 if tiles>>
 
 <<AMD64 manage temporaries>>
 
