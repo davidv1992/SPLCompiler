@@ -45,9 +45,6 @@ COMPILER_SETTING(std::string, outputFile, "", OUTPUTFILE_FLAG, {})
 
 using namespace std;
 
-void initialize_tables();
-void cleanup_tables();
-
 void main_info(const char *message, ...)
 {
 	va_list args;
