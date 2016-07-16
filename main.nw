@@ -3,6 +3,10 @@
 
 This file does all the chaining of the various parts of the compiler. It is responsible for calling the different parts of the compiler in the right order.
 
+\section{Global settings}
+
+We start with a few global settings, controlling the output architecture, and whether the compiler will also take care of linking and such.
+
 <<compiler settings>>=
 #define ARCH_FLAG {"", "arch", \
 	"Target specified processor architecture."}
@@ -24,27 +28,153 @@ COMPILER_SETTING(std::string, outputFile, "", OUTPUTFILE_FLAG, {})
 #undef OUTPUTFILE_FLAG
 @
 
-<<main.cpp>>=
-#include "token.h"
-#include "parser.h"
-#include "typecheck.h"
-#include "position.h"
-#include "ir.h"
-#include "irgeneration.h"
-#include "splruntime.h"
-#include "settings.h"
-#include "ssm.h"
-#include "amd64.h"
-#include "error.h"
-#include "constprop.h"
-#include <cstdio>
-#include <map>
-#include <cstdarg>
-#include <sstream>
-#include <cassert>
+\section{Compiler proper}
 
-using namespace std;
+These settings are read in from the commandline, along with imput files. We then ensure that we have precisely one input file.
 
+<<handle commandline>>=
+vector<string> inputfiles = parse_commandline(argc, argv);
+	
+if (inputfiles.size() != 1)
+	main_fatal("Incorrect number of input files");
+@
+
+When not provided, we need to generate an input file. This is dependent on both target and whether or not we link.
+
+<<generate output name>>=
+if (outputFile == "")
+{
+	if (targetArch == "ssm")
+		outputFile = "out.ssm";
+	else if (!assemblyOnly)
+		outputFile = "a.out";
+	else
+		outputFile = "out.s";
+}
+@
+
+The first steps in compilation (tokenizing, parsing, typechecking and IR generation) are platform independend, and more importantly, always needed.
+
+<<compile to optimized IR>>=
+tok_setinput(inputfiles[0]);
+
+main_info("Parsing input.");
+ast_program *program = parse_program();
+
+main_info("Typechecking program.");
+typecheck_program(program);
+
+if (eh_haveerror())
+	return 1;
+
+main_info("Generating intermediate code.");
+ir_module *module = irgen_translate_program(program);
+
+main_info("Generating runtime.");
+generate_runtime(module);
+
+main_info("Post-frontend cleanup");
+typecheck_cleanup();
+delete program;
+
+if (enableOptimize)
+{
+	main_info("Optimizing.");
+	main_info("Opitimization: Constant propagation.");
+	cp_rewrite_module(module);
+}
+@
+
+Finally, everything produced here needs to be cleaned up:
+
+<<module cleanup>>=
+delete module;
+@
+
+The other steps are platform dependend, hence handled seperatly. Chaining everything together:
+
+<<compiler main>>=
+int main(int argc, char **argv)
+{
+	<<handle commandline>>
+	<<generate output name>>
+	<<compile to optimized IR>>
+	
+	if (targetArch == "ssm")
+	{
+		<<ssm output generation>>
+	}
+	else if (targetArch == "amd64")
+	{
+		<<amd64 output generation>>
+	}
+	else
+	{
+		assert(0);
+	}
+	
+	<<module cleanup>>
+	
+	return 0;
+}
+@
+
+\subsection{SSM Output}
+
+For SSM there is no seperate assembler, the input to the interpreter is the assembly. Hence, output generation is straightforward:
+
+<<ssm output generation>>=
+FILE *outputF = fopen(outputFile.c_str(), "w");
+if (outputF == NULL)
+	main_fatal("Cannot open assembly file %s", outputFile.c_str());
+
+main_info("Generating ssm assembly.");
+ssm_translate_module(module, outputF);
+fclose(outputF);
+@
+
+\subsection{AMD64 Output}
+
+AMD64 is a bit more involved, because we dont directly produce machine code. Instead, we output to a temporary file and pass that on to the assembler if we need to produce an executable.
+
+<<amd64 output generation>>=
+main_info("Generating AMD64 assembly.");
+string assemblyFileName;
+
+if (assemblyOnly)
+	assemblyFileName = outputFile;
+else
+	assemblyFileName = tmpnam(NULL);
+
+main_info("Assembly intermediate file: %s", assemblyFileName.c_str());
+
+FILE *assemblyFile = fopen(assemblyFileName.c_str(), "w");
+
+if (assemblyFile == NULL)
+	main_fatal("Cannot open assembly file %s", assemblyFileName.c_str());
+
+amd64_translate_module(module, assemblyFile);
+
+fclose(assemblyFile);
+
+if (!assemblyOnly)
+{
+	main_info("Compiling final program.");
+	ostringstream compileCommand;
+	compileCommand << "gcc"
+		<< " -x assembler " << assemblyFileName 
+		<< " -x c cplatform.c"
+		<< " -o " << outputFile;
+	main_info("Compile command: %s", compileCommand.str().c_str());
+	system(compileCommand.str().c_str());
+}
+@
+
+\section{Error handling}
+
+Following the tried and true patterns, with empty position info for fatals, since in this scope they do not relate to any particular position in the source.
+
+<<main error handling>>=
 void main_info(const char *message, ...)
 {
 	va_list args;
@@ -70,101 +200,32 @@ void main_fatal(const char *message, ...)
 	
 	exit(1);
 }
+@
 
-int main(int argc, char **argv)
-{
-	vector<string> inputfiles = parse_commandline(argc, argv);
-	
-	if (inputfiles.size() != 1)
-		exit(1);
-	
-	if (outputFile == "")
-	{
-		if (targetArch == "ssm")
-			outputFile = "out.ssm";
-		else if (!assemblyOnly)
-			outputFile = "a.out";
-		else
-			outputFile = "out.s";
-	}
-	
-	tok_setinput(inputfiles[0]);
-	
-	main_info("Parsing input.");
-	ast_program *program = parse_program();
-	
-	main_info("Typechecking program.");
-	typecheck_program(program);
-	
-	if (eh_haveerror())
-		return 1;
-	
-	main_info("Generating intermediate code.");
-	ir_module *module = irgen_translate_program(program);
-	
-	main_info("Generating runtime.");
-	generate_runtime(module);
-	
-	//module->print();
-	
-	main_info("Post-frontend cleanup");
-	typecheck_cleanup();
-	delete program;
-	
-	if (enableOptimize)
-	{
-		main_info("Optimizing.");
-		main_info("Opitimization: Constant propagation.");
-		cp_rewrite_module(module);
-	}
-	
-	if (targetArch == "ssm")
-	{
-		FILE *outputF = fopen(outputFile.c_str(), "w");
-		if (outputF == NULL)
-			main_fatal("Cannot open assembly file %s", outputFile.c_str());
-		
-		main_info("Generating ssm assembly.");
-		ssm_translate_module(module, outputF);
-		fclose(outputF);
-	}
-	else if (targetArch == "amd64")
-	{
-		main_info("Generating AMD64 assembly.");
-		string assemblyFileName;
+\section{source}
 
-		if (assemblyOnly)
-			assemblyFileName = outputFile;
-		else
-			assemblyFileName = tmpnam(NULL);
-		
-		main_info("Assembly intermediate file: %s", assemblyFileName.c_str());
-		
-		FILE *assemblyFile = fopen(assemblyFileName.c_str(), "w");
-		
-		if (assemblyFile == NULL)
-			main_fatal("Cannot open assembly file %s", assemblyFileName.c_str());
-		
-		amd64_translate_module(module, assemblyFile);
-		
-		fclose(assemblyFile);
-		
-		if (!assemblyOnly)
-		{
-			main_info("Compiling final program.");
-			ostringstream compileCommand;
-			compileCommand << "gcc -x assembler " << assemblyFileName << " -x c cplatform.c -o " << outputFile;
-			main_info("Compile command: %s", compileCommand.str().c_str());
-			system(compileCommand.str().c_str());
-		}
-	}
-	else
-	{
-		assert(0);
-	}
-	
-	delete module;
-	
-	return 0;
-}
+<<main.cpp>>=
+#include "token.h"
+#include "parser.h"
+#include "typecheck.h"
+#include "position.h"
+#include "ir.h"
+#include "irgeneration.h"
+#include "splruntime.h"
+#include "settings.h"
+#include "ssm.h"
+#include "amd64.h"
+#include "error.h"
+#include "constprop.h"
+#include <cstdio>
+#include <map>
+#include <cstdarg>
+#include <sstream>
+#include <cassert>
+
+using namespace std;
+
+<<main error handling>>
+
+<<compiler main>>
 @
