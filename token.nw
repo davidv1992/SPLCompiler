@@ -419,6 +419,7 @@ TOKEN_IF,					// if
 TOKEN_ELSE,					// else
 TOKEN_WHILE,				// while
 TOKEN_RETURN,				// return
+TOKEN_EXPORT,				// export
 @
 <<filter keywords>>=
 if (cur_token.type == TOKEN_ID)
@@ -431,6 +432,8 @@ if (cur_token.type == TOKEN_ID)
 		cur_token.type = TOKEN_WHILE;
 	if (cur_token.id == "return")
 		cur_token.type = TOKEN_RETURN;
+	if (cur_token.id == "export")
+		cur_token.type = TOKEN_EXPORT;
 }
 @
 <<print keywords>>=
@@ -442,6 +445,8 @@ case TOKEN_WHILE:
 	return "while";
 case TOKEN_RETURN:
 	return "return";
+case TOKEN_EXPORT:
+	return "export";
 @
 
 \subsection{Whitespace, comments and end of file}

@@ -27,7 +27,7 @@ Furthermore, we have several extensions that can be enabled, and these are easie
 This gives us the following grammar as used in implementing the parser. There is roughly a one-to-one mapping between the functions used below and the grammar constructs.
 
 \begin{longtable}{lcl}
-\nonterm{Program}&=&\nonterm{Type} \uterm{id} \term{(} [\nonterm{Funarg} (\term{,} \nonterm{Funarg})*] \term{)} \term{\{} \nonterm{Statement}+ \term{\}}\\*
+\nonterm{Program}&=& [\term{export}] \nonterm{Type} \uterm{id} \term{(} [\nonterm{Funarg} (\term{,} \nonterm{Funarg})*] \term{)} \term{\{} \nonterm{Statement}+ \term{\}}\\*
 &\bor& \nonterm{Type} \uterm{id} \term{=} \nonterm{Expression} \term{;}\\
 \nonterm{Funarg}&=&\nonterm{Type} \uterm{id}\\
 \nonterm{Statement} &=& \term{\{} \nonterm{Statement} \term{\}}\\*
@@ -784,7 +784,11 @@ ast_program *parse_program()
 	token cur_token = tok_get();
 	while (cur_token.type != TOKEN_EOF)
 	{
-		tok_unget(cur_token);
+		bool current_export = false;
+		if (cur_token.type == TOKEN_EXPORT)
+			current_export = true;
+		else
+			tok_unget(cur_token);
 		
 		ast_type *type = parse_type();
 		
@@ -827,6 +831,8 @@ Vardecls are straightforward at the global level, since there is nothing that lo
 <<parse global vardecl>>=
 case TOKEN_ASSIGN:
 {
+	if (current_export)
+		parse_error(cur_token.position, "Cannot export variable %s", name.c_str());
 	ast_expression *value = parse_expression();
 	match_token(TOKEN_SEMICOLON);
 	globalvariables.push_back(new ast_statement_vardecl(type, name, value));
@@ -881,7 +887,7 @@ case TOKEN_ROUNDBRACKET_LEFT:
 	}
 	
 	functions.push_back(new ast_fundecl(type, name, arguments, 
-		body));
+		body, current_export));
 }
 break;
 @
