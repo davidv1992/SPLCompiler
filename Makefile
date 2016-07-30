@@ -27,9 +27,6 @@ test/typechecktest: testprogs/typechecktest testprogs/typecheckcorrect.sh testpr
 test/irgentest: testprogs/irgentest testprogs/irgencorrect.sh
 	$(BASH) ./testprogs/irgencorrect.sh
 
-test/compiler: compiler testprogs/compilercorrect.sh
-	$(BASH) ./testprogs/compilercorrect.sh
-
 test/compileramd: compiler testprogs/amdcorrect.sh cplatform.c
 	$(BASH) ./testprogs/amdcorrect.sh
 
@@ -84,12 +81,6 @@ assembly.h: assembly.nw
 assembly.cpp: assembly.nw
 	notangle -L -Rassembly.cpp assembly.nw | cpif assembly.cpp
 
-ssm.o: ssm.cpp assembly.h ir.h ssm.h irutil.h
-ssm.h: ssm.nw
-	notangle -L -Rssm.h ssm.nw | cpif ssm.h
-ssm.cpp: ssm.nw
-	notangle -L -Rssm.cpp ssm.nw | cpif ssm.cpp
-
 parser.o: parser.cpp parser.h ast.h token.h error.h position.h settings.h
 parser.h: parser.nw
 	notangle -L -Rparser.h parser.nw | cpif parser.h
@@ -114,12 +105,12 @@ splruntime.h: splruntime.nw
 splruntime.cpp: splruntime.nw
 	notangle -L -Rsplruntime.cpp splruntime.nw | cpif splruntime.cpp
 
-main.o: main.cpp token.h parser.h ast.h position.h typecheck.h ir.h irgeneration.h settings.h splruntime.h ssm.h error.h amd64.h constprop.h position.h
+main.o: main.cpp token.h parser.h ast.h position.h typecheck.h ir.h irgeneration.h settings.h splruntime.h error.h amd64.h constprop.h position.h
 main.cpp: main.nw
 	notangle -L -Rmain.cpp main.nw | cpif main.cpp
 
-compiler: main.o token.o parser.o ast.o error.o typecheck.o irgeneration.o settings.o splruntime.o ssm.o irutil.o assembly.o amd64.o constprop.o
-	g++ $(CXXFLASGS) -o compiler main.o token.o parser.o ast.o error.o typecheck.o irgeneration.o settings.o splruntime.o ssm.o irutil.o assembly.o amd64.o constprop.o
+compiler: main.o token.o parser.o ast.o error.o typecheck.o irgeneration.o settings.o splruntime.o irutil.o assembly.o amd64.o constprop.o
+	g++ $(CXXFLASGS) -o compiler main.o token.o parser.o ast.o error.o typecheck.o irgeneration.o settings.o splruntime.o irutil.o assembly.o amd64.o constprop.o
 
 amd64.o: amd64.cpp amd64.h assembly.h ir.h irutil.h settings.h
 amd64.h: amd64.nw
@@ -134,10 +125,10 @@ version.h:
 	echo \#define VERSION \"`git describe --abbrev=4 --dirty --always --tags`\" | cpif version.h
 
 settings.o: settings.cpp settings.h version.h
-settings.cpp: settings.nw token.nw parser.nw typecheck.nw error.nw ir.nw irgeneration.nw ssm.nw main.nw
-	notangle -L -Rsettings.cpp token.nw parser.nw typecheck.nw error.nw ir.nw irgeneration.nw ssm.nw settings.nw main.nw | cpif settings.cpp
-settings.h: settings.nw token.nw parser.nw typecheck.nw error.nw ir.nw irgeneration.nw ssm.nw main.nw
-	notangle -L -Rsettings.h token.nw parser.nw typecheck.nw error.nw ir.nw irgeneration.nw ssm.nw settings.nw main.nw | cpif settings.h
+settings.cpp: settings.nw token.nw parser.nw typecheck.nw error.nw ir.nw irgeneration.nw main.nw
+	notangle -L -Rsettings.cpp token.nw parser.nw typecheck.nw error.nw ir.nw irgeneration.nw settings.nw main.nw | cpif settings.cpp
+settings.h: settings.nw token.nw parser.nw typecheck.nw error.nw ir.nw irgeneration.nw main.nw
+	notangle -L -Rsettings.h token.nw parser.nw typecheck.nw error.nw ir.nw irgeneration.nw settings.nw main.nw | cpif settings.h
 
 test.tex: testprogs/testheader.nw testprogs/testtrailer.nw testprogs/tokentest.nw testprogs/parsetest.nw testprogs/exprparsetest.nw testprogs/typeparsetest.nw testprogs/irgentest.nw testprogs/compilertest.nw testprogs/statementparsetest.nw testprogs/stresstest.nw
 	noweave -t4 -delay testprogs/testheader.nw testprogs/tokentest.nw testprogs/parsetest.nw testprogs/typeparsetest.nw testprogs/exprparsetest.nw testprogs/statementparsetest.nw testprogs/irgentest.nw testprogs/compilertest.nw testprogs/stresstest.nw testprogs/testtrailer.nw | cpif test.tex
@@ -145,8 +136,8 @@ test.pdf: test.tex
 	latexmk -pdf test.tex
 	latexmk -c
 
-code.tex: header.nw trailer.nw token.nw position.nw error.nw parser.nw settings.nw spllang.nw ast.nw typecheck.nw ir.nw irgeneration.nw main.nw splruntime.nw ssm.nw assembly.nw irutils.nw amd64.nw constprop.nw
-	noweave -t4 -delay header.nw spllang.nw ast.nw token.nw parser.nw typecheck.nw ir.nw irgeneration.nw splruntime.nw constprop.nw irutils.nw assembly.nw ssm.nw amd64.nw main.nw settings.nw position.nw error.nw trailer.nw | cpif code.tex
+code.tex: header.nw trailer.nw token.nw position.nw error.nw parser.nw settings.nw spllang.nw ast.nw typecheck.nw ir.nw irgeneration.nw main.nw splruntime.nw assembly.nw irutils.nw amd64.nw constprop.nw
+	noweave -t4 -delay header.nw spllang.nw ast.nw token.nw parser.nw typecheck.nw ir.nw irgeneration.nw splruntime.nw constprop.nw irutils.nw assembly.nw amd64.nw main.nw settings.nw position.nw error.nw trailer.nw | cpif code.tex
 code.pdf: code.tex compiler.bib
 	latexmk -pdf code.tex
 	latexmk -c
@@ -235,10 +226,6 @@ testprogs/irgencorrect.sh: testprogs/irgentest.nw
 	notangle -L -Rirgencorrect.sh testprogs/irgentest.nw > testprogs/irgencorrect.sh
 	chmod +x testprogs/irgencorrect.sh
 
-testprogs/compilercorrect.sh: testprogs/compilertest.nw
-	notangle -L -Rcompilercorrect.sh testprogs/compilertest.nw > testprogs/compilercorrect.sh
-	chmod +x testprogs/compilercorrect.sh
-
 testprogs/amdcorrect.sh: testprogs/compilertest.nw
 	notangle -L -Ramdcorrect.sh testprogs/compilertest.nw > testprogs/amdcorrect.sh
 	chmod +x testprogs/amdcorrect.sh
@@ -269,7 +256,6 @@ clean:
 	rm -f constprop.h constprop.cpp constprop.o
 	rm -f settings.h settings.cpp settings.o
 	rm -f position.h version.h ir.h
-	rm -f ssm.h ssm.cpp ssm.o
 	rm -f amd64.h amd64.cpp amd64.o cplatform.c
 	rm -f testprogs/tokentest.cpp testprogs/tokentest.o testprogs/tokentest
 	rm -f testprogs/parsetest.cpp testprogs/parsetest.o testprogs/parsetest

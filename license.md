@@ -1,4 +1,4 @@
-The following license information is applicable to all the files in this repository, with the exception of the file testprogs/ssm.jar.
+The following license information is applicable to all the files in this repository.
 
 Copyright (c) 2015, David Venhoek
 All rights reserved.

@@ -1,4 +1,5 @@
 \chapter{AMD64 code generation}
+\label{ch:amd64}
 
 I have, for my expansion project, decided to implement code generation for the AMD64 processor architecture. This chapter is (part of) the result of that decision, and contains all the code that actually generates the AMD64 instructions. It uses the standard register allocator for assigning all the temporaries to registers.
 

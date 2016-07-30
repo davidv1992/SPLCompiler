@@ -29,7 +29,7 @@ The compiler proper consists of 5 major modules, and their supporting code. The 
 
 At this point the resulting abstract syntax tree is known to represent a valid SPL program, and we proceed to code generation. Code generation is done in two stages. The IR generator (chapter \ref{ch:irgenerator}) produces code in an intermediate representation described in (chapter \ref{ch:ir}). This is then combined with the IR for the platform independent parts of the runtime library (chapter \ref{ch:splruntime}) to form the completed program in IR form.
 
-The final step is to translate this IR to platform-specific assembly code. Currently only the SSM platform (chapter \ref{ch:ssm}) is supported. This translator translates the IR and adds platform-specific support code.
+The final step is to translate this IR to platform-specific assembly code. Currently only the AMD64 platform (chapter \ref{ch:amd64}) is supported. This translator translates the IR and adds platform-specific support code.
 
 \section*{How to read this document}
 

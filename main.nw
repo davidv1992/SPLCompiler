@@ -10,7 +10,7 @@ We start with a few global settings, controlling the output architecture, and wh
 <<compiler settings>>=
 #define ARCH_FLAG {"", "arch", \
 	"Target specified processor architecture."}
-#define ARCH_OPTS {"amd64", "ssm"}
+#define ARCH_OPTS {"amd64"}
 COMPILER_SETTING(opt_enum, targetArch, "amd64", ARCH_FLAG, ARCH_OPTS)
 #undef ARCH_FLAG
 #undef ARHC_OPTS
@@ -44,9 +44,7 @@ When not provided, we need to generate an input file. This is dependent on both 
 <<generate output name>>=
 if (outputFile == "")
 {
-	if (targetArch == "ssm")
-		outputFile = "out.ssm";
-	else if (!assemblyOnly)
+	if (!assemblyOnly)
 		outputFile = "a.out";
 	else
 		outputFile = "out.s";
@@ -100,11 +98,7 @@ int main(int argc, char **argv)
 	<<generate output name>>
 	<<compile to optimized IR>>
 	
-	if (targetArch == "ssm")
-	{
-		<<ssm output generation>>
-	}
-	else if (targetArch == "amd64")
+	if (targetArch == "amd64")
 	{
 		<<amd64 output generation>>
 	}
@@ -117,20 +111,6 @@ int main(int argc, char **argv)
 	
 	return 0;
 }
-@
-
-\subsection{SSM Output}
-
-For SSM there is no seperate assembler, the input to the interpreter is the assembly. Hence, output generation is straightforward:
-
-<<ssm output generation>>=
-FILE *outputF = fopen(outputFile.c_str(), "w");
-if (outputF == NULL)
-	main_fatal("Cannot open assembly file %s", outputFile.c_str());
-
-main_info("Generating ssm assembly.");
-ssm_translate_module(module, outputF);
-fclose(outputF);
 @
 
 \subsection{AMD64 Output}
@@ -213,7 +193,6 @@ void main_fatal(const char *message, ...)
 #include "irgeneration.h"
 #include "splruntime.h"
 #include "settings.h"
-#include "ssm.h"
 #include "amd64.h"
 #include "error.h"
 #include "constprop.h"
