@@ -24,7 +24,7 @@ This function writes one unicode character to standard output.
 The \_cmp function required by IR generation can be entirely implemented in the IR language. We are allowed to make the assumption that the type of the two inputs is the same, which we do (we decide what to do only on the first type).
 
 <<generate cmp>>=
-void generate_cmp(ir_module *module)
+void generate_cmp(ir_module *module, bool doexport)
 {
 	vector<ir_type> arguments;
 	vector<ir_type> returns;
@@ -36,7 +36,7 @@ void generate_cmp(ir_module *module)
 	
 	returns.push_back(IR_TYPE_INT);
 	
-	ir_function *cmp = new ir_function(arguments, returns, true);
+	ir_function *cmp = new ir_function(arguments, returns, doexport);
 	
 	//Check equality first, saves effort later
 	cmp->add_block();
@@ -901,7 +901,7 @@ void generate_infilistcmp(ir_module *module)
 The construction of lists and pairs is relatively simple:
 
 <<generate makepair>>=
-void generate_makepair(ir_module *module)
+void generate_makepair(ir_module *module, bool doexport)
 {
 	vector<ir_type> arguments;
 	vector<ir_type> returns;
@@ -913,7 +913,7 @@ void generate_makepair(ir_module *module)
 	
 	returns.push_back(IR_TYPE_PTR);
 	
-	ir_function *makepair = new ir_function(arguments, returns, true);
+	ir_function *makepair = new ir_function(arguments, returns, doexport);
 	
 	vector<ir_expression*> allocArgs;
 	vector<int> allocRets;
@@ -959,7 +959,7 @@ void generate_makepair(ir_module *module)
 @
 
 <<generate makelist>>=
-void generate_makelist(ir_module *module)
+void generate_makelist(ir_module *module, bool doexport)
 {
 	vector<ir_type> arguments;
 	vector<ir_type> returns;
@@ -970,7 +970,7 @@ void generate_makelist(ir_module *module)
 	
 	returns.push_back(IR_TYPE_PTR);
 	
-	ir_function *makelist = new ir_function(arguments, returns, true);
+	ir_function *makelist = new ir_function(arguments, returns, doexport);
 	
 	vector<ir_expression*> allocArgs;
 	vector<int> allocRets;
@@ -1017,7 +1017,7 @@ void generate_makelist(ir_module *module)
 The following functions can be called directly by the user code.
 
 <<generate isempty>>=
-void generate_isempty(ir_module *module)
+void generate_isempty(ir_module *module, bool doexport)
 {
 	vector<ir_type> arguments;
 	vector<ir_type> returns;
@@ -1026,7 +1026,7 @@ void generate_isempty(ir_module *module)
 	
 	returns.push_back(IR_TYPE_BOOL);
 	
-	ir_function *isEmpty = new ir_function(arguments, returns, true);
+	ir_function *isEmpty = new ir_function(arguments, returns, doexport);
 	
 	isEmpty->add_block();
 	isEmpty->blocks[0].push_back(
@@ -1046,14 +1046,14 @@ void generate_isempty(ir_module *module)
 @
 
 <<generate read>>=
-void generate_read(ir_module *module)
+void generate_read(ir_module *module, bool doexport)
 {
 	vector<ir_type> arguments;
 	vector<ir_type> returns;
 	
 	returns.push_back(IR_TYPE_INT);
 	
-	ir_function *read = new ir_function(arguments, returns, true);
+	ir_function *read = new ir_function(arguments, returns, doexport);
 	
 	vector<ir_expression*> primArgs;
 	vector<int> primRets;
@@ -1078,7 +1078,7 @@ void generate_read(ir_module *module)
 Printing is split into a few functions. One for the main entry point and various simple printing routines, one for integers, and one for lists
 
 <<generate print>>=
-void generate_print(ir_module *module)
+void generate_print(ir_module *module, bool doexport)
 {
 	vector<ir_type> arguments;
 	vector<ir_type> returns;
@@ -1086,7 +1086,7 @@ void generate_print(ir_module *module)
 	arguments.push_back(IR_TYPE_UNKNOWN);
 	arguments.push_back(IR_TYPE_INT);
 	
-	ir_function *print = new ir_function(arguments, returns, true);
+	ir_function *print = new ir_function(arguments, returns, doexport);
 	
 	// handle characters
 	print->add_block();
@@ -1748,21 +1748,21 @@ void generate_printList(ir_module *module)
 The following function forms the interface to the rest of the compiler. It adds all the runtime libraries functions to a given module.
 
 <<generate runtime header>>=
-void generate_runtime(ir_module *module);
+void generate_runtime(ir_module *module, bool doexport);
 @
 <<generate runtime>>=
-void generate_runtime(ir_module *module)
+void generate_runtime(ir_module *module, bool doexport)
 {
-	generate_cmp(module);
+	generate_cmp(module, doexport);
 	generate_listcmp(module);
 	generate_infilistcmp(module);
 	
-	generate_makepair(module);
-	generate_makelist(module);
+	generate_makepair(module, doexport);
+	generate_makelist(module, doexport);
 	
-	generate_isempty(module);
-	generate_read(module);
-	generate_print(module);
+	generate_isempty(module, doexport);
+	generate_read(module, doexport);
+	generate_print(module, doexport);
 	
 	generate_printInt(module);
 	generate_printIntRec(module);

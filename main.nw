@@ -69,7 +69,7 @@ main_info("Generating intermediate code.");
 ir_module *module = irgen_translate_program(program);
 
 main_info("Generating runtime.");
-generate_runtime(module);
+generate_runtime(module, false);
 
 main_info("Post-frontend cleanup");
 typecheck_cleanup();

@@ -29,7 +29,7 @@ int main(int argc, char **argv)
 	
 	ir_module *module = irgen_translate_program(program);
 	
-	generate_runtime(module);
+	generate_runtime(module, false);
 	
 	module->print();
 	
