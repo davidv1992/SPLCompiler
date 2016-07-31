@@ -1,4 +1,4 @@
-Int main() {
+export Int main() {
 	Bool a = False/*Bool*/;
 	Bool b = True/*Bool*/;
 	return 1/*Int*/;

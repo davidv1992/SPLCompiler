@@ -14,7 +14,7 @@ Int facI(Int n) {
 	}
 	return r/*Int*/;
 }
-Void main() {
+export Void main() {
 	Int n = 0/*Int*/;
 	Int facN = 1/*Int*/;
 	Bool ok = True/*Bool*/;

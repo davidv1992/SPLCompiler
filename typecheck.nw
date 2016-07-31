@@ -94,6 +94,10 @@ $\text{returntype} = \tau$\\
 \hline
 \end{tabular}
 
+\subsection{Export checking}
+
+Typechecking is also responsible for making sure main is marked as global.
+
 \section{Preparations for IR generation}
 
 The typechecker makes some initial preparations for the process of code generation. In particular, it adds to every variable reference in expressions a pointer to the corresponding variable declaration. These pointers are non-owning pointers, and no delete is called on them on deconstruction in any part of the compiler.
@@ -1228,6 +1232,12 @@ void typecheck_program(ast_program *program)
 	
 	for (auto fundecl : program->functions)
 	{
+		if (fundecl->name == "main" && !fundecl->is_export) {
+			typecheck_warning(fundecl->position,
+				"main is not marked as export, but will be implicit exported");
+			fundecl->is_export = true;
+		}
+		
 		enter_scope();
 		set_return_type((ast_type*)fundecl->type->copy());
 		for (auto funarg : fundecl->args)

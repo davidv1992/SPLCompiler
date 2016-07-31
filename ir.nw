@@ -38,9 +38,12 @@ public:
 	std::vector<ir_type> temp_types;
 	int num_args;
 	int num_returns;
+	bool is_export;
 	
-	ir_function(std::vector<ir_type> arguments, std::vector<ir_type> returns)
+	ir_function(std::vector<ir_type> arguments, std::vector<ir_type> returns, bool isex)
 	{
+		is_export = isex;
+		
 		num_args = arguments.size();
 		num_returns = returns.size();
 		
@@ -60,6 +63,7 @@ public:
 		temp_types = f.temp_types;
 		num_args = f.num_args;
 		num_returns = f.num_returns;
+		is_export = f.is_export;
 	}
 	
 	virtual ~ir_function()
@@ -73,6 +77,8 @@ public:
 	
 	virtual void print()
 	{
+		if (is_export) 
+			printf("exported ");
 		printf("function %d -> %d\n", num_args, num_returns);
 		for (unsigned int i=0; i<blocks.size(); i++)
 		{

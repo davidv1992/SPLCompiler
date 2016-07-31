@@ -1,4 +1,4 @@
-Int main() {
+export Int main() {
 	Int a = 10;
 	Int b = 12345689;
 	Int c = 152438;

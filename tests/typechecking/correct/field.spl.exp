@@ -1,4 +1,4 @@
-Int main((Int,(Int,Int)) a) {
+export Int main((Int,(Int,Int)) a) {
 	return a/*(Int,(Int,Int))*/.snd/*(Int,Int)*/.fst/*Int*/;
 }
 t first((t,b) a) {

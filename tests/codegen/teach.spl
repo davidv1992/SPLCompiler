@@ -20,7 +20,7 @@ Int facI ( Int n ) {
 }
 
 // A main function to check the results
-Int main () {
+export Int main () {
 	Int n = 0;
 	Int facN = 1;
 	Bool ok = True;

@@ -1,6 +1,6 @@
 Int a = 5;
 
-Int main()
+export Int main()
 {
 	return a;
 }

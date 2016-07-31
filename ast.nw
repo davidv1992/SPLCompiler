@@ -879,7 +879,7 @@ public:
 class ast_fundecl : public ast_base
 {
 public:
-	bool isExport;
+	bool is_export;
 	ast_type *type;
 	std::string name;
 	std::vector<ast_funarg*> args;
@@ -893,7 +893,7 @@ public:
 		name = n; 
 		args = a; 
 		body = b;
-		isExport = isex;
+		is_export = isex;
 	}
 	virtual ~ast_fundecl()
 	{
@@ -903,7 +903,7 @@ public:
 	}
 	virtual void print(int tabdepth)
 	{
-		if (isExport) printf("export ");
+		if (is_export) printf("export ");
 		type->print(tabdepth);
 		printf(" %s(", name.c_str());
 		bool is_firstarg = true;
@@ -924,7 +924,7 @@ public:
 		for (auto ptr : args) argscopy.push_back((ast_funarg*)ptr->copy());
 		
 		return new ast_fundecl((ast_type*)type->copy(), name, argscopy,
-			(ast_statement*)body->copy(), isExport);
+			(ast_statement*)body->copy(), is_export);
 	}
 		
 };

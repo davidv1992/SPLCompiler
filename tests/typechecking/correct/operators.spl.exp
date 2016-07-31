@@ -1,4 +1,4 @@
-Int main(Int a,Int b) {
+export Int main(Int a,Int b) {
 	return (a/*Int*/+b/*Int*/)/*Int*/;
 }
 Int sub(Int a,Int b) {

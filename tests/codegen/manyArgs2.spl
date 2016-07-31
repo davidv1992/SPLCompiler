@@ -3,7 +3,7 @@ Int f(Int a, Int b, Int c, Int d, Int e, Int f, Int g)
 	return a+b+c+d+e+f+g;
 }
 
-Int main()
+export Int main()
 {
 	return f(1,2,3,4,5,6,7);
 }

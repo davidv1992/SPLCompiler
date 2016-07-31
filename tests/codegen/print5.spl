@@ -1,4 +1,4 @@
-Int main()
+export Int main()
 {
 	[Int] a = 1:2:[];
 	a.tl.tl = a;

@@ -1229,7 +1229,7 @@ void irgen_translate_function(ir_module *module, ast_fundecl *fun)
 		rets.push_back(IR_TYPE_INT);
 	}
 	
-	ir_function *function = new ir_function(args, rets);
+	ir_function *function = new ir_function(args, rets, fun->is_export);
 	int initialTrace = function->add_block();
 	
 	bool needsReturn = !irgen_translate_statement(function, initialTrace, fun->body);
@@ -1253,7 +1253,7 @@ ir_module* irgen_translate_program(ast_program *program)
 {
 	ir_module *module = new ir_module();
 
-	ir_function *init = new ir_function(vector<ir_type>(0), vector<ir_type>(0));
+	ir_function *init = new ir_function(vector<ir_type>(0), vector<ir_type>(0), false);
 	int initTrace = init->add_block();
 
 	for (auto global: program->globalvars)

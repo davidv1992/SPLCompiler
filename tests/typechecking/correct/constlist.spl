@@ -1,4 +1,4 @@
-Int main() {
+export Int main() {
 	[Int] a = [];
 	return 1;
 }

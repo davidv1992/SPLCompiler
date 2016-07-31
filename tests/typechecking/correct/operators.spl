@@ -1,4 +1,4 @@
-Int main(Int a, Int b) {
+export Int main(Int a, Int b) {
 	return a+b;
 }
 

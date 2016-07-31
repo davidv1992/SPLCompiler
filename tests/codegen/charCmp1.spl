@@ -1,4 +1,4 @@
-Int main()
+export Int main()
 {
 	if ('a' >= 'b')
 		return 2;

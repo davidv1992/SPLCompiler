@@ -36,7 +36,7 @@ void generate_cmp(ir_module *module)
 	
 	returns.push_back(IR_TYPE_INT);
 	
-	ir_function *cmp = new ir_function(arguments, returns);
+	ir_function *cmp = new ir_function(arguments, returns, true);
 	
 	//Check equality first, saves effort later
 	cmp->add_block();
@@ -286,7 +286,7 @@ void generate_listcmp(ir_module *module)
 	
 	returns.push_back(IR_TYPE_INT);
 	
-	ir_function *listcmp = new ir_function(arguments, returns);
+	ir_function *listcmp = new ir_function(arguments, returns, false);
 	
 	// make temps for tortoises
 	listcmp->add_temp(IR_TYPE_PTR);
@@ -678,7 +678,7 @@ void generate_infilistcmp(ir_module *module)
 	
 	returns.push_back(IR_TYPE_INT);
 	
-	ir_function *infilistcmp = new ir_function(arguments, returns);
+	ir_function *infilistcmp = new ir_function(arguments, returns, false);
 	
 	// state 1, only hare
 	// check direct equality
@@ -913,7 +913,7 @@ void generate_makepair(ir_module *module)
 	
 	returns.push_back(IR_TYPE_PTR);
 	
-	ir_function *makepair = new ir_function(arguments, returns);
+	ir_function *makepair = new ir_function(arguments, returns, true);
 	
 	vector<ir_expression*> allocArgs;
 	vector<int> allocRets;
@@ -970,7 +970,7 @@ void generate_makelist(ir_module *module)
 	
 	returns.push_back(IR_TYPE_PTR);
 	
-	ir_function *makelist = new ir_function(arguments, returns);
+	ir_function *makelist = new ir_function(arguments, returns, true);
 	
 	vector<ir_expression*> allocArgs;
 	vector<int> allocRets;
@@ -1026,7 +1026,7 @@ void generate_isempty(ir_module *module)
 	
 	returns.push_back(IR_TYPE_BOOL);
 	
-	ir_function *isEmpty = new ir_function(arguments, returns);
+	ir_function *isEmpty = new ir_function(arguments, returns, true);
 	
 	isEmpty->add_block();
 	isEmpty->blocks[0].push_back(
@@ -1053,7 +1053,7 @@ void generate_read(ir_module *module)
 	
 	returns.push_back(IR_TYPE_INT);
 	
-	ir_function *read = new ir_function(arguments, returns);
+	ir_function *read = new ir_function(arguments, returns, true);
 	
 	vector<ir_expression*> primArgs;
 	vector<int> primRets;
@@ -1086,7 +1086,7 @@ void generate_print(ir_module *module)
 	arguments.push_back(IR_TYPE_UNKNOWN);
 	arguments.push_back(IR_TYPE_INT);
 	
-	ir_function *print = new ir_function(arguments, returns);
+	ir_function *print = new ir_function(arguments, returns, true);
 	
 	// handle characters
 	print->add_block();
@@ -1292,7 +1292,7 @@ void generate_printInt(ir_module *module)
 	
 	arguments.push_back(IR_TYPE_INT);
 	
-	ir_function *printInt = new ir_function(arguments, returns);
+	ir_function *printInt = new ir_function(arguments, returns, false);
 	
 	// special case 0
 	printInt->add_block();
@@ -1368,7 +1368,7 @@ void generate_printIntRec(ir_module *module)
 	
 	arguments.push_back(IR_TYPE_INT);
 	
-	ir_function *printIntRec = new ir_function(arguments, returns);
+	ir_function *printIntRec = new ir_function(arguments, returns, false);
 	
 	// return on 0
 	printIntRec->add_block();
@@ -1437,7 +1437,7 @@ void generate_printBool(ir_module *module)
 	
 	arguments.push_back(IR_TYPE_BOOL);
 	
-	ir_function *printBool = new ir_function(arguments, returns);
+	ir_function *printBool = new ir_function(arguments, returns, false);
 	
 	// select what to print based on input value
 	printBool->add_block();
@@ -1550,7 +1550,7 @@ void generate_printList(ir_module *module)
 	
 	arguments.push_back(IR_TYPE_PTR);
 	
-	ir_function *printList = new ir_function(arguments, returns);
+	ir_function *printList = new ir_function(arguments, returns, false);
 	
 	vector<ir_expression*> pcArgs;
 	vector<int> pcRets;

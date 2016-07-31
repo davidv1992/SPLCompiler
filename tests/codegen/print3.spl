@@ -1,4 +1,4 @@
-Int main()
+export Int main()
 {
 	print(('a',15));
 	return 1;

@@ -1,4 +1,4 @@
-Int main(Int a) {
+export Int main(Int a) {
 	Int b = 0/*Int*/;
 	while ((a/*Int*/>0/*Int*/)/*Bool*/) {
 		a/*Int*/ = (a/*Int*/-1/*Int*/)/*Int*/;

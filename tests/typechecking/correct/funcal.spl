@@ -12,6 +12,6 @@ Int emptycall() {
 	return emptycall();
 }
 
-Int main(Int a, Int b) {
+export Int main(Int a, Int b) {
 	return sqrprod(a,b);
 }

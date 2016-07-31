@@ -1423,7 +1423,8 @@ void amd64_translate_function(FILE *stream, ir_function *function, string fnname
 			tempTable.push_back(regNames[color]);
 	}
 	
-	fprintf(stream, "\t.globl %s\n", fnname.c_str());
+	if (function->is_export)
+		fprintf(stream, "\t.globl %s\n", fnname.c_str());
 	fprintf(stream, "\t.type %s, @function\n", fnname.c_str());
 	assembly->print(stream, tempTable);
 	fprintf(stream, "\n\n");
@@ -1561,6 +1562,10 @@ void amd64_translate_module(ir_module *module, FILE *stream)
 		for (int i=0; i<glob.second; i++)
 			fprintf(stream, "\t.quad 0\n");
 	}
+	
+	fprintf(stream, "\t.section .init_array,\"aw\"\n");
+	fprintf(stream, "\t.align 8\n");
+	fprintf(stream, "\t.quad _splinit\n");
 }
 @
 
@@ -1598,7 +1603,6 @@ void *_allocRecord()
 
 int main()
 {
-	_splinit();
 	long long result = __main();
 #ifdef _SPLTEST
 	printf("%lld\n", result);

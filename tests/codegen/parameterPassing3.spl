@@ -3,7 +3,7 @@ Void Inc([Int] a)
 	a.hd = a.hd + 1;
 }
 
-Int main()
+export Int main()
 {
 	[Int] a = 0:[];
 	Inc(a);
